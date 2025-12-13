@@ -120,10 +120,85 @@ Check out the [samples](./samples) folder for complete working examples:
 - **Broca.Sample.WebApi** - Full Web API with controllers
 - **Broca.Sample.BlazorApp** - Blazor with ActivityPub integration
 
+## Production Deployment with HTTPS
+
+ActivityPub **requires HTTPS** in production. The easiest way to set this up is using nginx-proxy with acme-companion for automatic Let's Encrypt certificates.
+
+### Setup nginx-proxy with Let's Encrypt
+
+First, create the nginx-proxy network and start the proxy containers:
+
+```bash
+# Create the network
+docker network create nginx-proxy
+
+# Start nginx-proxy with Let's Encrypt companion
+docker run -d -p 80:80 -p 443:443 \
+  --name nginx-proxy \
+  --network nginx-proxy \
+  -v /var/run/docker.sock:/tmp/docker.sock:ro \
+  -v nginx-certs:/etc/nginx/certs \
+  -v nginx-vhost:/etc/nginx/vhost.d \
+  -v nginx-html:/usr/share/nginx/html \
+  nginxproxy/nginx-proxy
+
+docker run -d \
+  --name nginx-proxy-acme \
+  --network nginx-proxy \
+  --volumes-from nginx-proxy \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -v acme-state:/etc/acme.sh \
+  nginxproxy/acme-companion
+```
+
+### Configure Your Broca Service
+
+Create a `docker-compose.override.yml` to add HTTPS support:
+
+```yaml
+services:
+  broca-blazor:
+    environment:
+      - VIRTUAL_HOST=yourdomain.com
+      - VIRTUAL_PORT=80
+      - LETSENCRYPT_HOST=yourdomain.com
+      - LETSENCRYPT_EMAIL=your-email@example.com
+    networks:
+      - broca-network
+      - nginx-proxy
+
+  broca-api:
+    environment:
+      - ActivityPub__BaseUrl=https://yourdomain.com
+      - ActivityPub__PrimaryDomain=yourdomain.com
+
+networks:
+  nginx-proxy:
+    external: true
+```
+
+Then start your services:
+
+```bash
+cd samples
+docker-compose up -d
+```
+
+The acme-companion will automatically:
+- Request Let's Encrypt certificates for your domain
+- Renew certificates before they expire
+- Configure nginx to serve your application over HTTPS
+
+Your ActivityPub server will be accessible at `https://yourdomain.com` and actors can be followed as `@username@yourdomain.com`.
+
+**Note**: Make sure your domain's DNS A record points to your server's IP address before starting the containers.
+
 ## Requirements
 
 - .NET 9.0 or later
 - ASP.NET Core for server components
+- Docker (optional, for containerized deployment)
+- Valid domain name with HTTPS for production ActivityPub federation
 
 ## License
 
@@ -131,4 +206,4 @@ Check out the [samples](./samples) folder for complete working examples:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for development workflow and guidelines.
