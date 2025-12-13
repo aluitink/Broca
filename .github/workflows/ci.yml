@@ -33,3 +33,11 @@ jobs:
       with:
         name: test-results
         path: '**/test-results.trx'
+
+    - name: Publish Test Results
+      if: always()
+      uses: dorny/test-reporter@v1
+      with:
+        name: Integration Tests
+        path: '**/test-results.trx'
+        reporter: dotnet-trx
