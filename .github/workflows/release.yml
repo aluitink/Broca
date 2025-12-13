@@ -1,0 +1,54 @@
+name: Release & Publish NuGet
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+        
+    - name: Extract version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+    - name: Restore dependencies
+      run: dotnet restore Broca.ActivityPub.sln
+      
+    - name: Build
+      run: dotnet build Broca.ActivityPub.sln --configuration Release --no-restore
+      
+    - name: Run integration tests
+      run: dotnet test tests/Broca.ActivityPub.IntegrationTests/Broca.ActivityPub.IntegrationTests.csproj --configuration Release --no-build --verbosity normal
+      
+    - name: Pack Broca.ActivityPub.Core
+      run: dotnet pack src/Broca.ActivityPub.Core/Broca.ActivityPub.Core.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+      
+    - name: Pack Broca.ActivityPub.Client
+      run: dotnet pack src/Broca.ActivityPub.Client/Broca.ActivityPub.Client.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+      
+    - name: Pack Broca.ActivityPub.Persistence
+      run: dotnet pack src/Broca.ActivityPub.Persistence/Broca.ActivityPub.Persistence.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+      
+    - name: Pack Broca.ActivityPub.Server
+      run: dotnet pack src/Broca.ActivityPub.Server/Broca.ActivityPub.Server.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+      
+    - name: Push to NuGet
+      run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./nupkgs/*.nupkg
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
