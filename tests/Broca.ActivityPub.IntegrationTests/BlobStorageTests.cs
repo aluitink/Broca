@@ -11,58 +11,16 @@ namespace Broca.ActivityPub.IntegrationTests;
 
 /// <summary>
 /// Integration tests for blob storage functionality
-/// Tests validate:
-/// - Blobs are stored correctly when uploaded
-/// - URIs are rewritten when objects are served back through the API
-/// - Media attachments work properly with Create activities
-/// - Blob retrieval works correctly
+/// Tests validate end-to-end HTTP interactions:
+/// - Media endpoint retrieves blobs correctly
+/// - Create activities with attachments work via HTTP
+/// - Cross-server delivery with attachments
+/// - HTTP status codes for blob operations
+/// 
+/// Unit tests for IBlobStorageService are in Broca.ActivityPub.UnitTests
 /// </summary>
 public class BlobStorageTests : TwoServerFixture
 {
-    [Fact]
-    public async Task BlobStorage_UploadAndRetrieve_BlobIsStored()
-    {
-        // Arrange - Seed Alice on Server A
-        using var scope = ServerA.Services.CreateScope();
-        var actorRepo = scope.ServiceProvider.GetRequiredService<IActorRepository>();
-        var blobStorage = scope.ServiceProvider.GetRequiredService<IBlobStorageService>();
-
-        var (alice, alicePrivateKey) = await TestDataSeeder.SeedActorAsync(
-            actorRepo,
-            "alice",
-            ServerA.BaseUrl);
-
-        // Create test blob data
-        var blobId = $"test-image-{Guid.NewGuid()}.png";
-        var testImageData = CreateTestImageData();
-        var contentType = "image/png";
-
-        // Act - Store the blob
-        using var blobStream = new MemoryStream(testImageData);
-        var blobUrl = await blobStorage.StoreBlobAsync(
-            "alice",
-            blobId,
-            blobStream,
-            contentType);
-
-        // Assert - Verify blob URL was generated
-        Assert.NotNull(blobUrl);
-        Assert.Contains("alice", blobUrl);
-        Assert.Contains("media", blobUrl);
-
-        // Retrieve the blob
-        var retrieved = await blobStorage.GetBlobAsync("alice", blobId);
-        Assert.NotNull(retrieved);
-        Assert.Equal(contentType, retrieved.Value.ContentType);
-
-        // Verify content matches
-        using var retrievedStream = new MemoryStream();
-        await retrieved.Value.Content.CopyToAsync(retrievedStream);
-        var retrievedData = retrievedStream.ToArray();
-        Assert.Equal(testImageData.Length, retrievedData.Length);
-        Assert.Equal(testImageData, retrievedData);
-    }
-
     [Fact]
     public async Task BlobStorage_RetrieveThroughMediaEndpoint_ReturnsCorrectContentType()
     {
@@ -269,127 +227,6 @@ public class BlobStorageTests : TwoServerFixture
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task BlobStorage_BlobExists_ReturnsTrue()
-    {
-        // Arrange
-        using var scope = ServerA.Services.CreateScope();
-        var actorRepo = scope.ServiceProvider.GetRequiredService<IActorRepository>();
-        var blobStorage = scope.ServiceProvider.GetRequiredService<IBlobStorageService>();
-
-        var (alice, _) = await TestDataSeeder.SeedActorAsync(
-            actorRepo,
-            "alice",
-            ServerA.BaseUrl);
-
-        var blobId = $"test-{Guid.NewGuid()}.png";
-        var testImageData = CreateTestImageData();
-        
-        using var blobStream = new MemoryStream(testImageData);
-        await blobStorage.StoreBlobAsync("alice", blobId, blobStream, "image/png");
-
-        // Act
-        var exists = await blobStorage.BlobExistsAsync("alice", blobId);
-
-        // Assert
-        Assert.True(exists);
-    }
-
-    [Fact]
-    public async Task BlobStorage_DeleteBlob_BlobIsRemoved()
-    {
-        // Arrange
-        using var scope = ServerA.Services.CreateScope();
-        var actorRepo = scope.ServiceProvider.GetRequiredService<IActorRepository>();
-        var blobStorage = scope.ServiceProvider.GetRequiredService<IBlobStorageService>();
-
-        var (alice, _) = await TestDataSeeder.SeedActorAsync(
-            actorRepo,
-            "alice",
-            ServerA.BaseUrl);
-
-        var blobId = $"temp-{Guid.NewGuid()}.png";
-        var testImageData = CreateTestImageData();
-        
-        using var blobStream = new MemoryStream(testImageData);
-        await blobStorage.StoreBlobAsync("alice", blobId, blobStream, "image/png");
-
-        // Verify it exists
-        Assert.True(await blobStorage.BlobExistsAsync("alice", blobId));
-
-        // Act - Delete the blob
-        await blobStorage.DeleteBlobAsync("alice", blobId);
-
-        // Assert - Verify it's gone
-        Assert.False(await blobStorage.BlobExistsAsync("alice", blobId));
-        
-        var retrieved = await blobStorage.GetBlobAsync("alice", blobId);
-        Assert.Null(retrieved);
-    }
-
-    [Fact]
-    public async Task BlobStorage_BuildBlobUrl_UrlContainsCorrectPath()
-    {
-        // Arrange
-        using var scope = ServerA.Services.CreateScope();
-        var blobStorage = scope.ServiceProvider.GetRequiredService<IBlobStorageService>();
-
-        var blobId = "test-photo.jpg";
-
-        // Act
-        var url = blobStorage.BuildBlobUrl("alice", blobId);
-
-        // Assert
-        Assert.NotNull(url);
-        Assert.StartsWith(ServerA.BaseUrl, url);
-        Assert.Contains("/media/alice/", url);
-        Assert.EndsWith(blobId, url);
-    }
-
-    [Fact]
-    public async Task BlobStorage_MultipleBlobs_AllStoredAndRetrievable()
-    {
-        // Arrange
-        using var scope = ServerA.Services.CreateScope();
-        var actorRepo = scope.ServiceProvider.GetRequiredService<IActorRepository>();
-        var blobStorage = scope.ServiceProvider.GetRequiredService<IBlobStorageService>();
-
-        var (alice, _) = await TestDataSeeder.SeedActorAsync(
-            actorRepo,
-            "alice",
-            ServerA.BaseUrl);
-
-        var blobIds = new List<string>
-        {
-            $"photo1-{Guid.NewGuid()}.png",
-            $"photo2-{Guid.NewGuid()}.jpg",
-            $"photo3-{Guid.NewGuid()}.webp"
-        };
-
-        var contentTypes = new[] { "image/png", "image/jpeg", "image/webp" };
-
-        // Act - Store multiple blobs
-        for (int i = 0; i < blobIds.Count; i++)
-        {
-            var testData = CreateTestImageData(i + 1);
-            using var stream = new MemoryStream(testData);
-            await blobStorage.StoreBlobAsync("alice", blobIds[i], stream, contentTypes[i]);
-        }
-
-        // Assert - Retrieve and verify each blob
-        for (int i = 0; i < blobIds.Count; i++)
-        {
-            var retrieved = await blobStorage.GetBlobAsync("alice", blobIds[i]);
-            Assert.NotNull(retrieved);
-            Assert.Equal(contentTypes[i], retrieved.Value.ContentType);
-            
-            using var retrievedStream = new MemoryStream();
-            await retrieved.Value.Content.CopyToAsync(retrievedStream);
-            var expectedData = CreateTestImageData(i + 1);
-            Assert.Equal(expectedData.Length, retrievedStream.Length);
-        }
     }
 
     /// <summary>

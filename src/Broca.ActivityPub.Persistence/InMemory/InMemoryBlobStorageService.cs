@@ -57,7 +57,9 @@ public class InMemoryBlobStorageService : IBlobStorageService
 
     public string BuildBlobUrl(string username, string blobId)
     {
-        return $"{_baseUrl.TrimEnd('/')}/media/{username}/{blobId}";
+        // URL encode the blob ID to handle special characters
+        var encodedBlobId = Uri.EscapeDataString(blobId);
+        return $"{_baseUrl.TrimEnd('/')}/users/{username}/media/{encodedBlobId}";
     }
 
     private string BuildKey(string username, string blobId)
