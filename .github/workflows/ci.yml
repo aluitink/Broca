@@ -21,6 +21,14 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '9.0.x'
+    
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
         
     - name: Restore dependencies
       run: dotnet restore Broca.ActivityPub.sln
@@ -28,8 +36,8 @@ jobs:
     - name: Build
       run: dotnet build Broca.ActivityPub.sln --configuration Release --no-restore
       
-    - name: Run integration tests
-      run: dotnet test tests/Broca.ActivityPub.IntegrationTests/Broca.ActivityPub.IntegrationTests.csproj --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+    - name: Run tests
+      run: dotnet test Broca.ActivityPub.sln --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
       
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -40,8 +48,8 @@ jobs:
 
     - name: Publish Test Results
       if: always()
-      uses: dorny/test-reporter@v1
+      uses: dorny/test-reporter@v1.9.1
       with:
-        name: Integration Tests
+        name: Test Results
         path: '**/test-results.trx'
         reporter: dotnet-trx
