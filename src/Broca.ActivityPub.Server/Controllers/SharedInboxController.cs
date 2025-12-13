@@ -112,7 +112,7 @@ public class SharedInboxController : ControllerBase
             {
                 try
                 {
-                    await _inboxHandler.HandleActivityAsync(username, activity, CancellationToken.None);
+                    await _inboxHandler.HandleActivityAsync(username, activity, false, CancellationToken.None);
                     _logger.LogDebug("Delivered to {Username}", username);
                 }
                 catch (Exception ex)

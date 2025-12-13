@@ -32,7 +32,7 @@ var app = builder.Build();
 // Initialize system actor on startup
 using (var scope = app.Services.CreateScope())
 {
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Broca.Sample.WebApi.Program>>();
     var systemIdentity = scope.ServiceProvider.GetRequiredService<ISystemIdentityService>();
     
     logger.LogInformation("Initializing system actor...");
@@ -77,4 +77,9 @@ app.Run();
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
     public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+}
+
+namespace Broca.Sample.WebApi
+{
+    public partial class Program { }
 }

@@ -100,7 +100,10 @@ public class OutboxProcessor
         }
 
         // For all other activities without explicit recipients, deliver to followers
-        await _deliveryService.QueueActivityForDeliveryAsync(username, activityId, activity, cancellationToken);
+        if (activity != null)
+        {
+            await _deliveryService.QueueActivityForDeliveryAsync(username, activityId, activity, cancellationToken);
+        }
     }
 
     private List<string> ExtractRecipients(Activity activity)

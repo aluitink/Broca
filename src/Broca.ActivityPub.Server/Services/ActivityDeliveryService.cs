@@ -282,7 +282,6 @@ public class ActivityDeliveryService
 
                     // Try to use shared inbox first
                     string? inboxUrl = null;
-                    var sharedInboxAvailable = false;
 
                     // Check for endpoints.sharedInbox
                     if (recipientActor.Endpoints != null)
@@ -302,7 +301,6 @@ public class ActivityDeliveryService
                         if (!string.IsNullOrEmpty(sharedInbox))
                         {
                             inboxUrl = sharedInbox;
-                            sharedInboxAvailable = true;
                         }
                     }
 

@@ -108,13 +108,6 @@ public class AdminOperationsHandler
             _logger.LogInformation("Processing administrative {ActivityType} authenticated via bearer token", activityType);
         }
 
-        // Route to appropriate handler            _logger.LogInformation("Administrative operation authorized via actor ID {ActorId}", actorId);
-        }
-        else
-        {
-            _logger.LogInformation("Administrative operation authorized via bearer token");
-        }
-
         // Route to appropriate handler
         return activityType switch
         {

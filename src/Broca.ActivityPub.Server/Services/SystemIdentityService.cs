@@ -132,11 +132,7 @@ public class SystemIdentityService : ISystemIdentityService
             JsonLDContext = new List<ITermDefinition>
             {
                 new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")),
-                new ReferenceTermDefinition(new Uri("https://w3id.org/security/v1")),
-                new ObjectTermDefinition
-                {
-                    ["broca"] = ActivityPubServerOptions.BrocaNamespace
-                }
+                new ReferenceTermDefinition(new Uri("https://w3id.org/security/v1"))
             },
             Id = actorId,
             Type = new[] { "Application" },
@@ -150,6 +146,7 @@ public class SystemIdentityService : ISystemIdentityService
             Published = DateTime.UtcNow,
             ExtensionData = new Dictionary<string, JsonElement>
             {
+                { "broca", JsonSerializer.SerializeToElement(ActivityPubServerOptions.BrocaNamespace) },
                 { "manuallyApprovesFollowers", JsonSerializer.SerializeToElement(false) },
                 { "discoverable", JsonSerializer.SerializeToElement(true) },
                 {
