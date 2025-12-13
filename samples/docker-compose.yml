@@ -1,0 +1,56 @@
+services:
+  broca-api:
+    build:
+      context: .
+      dockerfile: samples/Broca.Sample.WebApi/Dockerfile
+    container_name: broca-sample-api
+    ports:
+      - "5050:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ActivityPub__BaseUrl=http://localhost:5050
+      - ActivityPub__PrimaryDomain=localhost
+      - ActivityPub__ServerName=Broca Sample Server
+      - ActivityPub__SystemActorUsername=sys
+      - ActivityPub__RoutePrefix=ap
+      - Persistence__DataPath=/app/data
+      - IdentityProvider__SimpleIdentity__Username=user
+      - IdentityProvider__SimpleIdentity__DisplayName=Sample User
+      - IdentityProvider__SimpleIdentity__Summary=A sample user for testing the Broca ActivityPub server
+      - IdentityProvider__SimpleIdentity__ActorType=Person
+      - IdentityProvider__SimpleIdentity__IsDiscoverable=true
+    volumes:
+      - broca-data:/app/data
+    networks:
+      - broca-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/.well-known/webfinger?resource=acct:sys@localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  broca-blazor:
+    build:
+      context: .
+      dockerfile: samples/Broca.Sample.BlazorApp/Dockerfile
+    container_name: broca-sample-blazor
+    ports:
+      - "5051:80"
+    networks:
+      - broca-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  broca-data:
+    driver: local
+
+networks:
+  broca-network:
+    driver: bridge

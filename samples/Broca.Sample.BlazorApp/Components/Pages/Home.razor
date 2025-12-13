@@ -1,0 +1,57 @@
+﻿@page "/"
+
+<PageTitle>Broca ActivityPub Browser</PageTitle>
+
+<div class="container mt-5">
+    <div class="text-center">
+        <h1 class="display-4">Broca ActivityPub Browser</h1>
+        <p class="lead">A client-side ActivityPub browser and client</p>
+        
+        <div class="mt-5">
+            <a href="/browse" class="btn btn-primary btn-lg">
+                Start Browsing
+            </a>
+            <a href="/identity" class="btn btn-outline-secondary btn-lg ms-2">
+                Load Identity
+            </a>
+        </div>
+
+        <div class="mt-5">
+            <h3>Features</h3>
+            <div class="row mt-4">
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">🔍 Browse Users</h5>
+                            <p class="card-text">Look up ActivityPub users by their alias (user@domain.com) and view their profiles.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">📬 View Outbox</h5>
+                            <p class="card-text">Browse a user's public outbox to see their recent activities and posts.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">🔐 Identity Support</h5>
+                            <p class="card-text">Load your public/private key pair from a JSON file to authenticate requests.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-5">
+            <h4>About</h4>
+            <p class="text-muted">
+                This is a client-side only Blazor WebAssembly application that uses the Broca ActivityPub Client library 
+                to interact with ActivityPub servers. All requests are made directly from your browser.
+            </p>
+        </div>
+    </div>
+</div>

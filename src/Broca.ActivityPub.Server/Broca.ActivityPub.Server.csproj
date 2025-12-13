@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Broca.ActivityPub.Core\Broca.ActivityPub.Core.csproj" />
+    <ProjectReference Include="..\Broca.ActivityPub.Client\Broca.ActivityPub.Client.csproj" />
+    <ProjectReference Include="..\Broca.ActivityPub.Persistence\Broca.ActivityPub.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="KristofferStrube.ActivityStreams" Version="0.2.4" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Don't copy content files when used as a project reference -->
+    <IncludeContentInPack>false</IncludeContentInPack>
+    <EnableDefaultContentItems>true</EnableDefaultContentItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Mark content files to not copy to publish directory when referenced as a project -->
+    <Content Update="appsettings*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+      <Pack>false</Pack>
+    </Content>
+  </ItemGroup>
+
+</Project>
