@@ -223,6 +223,7 @@ internal class NoteBuilder : INoteBuilder
     private readonly List<IObjectOrLink> _cc = new();
     private readonly List<IObjectOrLink> _bcc = new();
     private readonly List<IObjectOrLink> _tags = new();
+    private readonly List<IObjectOrLink> _attachments = new();
     private string? _inReplyTo;
 
     public NoteBuilder(
@@ -303,6 +304,55 @@ internal class NoteBuilder : INoteBuilder
         return this;
     }
 
+    public INoteBuilder WithAttachment(IObjectOrLink attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+        _attachments.Add(attachment);
+        return this;
+    }
+
+    public INoteBuilder WithDocument(string url, string mediaType, string? name = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(url);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaType);
+
+        var document = new Document
+        {
+            Type = new[] { "Document" },
+            MediaType = mediaType,
+            Url = new List<Link> { new Link { Href = new Uri(url) } }
+        };
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            document.Name = new[] { name };
+        }
+
+        _attachments.Add(document);
+        return this;
+    }
+
+    public INoteBuilder WithImage(string url, string? name = null, string mediaType = "image/jpeg")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(url);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaType);
+
+        var image = new Image
+        {
+            Type = new[] { "Image" },
+            MediaType = mediaType,
+            Url = new List<Link> { new Link { Href = new Uri(url) } }
+        };
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            image.Name = new[] { name };
+        }
+
+        _attachments.Add(image);
+        return this;
+    }
+
     public Note BuildNote()
     {
         var noteId = _generateObjectId("note");
@@ -325,6 +375,11 @@ internal class NoteBuilder : INoteBuilder
         if (_tags.Count > 0)
         {
             note.Tag = _tags;
+        }
+
+        if (_attachments.Count > 0)
+        {
+            note.Attachment = _attachments;
         }
 
         if (!string.IsNullOrWhiteSpace(_inReplyTo))

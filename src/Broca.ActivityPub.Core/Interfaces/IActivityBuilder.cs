@@ -128,6 +128,28 @@ public interface INoteBuilder
     INoteBuilder InReplyTo(string objectId);
 
     /// <summary>
+    /// Adds an attachment (image, video, document, etc.) to the note
+    /// </summary>
+    /// <param name="attachment">The attachment object (Document, Image, Video, etc.)</param>
+    INoteBuilder WithAttachment(IObjectOrLink attachment);
+
+    /// <summary>
+    /// Adds a document attachment to the note
+    /// </summary>
+    /// <param name="url">URL of the attachment</param>
+    /// <param name="mediaType">MIME type of the attachment</param>
+    /// <param name="name">Optional name/description of the attachment</param>
+    INoteBuilder WithDocument(string url, string mediaType, string? name = null);
+
+    /// <summary>
+    /// Adds an image attachment to the note
+    /// </summary>
+    /// <param name="url">URL of the image</param>
+    /// <param name="name">Optional alt text for the image</param>
+    /// <param name="mediaType">MIME type (defaults to image/jpeg)</param>
+    INoteBuilder WithImage(string url, string? name = null, string mediaType = "image/jpeg");
+
+    /// <summary>
     /// Builds the Create activity containing this Note
     /// </summary>
     Activity Build();
