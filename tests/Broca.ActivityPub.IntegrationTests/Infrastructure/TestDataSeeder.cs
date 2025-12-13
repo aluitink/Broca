@@ -222,4 +222,40 @@ public static class TestDataSeeder
         var builder = CreateBuilderForActor(actorId);
         return builder.Undo(activityToUndo);
     }
+
+    /// <summary>
+    /// Creates a Create activity with an attachment (image, video, etc.)
+    /// </summary>
+    public static Activity CreateCreateActivityWithAttachment(
+        string actorId,
+        string content,
+        string attachmentUrl,
+        string attachmentMediaType,
+        string? attachmentName = null)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        
+        return builder.CreateNote(content)
+            .WithDocument(attachmentUrl, attachmentMediaType, attachmentName)
+            .Build();
+    }
+
+    /// <summary>
+    /// Creates a Create activity with an attachment addressed to a specific recipient
+    /// </summary>
+    public static Activity CreateCreateActivityWithAttachmentToRecipient(
+        string actorId,
+        string recipientId,
+        string content,
+        string attachmentUrl,
+        string attachmentMediaType,
+        string? attachmentName = null)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        
+        return builder.CreateNote(content)
+            .To(recipientId)
+            .WithDocument(attachmentUrl, attachmentMediaType, attachmentName)
+            .Build();
+    }
 }
