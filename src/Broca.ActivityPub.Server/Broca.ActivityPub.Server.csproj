@@ -14,6 +14,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>true</IsPackable>
     <!-- Don't copy content files when used as a project reference -->
     <IncludeContentInPack>false</IncludeContentInPack>
     <EnableDefaultContentItems>true</EnableDefaultContentItems>

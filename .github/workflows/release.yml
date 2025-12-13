@@ -2,6 +2,7 @@ name: Release & Publish NuGet
 
 permissions:
   contents: write
+  packages: write
 
 on:
   push:
@@ -45,8 +46,11 @@ jobs:
     - name: Pack Broca.ActivityPub.Server
       run: dotnet pack src/Broca.ActivityPub.Server/Broca.ActivityPub.Server.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
       
-    - name: Push to NuGet
+    - name: Push to NuGet.org
       run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      
+    - name: Push to GitHub Packages
+      run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --skip-duplicate
       
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
