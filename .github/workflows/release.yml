@@ -1,5 +1,8 @@
 name: Release & Publish NuGet
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
