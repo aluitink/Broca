@@ -119,6 +119,57 @@ public static class ServiceCollectionExtensions
             configureOptions(options);
         });
     }
+
+    /// <summary>
+    /// Adds ActivityPub client services with API key authentication
+    /// </summary>
+    /// <remarks>
+    /// The client will be configured with an API key and will fetch the actor's
+    /// private key from the server when InitializeAsync() is called.
+    /// The API key should match the server's AdminApiToken configuration.
+    /// </remarks>
+    /// <param name="services">Service collection</param>
+    /// <param name="actorId">The ActivityPub actor ID (e.g., https://example.com/users/alice)</param>
+    /// <param name="apiKey">API key for authenticating with the server</param>
+    public static IServiceCollection AddActivityPubClientWithApiKey(
+        this IServiceCollection services,
+        string actorId,
+        string apiKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
+
+        return services.AddActivityPubClient(options =>
+        {
+            options.ActorId = actorId;
+            options.ApiKey = apiKey;
+        });
+    }
+
+    /// <summary>
+    /// Adds ActivityPub client services with API key authentication and additional configuration
+    /// </summary>
+    /// <param name="services">Service collection</param>
+    /// <param name="actorId">The ActivityPub actor ID</param>
+    /// <param name="apiKey">API key for authenticating with the server</param>
+    /// <param name="configureOptions">Action to configure additional options</param>
+    public static IServiceCollection AddActivityPubClientWithApiKey(
+        this IServiceCollection services,
+        string actorId,
+        string apiKey,
+        Action<ActivityPubClientOptions> configureOptions)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
+        ArgumentNullException.ThrowIfNull(configureOptions);
+
+        return services.AddActivityPubClient(options =>
+        {
+            options.ActorId = actorId;
+            options.ApiKey = apiKey;
+            configureOptions(options);
+        });
+    }
 }
 
 

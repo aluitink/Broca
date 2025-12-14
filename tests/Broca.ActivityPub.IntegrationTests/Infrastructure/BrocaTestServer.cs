@@ -18,6 +18,7 @@ public class BrocaTestServer : WebApplicationFactory<Program>, IAsyncDisposable
     private readonly string _domain;
     private readonly string _instanceName;
     private readonly TestServerRoutingHandler? _routingHandler;
+    private readonly Dictionary<string, string?>? _additionalConfiguration;
     private bool _initialized;
 
     public string BaseUrl => _baseUrl;
@@ -31,12 +32,19 @@ public class BrocaTestServer : WebApplicationFactory<Program>, IAsyncDisposable
     /// <param name="domain">Domain name (e.g., "server-a.test")</param>
     /// <param name="instanceName">Friendly instance name for debugging</param>
     /// <param name="routingHandler">Optional routing handler for cross-server communication</param>
-    public BrocaTestServer(string baseUrl, string domain, string instanceName, TestServerRoutingHandler? routingHandler = null)
+    /// <param name="additionalConfiguration">Additional configuration values</param>
+    public BrocaTestServer(
+        string baseUrl, 
+        string domain, 
+        string instanceName, 
+        TestServerRoutingHandler? routingHandler = null,
+        Dictionary<string, string?>? additionalConfiguration = null)
     {
         _baseUrl = baseUrl;
         _domain = domain;
         _instanceName = instanceName;
         _routingHandler = routingHandler;
+        _additionalConfiguration = additionalConfiguration;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -45,12 +53,23 @@ public class BrocaTestServer : WebApplicationFactory<Program>, IAsyncDisposable
 
         builder.ConfigureAppConfiguration((context, config) =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
+            var configValues = new Dictionary<string, string?>
             {
                 ["ActivityPub:BaseUrl"] = _baseUrl,
                 ["ActivityPub:PrimaryDomain"] = _domain,
                 ["ActivityPub:EnableAdminOperations"] = "true"
-            });
+            };
+
+            // Merge additional configuration if provided
+            if (_additionalConfiguration != null)
+            {
+                foreach (var kvp in _additionalConfiguration)
+                {
+                    configValues[kvp.Key] = kvp.Value;
+                }
+            }
+
+            config.AddInMemoryCollection(configValues);
         });
 
         builder.ConfigureServices(services =>
