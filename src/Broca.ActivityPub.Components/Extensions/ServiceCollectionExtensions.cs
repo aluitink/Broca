@@ -1,16 +1,16 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Broca.ActivityPub.WebClient.Extensions;
+namespace Broca.ActivityPub.Components.Extensions;
 
 /// <summary>
-/// Extension methods for configuring Broca ActivityPub WebClient
+/// Extension methods for configuring Broca ActivityPub Components
 /// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds Broca ActivityPub WebClient services to the DI container
+    /// Adds Broca ActivityPub Components services to the DI container
     /// </summary>
-    public static IServiceCollection UseBrocaWebClient(this IServiceCollection services)
+    public static IServiceCollection UseBrocaComponents(this IServiceCollection services)
     {
         // WebClient services will be added here as they are implemented
         

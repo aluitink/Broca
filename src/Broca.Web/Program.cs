@@ -1,0 +1,19 @@
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Broca.Web;
+using Broca.ActivityPub.Components.Extensions;
+using Broca.ActivityPub.Client.Extensions;
+
+var builder = WebAssemblyHostBuilder.CreateDefault(args);
+builder.RootComponents.Add<App>("#app");
+builder.RootComponents.Add<HeadOutlet>("head::after");
+
+// Configure HttpClient for API calls
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
+builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
+
+// Add Broca services
+builder.Services.UseBrocaComponents();
+builder.Services.AddActivityPubClient();
+
+await builder.Build().RunAsync();
