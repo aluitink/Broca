@@ -76,7 +76,7 @@ public static class TestDataSeeder
                     })
                 },
                 {
-                    "privateKey",
+                    "privateKeyPem",
                     JsonSerializer.SerializeToElement(privateKeyPem)
                 }
             }

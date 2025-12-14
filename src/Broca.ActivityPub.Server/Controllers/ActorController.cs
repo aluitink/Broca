@@ -59,6 +59,11 @@ public class ActorController : ControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            // Clone the actor to avoid modifying the stored instance
+            // when adding endpoints or removing private keys
+            var actorJson = JsonSerializer.Serialize(actor, _jsonOptions);
+            actor = JsonSerializer.Deserialize<Actor>(actorJson, _jsonOptions)!;
+
             // Add endpoints property to advertise capabilities
             var baseUrl = $"{Request.Scheme}://{Request.Host}";
             actor.ExtensionData ??= new Dictionary<string, JsonElement>();
@@ -72,11 +77,17 @@ public class ActorController : ControllerBase
             // Check if admin token is provided and valid
             bool includePrivateKey = IsAdminTokenValid();
             
+            _logger.LogDebug("Actor {Username} request - AdminApiToken configured: {HasToken}, Include private key: {IncludeKey}", 
+                username, 
+                !string.IsNullOrWhiteSpace(_options.AdminApiToken),
+                includePrivateKey);
+            
             if (!includePrivateKey)
             {
                 // Remove private key from response for non-admin requests
                 if (actor.ExtensionData?.ContainsKey("privateKeyPem") == true)
                 {
+                    _logger.LogDebug("Removing private key from actor {Username} response", username);
                     actor.ExtensionData.Remove("privateKeyPem");
                 }
             }
@@ -98,6 +109,7 @@ public class ActorController : ControllerBase
         // Check if admin token is configured
         if (string.IsNullOrWhiteSpace(_options.AdminApiToken))
         {
+            _logger.LogDebug("AdminApiToken not configured");
             return false;
         }
 
@@ -105,19 +117,23 @@ public class ActorController : ControllerBase
         var authHeader = Request.Headers["Authorization"].FirstOrDefault();
         if (string.IsNullOrWhiteSpace(authHeader))
         {
+            _logger.LogDebug("No Authorization header provided");
             return false;
         }
 
         // Check for Bearer token format
         if (!authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
+            _logger.LogDebug("Authorization header does not start with 'Bearer '");
             return false;
         }
 
         var providedToken = authHeader.Substring(7).Trim();
         
         // Constant-time comparison to prevent timing attacks
-        return CryptographicEquals(providedToken, _options.AdminApiToken);
+        var isValid = CryptographicEquals(providedToken, _options.AdminApiToken);
+        _logger.LogDebug("API token validation result: {IsValid}", isValid);
+        return isValid;
     }
 
     /// <summary>
