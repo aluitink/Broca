@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.FluentUI.AspNetCore.Components;
 using Broca.Web;
 using Broca.ActivityPub.Components.Extensions;
 using Broca.ActivityPub.Client.Extensions;
@@ -12,7 +13,10 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 
-// Add Broca services
+// Add Fluent UI services
+builder.Services.AddFluentUIComponents();
+
+// Add Broca ActivityPub services
 builder.Services.UseBrocaComponents();
 builder.Services.AddActivityPubClient();
 
