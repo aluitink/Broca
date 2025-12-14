@@ -1,0 +1,63 @@
+@using Broca.ActivityPub.Core.Interfaces
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider ServiceProvider
+
+<CascadingValue Value="this" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    /// <summary>
+    /// Gets or sets the base URL for the ActivityPub instance.
+    /// If not provided, the client will use the default configured URL.
+    /// </summary>
+    [Parameter]
+    public string? BaseUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional callback that is invoked when the client is ready.
+    /// </summary>
+    [Parameter]
+    public EventCallback<IActivityPubClient> OnClientReady { get; set; }
+
+    /// <summary>
+    /// Gets or sets the child content to render within this provider.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Gets the ActivityPub client instance.
+    /// </summary>
+    public IActivityPubClient Client { get; private set; } = default!;
+
+    /// <summary>
+    /// Gets a value indicating whether the client is ready.
+    /// </summary>
+    public bool IsReady { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get or create the client from DI
+        Client = ServiceProvider.GetRequiredService<IActivityPubClient>();
+
+        // TODO: If BaseUrl is provided, we might need to create a scoped client
+        // or configure the existing client with the new base URL
+        // This depends on the IActivityPubClient implementation
+
+        IsReady = true;
+
+        if (OnClientReady.HasDelegate)
+        {
+            await OnClientReady.InvokeAsync(Client);
+        }
+    }
+
+    /// <summary>
+    /// Gets the effective base URL being used.
+    /// </summary>
+    public string GetEffectiveBaseUrl()
+    {
+        return BaseUrl ?? string.Empty; // TODO: Get from client configuration
+    }
+}

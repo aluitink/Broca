@@ -1,0 +1,232 @@
+/* ActivityPub Component Styles */
+
+/* Base Object Display */
+.activitypub-object-fallback {
+    padding: 1rem;
+    background-color: #f5f5f5;
+    border: 1px dashed #ccc;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.activitypub-object-fallback .object-type {
+    font-weight: bold;
+    color: #666;
+}
+
+/* Note Renderer */
+.activitypub-note {
+    padding: 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #fff;
+    margin-bottom: 1rem;
+}
+
+.activitypub-note .note-attribution {
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.activitypub-note .note-actor {
+    font-weight: 600;
+    color: #333;
+}
+
+.activitypub-note .note-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #1a1a1a;
+}
+
+.activitypub-note .note-content {
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+    color: #333;
+}
+
+.activitypub-note .note-metadata {
+    font-size: 0.75rem;
+    color: #666;
+    margin-top: 0.5rem;
+}
+
+.activitypub-note .note-attachments {
+    margin-top: 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.5rem;
+}
+
+.activitypub-note .attachment-item {
+    padding: 0.5rem;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+}
+
+/* Actor/Profile Renderer */
+.activitypub-profile {
+    padding: 1.5rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #fff;
+}
+
+.activitypub-profile .profile-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.activitypub-profile .profile-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: #f0f0f0;
+}
+
+.activitypub-profile .profile-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.activitypub-profile .profile-info {
+    flex: 1;
+}
+
+.activitypub-profile .profile-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin-bottom: 0.25rem;
+}
+
+.activitypub-profile .profile-username {
+    font-size: 0.875rem;
+    color: #666;
+}
+
+.activitypub-profile .profile-summary {
+    margin-bottom: 1rem;
+    line-height: 1.5;
+    color: #333;
+}
+
+.activitypub-profile .profile-details {
+    border-top: 1px solid #e0e0e0;
+    padding-top: 1rem;
+    margin-top: 1rem;
+}
+
+.activitypub-profile .profile-detail {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.activitypub-profile .profile-detail .label {
+    font-weight: 600;
+    color: #666;
+}
+
+.activitypub-profile .profile-detail .value {
+    color: #333;
+}
+
+.activitypub-profile .profile-detail a {
+    color: #0066cc;
+    text-decoration: none;
+}
+
+.activitypub-profile .profile-detail a:hover {
+    text-decoration: underline;
+}
+
+/* Activity Renderer */
+.activitypub-activity {
+    padding: 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #fff;
+    margin-bottom: 1rem;
+}
+
+.activitypub-activity .activity-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.activitypub-activity .activity-actor {
+    font-weight: 600;
+    color: #333;
+}
+
+.activitypub-activity .type-badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    background-color: #e3f2fd;
+    color: #1976d2;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.activitypub-activity .activity-time {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: #666;
+}
+
+.activitypub-activity .activity-summary {
+    margin-bottom: 0.75rem;
+    font-style: italic;
+    color: #666;
+}
+
+.activitypub-activity .activity-objects {
+    margin-top: 1rem;
+}
+
+.activitypub-activity .activity-object {
+    margin-bottom: 0.5rem;
+}
+
+.activitypub-activity .activity-object:last-child {
+    margin-bottom: 0;
+}
+
+.activitypub-activity .activity-recipients {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e0e0e0;
+    font-size: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.activitypub-activity .recipients-label {
+    font-weight: 600;
+    color: #666;
+}
+
+.activitypub-activity .recipient {
+    padding: 0.125rem 0.5rem;
+    background-color: #f5f5f5;
+    border-radius: 12px;
+    color: #333;
+}
+
+.activitypub-activity .recipient.cc {
+    opacity: 0.7;
+}

@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Broca.ActivityPub.Core\Broca.ActivityPub.Core.csproj" />
+    <ProjectReference Include="..\Broca.ActivityPub.Client\Broca.ActivityPub.Client.csproj" />
   </ItemGroup>
 
 </Project>

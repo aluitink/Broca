@@ -1,4 +1,5 @@
 using Broca.ActivityPub.Client.Extensions;
+using Broca.ActivityPub.Components.Extensions;
 using Broca.Sample.BlazorApp;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
@@ -19,8 +20,12 @@ builder.Services.AddHttpClient("ActivityPubApi", client =>
     client.DefaultRequestHeaders.Add("Accept", "application/activity+json");
 });
 
-// Add Broca ActivityPub Client services
-builder.Services.AddActivityPubClient();
+// Add Broca ActivityPub Components and Client services
+builder.Services.AddActivityPubComponents(options =>
+{
+    options.DefaultPageSize = 20;
+    options.AutoFetchActors = true;
+});
 
 // Add identity service for managing user keys
 builder.Services.AddSingleton<IdentityService>();

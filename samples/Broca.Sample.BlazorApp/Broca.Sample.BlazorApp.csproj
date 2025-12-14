@@ -6,7 +6,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- TODO: Replace with actual NuGet package reference when published -->
+    <!-- <PackageReference Include="Broca.ActivityPub.Client" Version="*" /> -->
+    <!-- <PackageReference Include="Broca.ActivityPub.Components" Version="*" /> -->
+    <!-- Temporarily using project references until packages are published -->
     <ProjectReference Include="..\..\src\Broca.ActivityPub.Client\Broca.ActivityPub.Client.csproj" />
+    <ProjectReference Include="..\..\src\Broca.ActivityPub.Components\Broca.ActivityPub.Components.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

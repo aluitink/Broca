@@ -1,11 +1,159 @@
-@* 
-    Component for displaying an ActivityPub feed
-*@
-<div class="activity-feed">
-    <h3>Activity Feed</h3>
-    @* TODO: Implement activity feed display *@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-activity-feed @CssClass">
+    @if (!string.IsNullOrEmpty(Title))
+    {
+        <div class="feed-header">
+            <h3>@Title</h3>
+        </div>
+    }
+
+    @if (CollectionUrl != null)
+    {
+        <CollectionLoader TItem="Activity" 
+                         CollectionUrl="@CollectionUrl" 
+                         PageSize="@PageSize"
+                         UseVirtualization="@UseVirtualization"
+                         ItemSize="@ItemSize"
+                         OverscanCount="@OverscanCount">
+            <ItemTemplate Context="activity">
+                @if (ActivityTemplate != null)
+                {
+                    @ActivityTemplate(activity)
+                }
+                else
+                {
+                    <ActivityRenderer Activity="@activity" 
+                                    ShowObject="@ShowObjects"
+                                    ShowRecipients="@ShowRecipients" />
+                }
+            </ItemTemplate>
+            <LoadingTemplate>
+                @if (LoadingTemplate != null)
+                {
+                    @LoadingTemplate
+                }
+                else
+                {
+                    <div class="feed-loading">
+                        <span class="loading-spinner"></span>
+                        <span>Loading activities...</span>
+                    </div>
+                }
+            </LoadingTemplate>
+            <EmptyTemplate>
+                @if (EmptyTemplate != null)
+                {
+                    @EmptyTemplate
+                }
+                else
+                {
+                    <div class="feed-empty">
+                        <p>No activities found</p>
+                    </div>
+                }
+            </EmptyTemplate>
+            <ErrorTemplate Context="error">
+                @if (ErrorTemplate != null)
+                {
+                    @ErrorTemplate(error)
+                }
+                else
+                {
+                    <div class="feed-error">
+                        <p>Error loading activities: @error</p>
+                    </div>
+                }
+            </ErrorTemplate>
+        </CollectionLoader>
+    }
+    else
+    {
+        <div class="feed-error">
+            <p>No collection URL specified</p>
+        </div>
+    }
 </div>
 
 @code {
-    // TODO: Add parameters and logic
+    /// <summary>
+    /// Gets or sets the URL of the activity collection (e.g., outbox, inbox).
+    /// </summary>
+    [Parameter]
+    public Uri? CollectionUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the title of the feed.
+    /// </summary>
+    [Parameter]
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Gets or sets the page size for loading activities.
+    /// </summary>
+    [Parameter]
+    public int PageSize { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets whether to use virtualization.
+    /// </summary>
+    [Parameter]
+    public bool UseVirtualization { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the item size for virtualization (in pixels).
+    /// </summary>
+    [Parameter]
+    public float ItemSize { get; set; } = 150f;
+
+    /// <summary>
+    /// Gets or sets the overscan count for virtualization.
+    /// </summary>
+    [Parameter]
+    public int OverscanCount { get; set; } = 3;
+
+    /// <summary>
+    /// Gets or sets whether to show activity objects.
+    /// </summary>
+    [Parameter]
+    public bool ShowObjects { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show recipients.
+    /// </summary>
+    [Parameter]
+    public bool ShowRecipients { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom activity rendering template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Activity>? ActivityTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loading template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the empty state template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? EmptyTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
 }
+

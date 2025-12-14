@@ -17,7 +17,11 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseU
 builder.Services.AddFluentUIComponents();
 
 // Add Broca ActivityPub services
-builder.Services.UseBrocaComponents();
-builder.Services.AddActivityPubClient();
+builder.Services.AddActivityPubComponents(options =>
+{
+    options.DefaultPageSize = 20;
+    options.AutoFetchActors = true;
+    options.VirtualizationOverscan = 5;
+});
 
 await builder.Build().RunAsync();

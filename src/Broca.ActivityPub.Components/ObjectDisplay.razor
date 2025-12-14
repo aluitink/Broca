@@ -1,0 +1,38 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Components.Services
+@inject IObjectRendererRegistry RendererRegistry
+
+@if (Object != null)
+{
+    @RendererRegistry.GetRenderFragment(Object)
+}
+else if (RenderEmpty != null)
+{
+    @RenderEmpty
+}
+
+@code {
+    /// <summary>
+    /// Gets or sets the ActivityStreams object to display.
+    /// </summary>
+    [Parameter]
+    public object? Object { get; set; }
+
+    /// <summary>
+    /// Gets or sets the content to display when the object is null.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? RenderEmpty { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional CSS classes for the container.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom renderer to use instead of the registry.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<object>? CustomRenderer { get; set; }
+}

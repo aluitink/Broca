@@ -1,0 +1,117 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-profile @CssClass">
+    @if (Actor != null)
+    {
+        <div class="profile-header">
+            @if (!string.IsNullOrEmpty(GetIconUrl()))
+            {
+                <div class="profile-icon">
+                    <img src="@GetIconUrl()" alt="@GetName()" />
+                </div>
+            }
+            
+            <div class="profile-info">
+                <div class="profile-name">@GetName()</div>
+                
+                @if (!string.IsNullOrEmpty(GetPreferredUsername()))
+                {
+                    <div class="profile-username">@@@GetPreferredUsername()</div>
+                }
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(GetSummary()))
+        {
+            <div class="profile-summary">
+                @((MarkupString)GetSummary())
+            </div>
+        }
+
+        @if (ShowDetails)
+        {
+            <div class="profile-details">
+                @if (GetPublished().HasValue)
+                {
+                    <div class="profile-detail">
+                        <span class="label">Joined:</span>
+                        <span class="value">@GetPublished().Value.ToString("MMMM yyyy")</span>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(Actor.Id))
+                {
+                    <div class="profile-detail">
+                        <span class="label">ID:</span>
+                        <a href="@Actor.Id" class="value" target="_blank">@Actor.Id</a>
+                    </div>
+                }
+            </div>
+        }
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Actor)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Actor object to render.
+    /// </summary>
+    [Parameter]
+    public KristofferStrube.ActivityStreams.Object? Actor { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show detailed information.
+    /// </summary>
+    [Parameter]
+    public bool ShowDetails { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? AdditionalContent { get; set; }
+
+    private string GetName()
+    {
+        if (Actor is Person person && person.Name?.Any() == true)
+            return person.Name.First();
+        
+        return Actor?.Name?.FirstOrDefault() ?? "Unknown";
+    }
+
+    private string GetPreferredUsername()
+    {
+        if (Actor is Person person)
+            return person.PreferredUsername ?? string.Empty;
+        
+        return string.Empty;
+    }
+
+    private string GetSummary()
+    {
+        return Actor?.Summary?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetIconUrl()
+    {
+        // The Icon property might be a complex object
+        // This is a simplified implementation
+        return string.Empty; // TODO: Implement proper icon URL extraction
+    }
+
+    private DateTimeOffset? GetPublished()
+    {
+        return Actor?.Published;
+    }
+}
