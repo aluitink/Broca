@@ -205,6 +205,97 @@ public class ActivityBuilder : IActivityBuilder
             Published = DateTime.UtcNow
         };
     }
+
+    public Create Create(IObject obj)
+    {
+        ArgumentNullException.ThrowIfNull(obj);
+
+        _logger.LogDebug("Creating Create activity: {ActorId} creates {ObjectType}", _actorId, obj.Type?.FirstOrDefault());
+
+        return new Create
+        {
+            JsonLDContext = new List<ITermDefinition> { new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) },
+            Id = GenerateActivityId("create"),
+            Type = new[] { "Create" },
+            Actor = new List<IObjectOrLink> { new Link { Href = new Uri(_actorId) } },
+            Object = new List<IObjectOrLink> { obj },
+            Published = DateTime.UtcNow
+        };
+    }
+
+    public Add Add(IObject obj, string targetCollectionUrl)
+    {
+        ArgumentNullException.ThrowIfNull(obj);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetCollectionUrl);
+
+        _logger.LogDebug("Creating Add activity: {ActorId} adds object to {TargetCollection}", _actorId, targetCollectionUrl);
+
+        return new Add
+        {
+            JsonLDContext = new List<ITermDefinition> { new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) },
+            Id = GenerateActivityId("add"),
+            Type = new[] { "Add" },
+            Actor = new List<IObjectOrLink> { new Link { Href = new Uri(_actorId) } },
+            Object = new List<IObjectOrLink> { obj },
+            Target = new List<IObjectOrLink> { new Link { Href = new Uri(targetCollectionUrl) } },
+            Published = DateTime.UtcNow
+        };
+    }
+
+    public Add Add(string objectId, string targetCollectionUrl)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetCollectionUrl);
+
+        _logger.LogDebug("Creating Add activity: {ActorId} adds {ObjectId} to {TargetCollection}", _actorId, objectId, targetCollectionUrl);
+
+        return new Add
+        {
+            JsonLDContext = new List<ITermDefinition> { new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) },
+            Id = GenerateActivityId("add"),
+            Type = new[] { "Add" },
+            Actor = new List<IObjectOrLink> { new Link { Href = new Uri(_actorId) } },
+            Object = new List<IObjectOrLink> { new Link { Href = new Uri(objectId) } },
+            Target = new List<IObjectOrLink> { new Link { Href = new Uri(targetCollectionUrl) } },
+            Published = DateTime.UtcNow
+        };
+    }
+
+    public Remove Remove(string objectId, string targetCollectionUrl)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetCollectionUrl);
+
+        _logger.LogDebug("Creating Remove activity: {ActorId} removes {ObjectId} from {TargetCollection}", _actorId, objectId, targetCollectionUrl);
+
+        return new Remove
+        {
+            JsonLDContext = new List<ITermDefinition> { new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) },
+            Id = GenerateActivityId("remove"),
+            Type = new[] { "Remove" },
+            Actor = new List<IObjectOrLink> { new Link { Href = new Uri(_actorId) } },
+            Object = new List<IObjectOrLink> { new Link { Href = new Uri(objectId) } },
+            Target = new List<IObjectOrLink> { new Link { Href = new Uri(targetCollectionUrl) } },
+            Published = DateTime.UtcNow
+        };
+    }
+
+    public Update Update(IObject obj)
+    {
+        ArgumentNullException.ThrowIfNull(obj);
+
+        _logger.LogDebug("Creating Update activity: {ActorId} updates {ObjectType}", _actorId, obj.Type?.FirstOrDefault());
+
+        return new Update
+        {
+            JsonLDContext = new List<ITermDefinition> { new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) },
+            Id = GenerateActivityId("update"),
+            Type = new[] { "Update" },
+            Actor = new List<IObjectOrLink> { new Link { Href = new Uri(_actorId) } },
+            Object = new List<IObjectOrLink> { obj },
+            Published = DateTime.UtcNow
+        };
+    }
 }
 
 /// <summary>

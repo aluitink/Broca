@@ -15,6 +15,7 @@ public class ActorController : ControllerBase
 {
     private readonly IActorRepository _actorRepository;
     private readonly IActivityRepository _activityRepository;
+    private readonly ICollectionService _collectionService;
     private readonly IdentityProviderService? _identityProviderService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<ActorController> _logger;
@@ -23,12 +24,14 @@ public class ActorController : ControllerBase
     public ActorController(
         IActorRepository actorRepository,
         IActivityRepository activityRepository,
+        ICollectionService collectionService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<ActorController> logger,
         IdentityProviderService? identityProviderService = null)
     {
         _actorRepository = actorRepository;
         _activityRepository = activityRepository;
+        _collectionService = collectionService;
         _identityProviderService = identityProviderService;
         _options = options.Value;
         _logger = logger;
@@ -73,6 +76,35 @@ public class ActorController : ControllerBase
                 sharedInbox = $"{baseUrl}/inbox",
                 uploadMedia = $"{baseUrl}/users/{username}/media"
             }, _jsonOptions);
+
+            // Add custom collections metadata for public collections
+            try
+            {
+                var collections = await _collectionService.GetCollectionDefinitionsAsync(username);
+                var publicCollections = collections.Where(c => c.Visibility == CollectionVisibility.Public).ToList();
+                
+                if (publicCollections.Any())
+                {
+                    // Add collections endpoint
+                    var collectionsData = new Dictionary<string, object>
+                    {
+                        ["collections"] = $"{baseUrl}/users/{username}/collections"
+                    };
+                    
+                    // Add individual collection links as extension properties
+                    foreach (var collection in publicCollections)
+                    {
+                        collectionsData[collection.Id] = $"{baseUrl}/users/{username}/collections/{collection.Id}";
+                    }
+                    
+                    actor.ExtensionData["broca:collections"] = JsonSerializer.SerializeToElement(collectionsData, _jsonOptions);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to add collections metadata to actor {Username}", username);
+                // Don't fail the request if collections metadata fails
+            }
 
             // Check if admin token is provided and valid
             bool includePrivateKey = IsAdminTokenValid();
