@@ -21,6 +21,7 @@ public class AdminOperationsHandler
 {
     private readonly IActorRepository _actorRepository;
     private readonly IActivityRepository _activityRepository;
+    private readonly ICollectionService _collectionService;
     private readonly CryptographyService _cryptographyService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<AdminOperationsHandler> _logger;
@@ -28,12 +29,14 @@ public class AdminOperationsHandler
     public AdminOperationsHandler(
         IActorRepository actorRepository,
         IActivityRepository activityRepository,
+        ICollectionService collectionService,
         CryptographyService cryptographyService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<AdminOperationsHandler> logger)
     {
         _actorRepository = actorRepository;
         _activityRepository = activityRepository;
+        _collectionService = collectionService;
         _cryptographyService = cryptographyService;
         _options = options.Value;
         _logger = logger;
@@ -134,6 +137,12 @@ public class AdminOperationsHandler
         {
             _logger.LogWarning("Create admin activity missing object property");
             return false;
+        }
+
+        // Check if this is a Collection object (for custom collections)
+        if (actorObject is Collection || actorObject.Type?.Contains("Collection") == true)
+        {
+            return await HandleCreateCollectionAsync(createActivity, cancellationToken);
         }
 
         // Check if object is an Actor type
@@ -343,6 +352,116 @@ public class AdminOperationsHandler
         _logger.LogInformation("Deleted actor via admin operation: {Username}", username);
         
         return true;
+    }
+
+    /// <summary>
+    /// Handles Create activity with a Collection object to create a custom collection
+    /// </summary>
+    private async Task<bool> HandleCreateCollectionAsync(Activity createActivity, CancellationToken cancellationToken)
+    {
+        var collectionObject = createActivity.Object?.FirstOrDefault();
+        if (collectionObject == null)
+        {
+            _logger.LogWarning("Create collection activity missing object property");
+            return false;
+        }
+
+        // Extract the target actor from the 'attributedTo' or 'actor' field
+        string? targetUsername = null;
+        
+        // Check attributedTo on the collection object
+        if (collectionObject is IObject obj && obj.AttributedTo != null)
+        {
+            var attributedToRef = obj.AttributedTo.FirstOrDefault();
+            var actorId = attributedToRef switch
+            {
+                Link link => link.Href?.ToString(),
+                IObject o => o.Id,
+                _ => null
+            };
+
+            if (actorId != null)
+            {
+                var actor = await _actorRepository.GetActorByIdAsync(actorId, cancellationToken);
+                targetUsername = actor?.PreferredUsername;
+            }
+        }
+
+        // If not found, use the actor who sent the Create activity
+        if (targetUsername == null)
+        {
+            var actorId = ExtractActorId(createActivity);
+            if (actorId != null)
+            {
+                var actor = await _actorRepository.GetActorByIdAsync(actorId, cancellationToken);
+                targetUsername = actor?.PreferredUsername;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(targetUsername))
+        {
+            _logger.LogWarning("Could not determine target actor for collection creation");
+            return false;
+        }
+
+        // Extract collection definition from extension data
+        // Look for Broca-specific extension: "broca:collectionDefinition"
+        CustomCollectionDefinition? definition = null;
+        
+        if (collectionObject is IObject collectionObj && collectionObj.ExtensionData != null)
+        {
+            // Try to find broca:collectionDefinition or collectionDefinition
+            if (collectionObj.ExtensionData.TryGetValue("collectionDefinition", out var defElement) ||
+                collectionObj.ExtensionData.TryGetValue("broca:collectionDefinition", out defElement))
+            {
+                try
+                {
+                    definition = JsonSerializer.Deserialize<CustomCollectionDefinition>(defElement.GetRawText());
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to deserialize collection definition from extension data");
+                    return false;
+                }
+            }
+        }
+
+        // If no extension data found, try to construct from standard Collection properties
+        if (definition == null)
+        {
+            if (collectionObject is not IObject collObj)
+            {
+                _logger.LogWarning("Collection object is not an IObject");
+                return false;
+            }
+
+            var collectionId = collObj.Name?.FirstOrDefault() ?? Guid.NewGuid().ToString();
+            definition = new CustomCollectionDefinition
+            {
+                Id = collectionId,
+                Name = collObj.Name?.FirstOrDefault() ?? collectionId,
+                Description = collObj.Summary?.FirstOrDefault()?.ToString(),
+                Type = CollectionType.Manual, // Default to manual
+                Visibility = CollectionVisibility.Public, // Default to public
+                Created = DateTimeOffset.UtcNow,
+                Updated = DateTimeOffset.UtcNow
+            };
+        }
+
+        // Create the collection
+        try
+        {
+            await _collectionService.CreateCollectionAsync(targetUsername, definition, cancellationToken);
+            _logger.LogInformation("Created custom collection {CollectionId} for {Username} via admin operation", 
+                definition.Id, targetUsername);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create collection {CollectionId} for {Username}", 
+                definition.Id, targetUsername);
+            return false;
+        }
     }
 
     /// <summary>
