@@ -1,0 +1,132 @@
+@page "/diagnostics"
+@using Broca.ActivityPub.Components
+@using KristofferStrube.ActivityStreams
+
+<PageTitle>Diagnostics - Broca Web</PageTitle>
+
+<link href="_content/Broca.ActivityPub.Components/admin-diagnostics.css" rel="stylesheet" />
+
+<AdminDiagnostics DefaultTab="actor" 
+                 EnableAdvancedDebug="true"
+                 OnActorSelected="HandleActorSelected">
+    <HeaderTemplate>
+        <div class="diagnostics-header custom-header">
+            <h2>🔧 ActivityPub Diagnostics</h2>
+            <p class="diagnostics-subtitle">
+                Test bed for Broca ActivityPub components
+            </p>
+            <div class="header-tips">
+                <small>💡 Explore the fediverse: Search for actors, browse feeds, and test components in real-time</small>
+            </div>
+        </div>
+    </HeaderTemplate>
+</AdminDiagnostics>
+
+@if (lastSelectedActor != null)
+{
+    <FluentMessageBar Title="Actor Selected" 
+                      Intent="MessageIntent.Success"
+                      Class="actor-notification">
+        <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Color="Color.Success" />
+        <span>Selected: @GetActorName(lastSelectedActor)</span>
+    </FluentMessageBar>
+}
+
+<style>
+    .custom-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2.5rem;
+        margin-bottom: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    .header-tips {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        backdrop-filter: blur(10px);
+    }
+
+    .header-tips small {
+        color: rgba(255, 255, 255, 0.95);
+        font-size: 0.9rem;
+    }
+
+    .actor-notification {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    @@keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .actor-notification {
+            bottom: 1rem;
+            right: 1rem;
+            left: 1rem;
+        }
+    }
+</style>
+
+@code {
+    private Actor? lastSelectedActor;
+    private System.Timers.Timer? notificationTimer;
+
+    private Task HandleActorSelected(KristofferStrube.ActivityStreams.Object actorObject)
+    {
+        if (actorObject is Actor actor)
+        {
+            lastSelectedActor = actor;
+            StateHasChanged();
+            
+            // Auto-hide notification after 4 seconds
+            notificationTimer?.Dispose();
+            notificationTimer = new System.Timers.Timer(4000);
+            notificationTimer.Elapsed += (s, e) =>
+            {
+                InvokeAsync(() =>
+                {
+                    lastSelectedActor = null;
+                    StateHasChanged();
+                });
+                notificationTimer?.Dispose();
+            };
+            notificationTimer.Start();
+        }
+        return Task.CompletedTask;
+    }
+
+    private string GetActorName(Actor actor)
+    {
+        var name = actor.Name?.FirstOrDefault();
+        var username = actor.PreferredUsername;
+        
+        if (!string.IsNullOrEmpty(name))
+            return name;
+        if (!string.IsNullOrEmpty(username))
+            return username;
+        
+        return "Unknown Actor";
+    }
+
+    public void Dispose()
+    {
+        notificationTimer?.Dispose();
+    }
+}

@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <!-- TODO: Replace with actual NuGet package references when published -->
+    <!-- <PackageReference Include="Broca.ActivityPub.Server" Version="*" /> -->
+    <!-- <PackageReference Include="Broca.ActivityPub.Client" Version="*" /> -->
+    <!-- Temporarily using project references until packages are published -->
     <ProjectReference Include="..\..\src\Broca.ActivityPub.Server\Broca.ActivityPub.Server.csproj">
       <ExcludeAssets>contentFiles</ExcludeAssets>
     </ProjectReference>

@@ -1,0 +1,112 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-note @CssClass">
+    @if (Note != null)
+    {
+        @if (ShowActor && Note.AttributedTo?.Any() == true)
+        {
+            <div class="note-attribution">
+                <span class="note-actor">@GetActorDisplay()</span>
+            </div>
+        }
+
+        @if (Note.Name?.Any() == true)
+        {
+            <div class="note-name">@Note.Name.First()</div>
+        }
+
+        @if (Note.Content?.Any() == true)
+        {
+            <div class="note-content">
+                @((MarkupString)(Note.Content.First() ?? string.Empty))
+            </div>
+        }
+
+        @if (Note.Published.HasValue)
+        {
+            <div class="note-metadata">
+                <time datetime="@Note.Published.Value.ToString("o")">
+                    @FormatDateTime(Note.Published.Value)
+                </time>
+            </div>
+        }
+
+        @if (Note.Attachment?.Any() == true)
+        {
+            <div class="note-attachments">
+                @foreach (var attachment in Note.Attachment)
+                {
+                    <div class="attachment-item">
+                        @RenderAttachment(attachment)
+                    </div>
+                }
+            </div>
+        }
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Note)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Note object to render.
+    /// </summary>
+    [Parameter]
+    public Note? Note { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the actor attribution.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Note>? AdditionalContent { get; set; }
+
+    private string GetActorDisplay()
+    {
+        var actorId = Note?.AttributedTo?.FirstOrDefault();
+        return actorId?.ToString() ?? "Unknown";
+    }
+
+    private string FormatDateTime(DateTimeOffset dateTime)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - dateTime;
+
+        if (diff.TotalMinutes < 1)
+            return "just now";
+        if (diff.TotalMinutes < 60)
+            return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24)
+            return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7)
+            return $"{(int)diff.TotalDays}d ago";
+        
+        return dateTime.ToString("MMM d, yyyy");
+    }
+
+    private RenderFragment RenderAttachment(object attachment)
+    {
+        return builder =>
+        {
+            builder.OpenElement(0, "div");
+            builder.AddAttribute(1, "class", "attachment");
+            builder.AddContent(2, attachment.GetType().Name);
+            builder.CloseElement();
+        };
+    }
+}

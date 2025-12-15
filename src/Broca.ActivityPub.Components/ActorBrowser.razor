@@ -1,0 +1,180 @@
+@using Broca.ActivityPub.Core.Interfaces
+@using KristofferStrube.ActivityStreams
+@inject IActivityPubClient Client
+
+<div class="activitypub-actor-browser @CssClass">
+    @if (SearchTemplate != null)
+    {
+        <div class="actor-search">
+            @SearchTemplate(new SearchContext(this))
+        </div>
+    }
+    else
+    {
+        <div class="actor-search-default">
+            <input type="text" 
+                   @bind="searchQuery" 
+                   @bind:event="oninput"
+                   placeholder="Enter actor handle (e.g., user@domain.com)" 
+                   class="search-input" />
+            <button @onclick="SearchAsync" class="search-button">Search</button>
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        @if (LoadingTemplate != null)
+        {
+            @LoadingTemplate
+        }
+        else
+        {
+            <div class="loading">Searching...</div>
+        }
+    }
+    else if (error != null)
+    {
+        @if (ErrorTemplate != null)
+        {
+            @ErrorTemplate(error)
+        }
+        else
+        {
+            <div class="error">@error</div>
+        }
+    }
+    else if (currentActor != null)
+    {
+        <div class="actor-result">
+            @if (ProfileTemplate != null)
+            {
+                @ProfileTemplate(currentActor)
+            }
+            else
+            {
+                <ActorRenderer Actor="currentActor" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string searchQuery = string.Empty;
+    private KristofferStrube.ActivityStreams.Object? currentActor;
+    private bool isLoading;
+    private string? error;
+
+    /// <summary>
+    /// Gets or sets the CSS class for the container.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets the search input template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<SearchContext>? SearchTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the profile display template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? ProfileTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loading template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when an actor is found.
+    /// </summary>
+    [Parameter]
+    public EventCallback<KristofferStrube.ActivityStreams.Object> OnActorFound { get; set; }
+
+    /// <summary>
+    /// Searches for an actor by handle or ID.
+    /// </summary>
+    public async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            error = "Please enter an actor handle or ID";
+            return;
+        }
+
+        isLoading = true;
+        error = null;
+        currentActor = null;
+        StateHasChanged();
+
+        try
+        {
+            // TODO: Implement WebFinger lookup if it's a handle (user@domain)
+            // For now, we'll try to get the actor directly if it's a URI
+            if (Uri.TryCreate(searchQuery, UriKind.Absolute, out var actorUri))
+            {
+                currentActor = await Client.GetActorAsync(actorUri);
+            }
+            else
+            {
+                // Try as an alias/handle
+                currentActor = await Client.GetActorByAliasAsync(searchQuery);
+            }
+
+            if (OnActorFound.HasDelegate)
+            {
+                await OnActorFound.InvokeAsync(currentActor);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to find actor: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Search context provided to the search template.
+    /// </summary>
+    public class SearchContext
+    {
+        private readonly ActorBrowser _browser;
+
+        public SearchContext(ActorBrowser browser)
+        {
+            _browser = browser;
+        }
+
+        /// <summary>
+        /// Gets or sets the current query.
+        /// </summary>
+        public string Query
+        {
+            get => _browser.searchQuery;
+            set => _browser.searchQuery = value;
+        }
+
+        /// <summary>
+        /// Executes the search.
+        /// </summary>
+        public Task Execute() => _browser.SearchAsync();
+
+        /// <summary>
+        /// Gets whether a search is in progress.
+        /// </summary>
+        public bool IsLoading => _browser.isLoading;
+    }
+}

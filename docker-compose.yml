@@ -1,0 +1,81 @@
+services:
+  broca-api:
+    build:
+      context: .
+      dockerfile: src/Broca.API/Dockerfile
+    container_name: broca-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ActivityPub__BaseUrl=https://dev.broca.luit.ink
+      - ActivityPub__PrimaryDomain=dev.broca.luit.ink
+      - ActivityPub__ServerName=Broca ActivityPub Server
+      - ActivityPub__SystemActorUsername=sys
+      - ActivityPub__RoutePrefix=ap
+      - Persistence__DataPath=/app/data
+      - IdentityProvider__SimpleIdentity__Username=admin
+      - IdentityProvider__SimpleIdentity__DisplayName=Administrator
+      - IdentityProvider__SimpleIdentity__Summary=System administrator account
+      - IdentityProvider__SimpleIdentity__ActorType=Person
+      - IdentityProvider__SimpleIdentity__IsDiscoverable=true
+    volumes:
+      - broca-data:/app/data
+    networks:
+      - broca-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/.well-known/webfinger?resource=acct:sys@dev.broca.luit.ink"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  broca-web:
+    build:
+      context: .
+      dockerfile: src/Broca.Web/Dockerfile
+    container_name: broca-web
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+    networks:
+      - broca-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: nginx
+      dockerfile: Dockerfile
+    container_name: broca-nginx
+    ports:
+      - "8080:80"
+    depends_on:
+      broca-api:
+        condition: service_healthy
+      broca-web:
+        condition: service_healthy
+    networks:
+      - broca-network
+      - nginx-proxy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  broca-data:
+    driver: local
+
+networks:
+  broca-network:
+    driver: bridge
+  nginx-proxy:
+    external: true

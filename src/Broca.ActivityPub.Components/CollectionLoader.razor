@@ -1,0 +1,331 @@
+@using Broca.ActivityPub.Core.Interfaces
+@using KristofferStrube.ActivityStreams
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@typeparam TItem
+@inject IActivityPubClient Client
+
+<div class="activitypub-collection-loader @CssClass">
+    @if (CollectionUrl != null)
+    {
+        @if (UseVirtualization)
+        {
+            <Virtualize @ref="virtualizeComponent" 
+                        ItemsProvider="LoadItemsAsync" 
+                        ItemSize="ItemSize"
+                        OverscanCount="OverscanCount">
+                <ItemContent Context="item">
+                    @if (ItemTemplate != null)
+                    {
+                        @ItemTemplate(item)
+                    }
+                    else
+                    {
+                        <div class="collection-item">@item?.ToString()</div>
+                    }
+                </ItemContent>
+                <Placeholder>
+                    @if (LoadingTemplate != null)
+                    {
+                        @LoadingTemplate
+                    }
+                    else
+                    {
+                        <div class="loading-placeholder">Loading...</div>
+                    }
+                </Placeholder>
+                <EmptyContent>
+                    @if (EmptyTemplate != null)
+                    {
+                        @EmptyTemplate
+                    }
+                    else
+                    {
+                        <div class="empty-content">No items found</div>
+                    }
+                </EmptyContent>
+            </Virtualize>
+        }
+        else
+        {
+            @if (isLoading && !items.Any())
+            {
+                @if (LoadingTemplate != null)
+                {
+                    @LoadingTemplate
+                }
+                else
+                {
+                    <div class="loading">Loading items...</div>
+                }
+            }
+
+            @if (items.Any())
+            {
+                <div class="collection-items">
+                    @foreach (var item in items)
+                    {
+                        <div class="collection-item-wrapper">
+                            @if (ItemTemplate != null)
+                            {
+                                @ItemTemplate(item)
+                            }
+                            else
+                            {
+                                <div class="collection-item">@item?.ToString()</div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @if (hasMore)
+                {
+                    <div class="load-more">
+                        <button @onclick="LoadMoreAsync" disabled="@isLoading" class="load-more-button">
+                            @if (isLoading)
+                            {
+                                <span>Loading...</span>
+                            }
+                            else
+                            {
+                                <span>Load More</span>
+                            }
+                        </button>
+                    </div>
+                }
+            }
+            else if (!isLoading)
+            {
+                @if (EmptyTemplate != null)
+                {
+                    @EmptyTemplate
+                }
+                else
+                {
+                    <div class="empty-content">No items found</div>
+                }
+            }
+        }
+
+        @if (error != null && ErrorTemplate != null)
+        {
+            @ErrorTemplate(error)
+        }
+    }
+</div>
+
+@code {
+    private List<TItem> items = new();
+    private bool isLoading;
+    private bool hasMore = true;
+    private string? error;
+    private Virtualize<TItem>? virtualizeComponent;
+
+    /// <summary>
+    /// Gets or sets the collection URL to load items from.
+    /// </summary>
+    [Parameter]
+    public Uri? CollectionUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the page size for loading items.
+    /// </summary>
+    [Parameter]
+    public int PageSize { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets whether to use virtualization for rendering.
+    /// </summary>
+    [Parameter]
+    public bool UseVirtualization { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the item size for virtualization (in pixels).
+    /// </summary>
+    [Parameter]
+    public float ItemSize { get; set; } = 100f;
+
+    /// <summary>
+    /// Gets or sets the overscan count for virtualization.
+    /// </summary>
+    [Parameter]
+    public int OverscanCount { get; set; } = 3;
+
+    /// <summary>
+    /// Gets or sets the CSS class for the container.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets the template for rendering items.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<TItem>? ItemTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loading template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the empty state template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? EmptyTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when items are loaded.
+    /// </summary>
+    [Parameter]
+    public EventCallback<IEnumerable<TItem>> OnItemsLoaded { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (CollectionUrl != null && !UseVirtualization && !items.Any())
+        {
+            await LoadInitialItemsAsync();
+        }
+    }
+
+    private async Task LoadInitialItemsAsync()
+    {
+        if (isLoading) return;
+
+        isLoading = true;
+        error = null;
+        StateHasChanged();
+
+        try
+        {
+            var loadedItems = new List<TItem>();
+            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, PageSize))
+            {
+                loadedItems.Add(item);
+                if (loadedItems.Count >= PageSize)
+                {
+                    break;
+                }
+            }
+
+            items = loadedItems;
+            hasMore = loadedItems.Count >= PageSize;
+
+            if (OnItemsLoaded.HasDelegate)
+            {
+                await OnItemsLoaded.InvokeAsync(items);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load items: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        if (isLoading || !hasMore) return;
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var skip = items.Count;
+            var loadedItems = new List<TItem>();
+            
+            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, null))
+            {
+                if (skip > 0)
+                {
+                    skip--;
+                    continue;
+                }
+
+                loadedItems.Add(item);
+                if (loadedItems.Count >= PageSize)
+                {
+                    break;
+                }
+            }
+
+            items.AddRange(loadedItems);
+            hasMore = loadedItems.Count >= PageSize;
+
+            if (OnItemsLoaded.HasDelegate)
+            {
+                await OnItemsLoaded.InvokeAsync(loadedItems);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load more items: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async ValueTask<ItemsProviderResult<TItem>> LoadItemsAsync(ItemsProviderRequest request)
+    {
+        try
+        {
+            var loadedItems = new List<TItem>();
+            var skip = request.StartIndex;
+
+            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, null))
+            {
+                if (skip > 0)
+                {
+                    skip--;
+                    continue;
+                }
+
+                loadedItems.Add(item);
+                if (loadedItems.Count >= request.Count)
+                {
+                    break;
+                }
+            }
+
+            return new ItemsProviderResult<TItem>(loadedItems, loadedItems.Count);
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load items: {ex.Message}";
+            return new ItemsProviderResult<TItem>(Array.Empty<TItem>(), 0);
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the collection from the beginning.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        items.Clear();
+        hasMore = true;
+        error = null;
+
+        if (UseVirtualization && virtualizeComponent != null)
+        {
+            await virtualizeComponent.RefreshDataAsync();
+        }
+        else
+        {
+            await LoadInitialItemsAsync();
+        }
+    }
+}

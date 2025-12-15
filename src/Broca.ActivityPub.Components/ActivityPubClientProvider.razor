@@ -1,0 +1,204 @@
+@using Broca.ActivityPub.Core.Interfaces
+@using Broca.ActivityPub.Core.Models
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
+@inject IServiceProvider ServiceProvider
+@inject IOptionsMonitor<ActivityPubClientOptions> OptionsMonitor
+
+<CascadingValue Value="this" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    /// <summary>
+    /// Gets or sets the base URL for the ActivityPub instance.
+    /// If not provided, the client will use the default configured URL.
+    /// </summary>
+    [Parameter]
+    public string? BaseUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Actor ID for authenticated requests.
+    /// Optional - if not provided, client operates in anonymous mode.
+    /// </summary>
+    [Parameter]
+    public string? ActorId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the API key for authentication.
+    /// Optional - used to fetch credentials from the server.
+    /// Takes precedence over PrivateKeyPem if both are provided.
+    /// </summary>
+    [Parameter]
+    public string? ApiKey { get; set; }
+
+    /// <summary>
+    /// Gets or sets the PEM-encoded private key for signing requests.
+    /// Optional - used for direct private key authentication.
+    /// </summary>
+    [Parameter]
+    public string? PrivateKeyPem { get; set; }
+
+    /// <summary>
+    /// Gets or sets the public key ID (typically actorId#main-key).
+    /// Required when using PrivateKeyPem directly.
+    /// </summary>
+    [Parameter]
+    public string? PublicKeyId { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional callback that is invoked when the client is ready.
+    /// </summary>
+    [Parameter]
+    public EventCallback<IActivityPubClient> OnClientReady { get; set; }
+
+    /// <summary>
+    /// Gets or sets the child content to render within this provider.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Gets the ActivityPub client instance.
+    /// </summary>
+    public IActivityPubClient Client { get; private set; } = default!;
+
+    /// <summary>
+    /// Gets a value indicating whether the client is ready.
+    /// </summary>
+    public bool IsReady { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the client is authenticated.
+    /// </summary>
+    public bool IsAuthenticated => OptionsMonitor.CurrentValue.IsAuthenticated;
+
+    /// <summary>
+    /// Gets the current actor ID being used.
+    /// </summary>
+    public string? CurrentActorId => OptionsMonitor.CurrentValue.ActorId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get or create the client from DI
+        Client = ServiceProvider.GetRequiredService<IActivityPubClient>();
+
+        // Configure the client if parameters are provided
+        await ConfigureClientAsync();
+
+        IsReady = true;
+
+        if (OnClientReady.HasDelegate)
+        {
+            await OnClientReady.InvokeAsync(Client);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsReady)
+        {
+            // Reconfigure if parameters change
+            await ConfigureClientAsync();
+        }
+    }
+
+    private async Task ConfigureClientAsync()
+    {
+        var options = OptionsMonitor.CurrentValue;
+        var needsConfiguration = false;
+
+        // Apply ActorId if provided
+        if (!string.IsNullOrWhiteSpace(ActorId) && options.ActorId != ActorId)
+        {
+            options.ActorId = ActorId;
+            needsConfiguration = true;
+        }
+
+        // Apply API Key if provided
+        if (!string.IsNullOrWhiteSpace(ApiKey) && options.ApiKey != ApiKey)
+        {
+            options.ApiKey = ApiKey;
+            needsConfiguration = true;
+        }
+
+        // Apply Private Key if provided (only if no API key)
+        if (string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(PrivateKeyPem))
+        {
+            if (options.PrivateKeyPem != PrivateKeyPem)
+            {
+                options.PrivateKeyPem = PrivateKeyPem;
+                needsConfiguration = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(PublicKeyId) && options.PublicKeyId != PublicKeyId)
+            {
+                options.PublicKeyId = PublicKeyId;
+                needsConfiguration = true;
+            }
+        }
+
+        // Initialize client if using API key authentication
+        if (needsConfiguration && options.RequiresInitialization)
+        {
+            await Client.InitializeAsync();
+            StateHasChanged(); // Trigger re-render after initialization
+        }
+    }
+
+    /// <summary>
+    /// Updates the authentication credentials and reinitializes the client.
+    /// </summary>
+    /// <param name="actorId">The actor ID</param>
+    /// <param name="apiKey">The API key for fetching credentials</param>
+    public async Task SetApiKeyAsync(string actorId, string apiKey)
+    {
+        ActorId = actorId;
+        ApiKey = apiKey;
+        await ConfigureClientAsync();
+        StateHasChanged(); // Trigger UI update
+    }
+
+    /// <summary>
+    /// Updates the authentication credentials with a direct private key.
+    /// </summary>
+    /// <param name="actorId">The actor ID</param>
+    /// <param name="privateKeyPem">The PEM-encoded private key</param>
+    /// <param name="publicKeyId">The public key ID</param>
+    public async Task SetPrivateKeyAsync(string actorId, string privateKeyPem, string publicKeyId)
+    {
+        ActorId = actorId;
+        PrivateKeyPem = privateKeyPem;
+        PublicKeyId = publicKeyId;
+        ApiKey = null; // Clear API key to use private key
+        await ConfigureClientAsync();
+        StateHasChanged(); // Trigger UI update
+    }
+
+    /// <summary>
+    /// Clears authentication and switches to anonymous mode.
+    /// </summary>
+    public void ClearAuthentication()
+    {
+        var options = OptionsMonitor.CurrentValue;
+        options.ActorId = null;
+        options.ApiKey = null;
+        options.PrivateKeyPem = null;
+        options.PublicKeyId = null;
+        
+        ActorId = null;
+        ApiKey = null;
+        PrivateKeyPem = null;
+        PublicKeyId = null;
+        
+        StateHasChanged(); // Trigger UI update
+    }
+
+    /// <summary>
+    /// Gets the effective base URL being used.
+    /// </summary>
+    public string GetEffectiveBaseUrl()
+    {
+        return BaseUrl ?? string.Empty; // TODO: Get from client configuration
+    }
+}

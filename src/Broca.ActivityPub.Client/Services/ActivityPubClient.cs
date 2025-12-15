@@ -95,9 +95,13 @@ public class ActivityPubClient : IActivityPubClient
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/ld+json", 0.9));
             
             // Add API key as Bearer token
+            _logger.LogDebug("Adding Authorization header with API key for initialization request");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
 
+            _logger.LogDebug("Sending initialization request to {ActorId}", _options.ActorId);
             var response = await client.SendAsync(request, cancellationToken);
+            
+            _logger.LogInformation("Initialization request returned status {StatusCode}", response.StatusCode);
             response.EnsureSuccessStatusCode();
 
             var actor = await response.Content.ReadFromJsonAsync<Actor>(_jsonOptions, cancellationToken);
@@ -124,7 +128,9 @@ public class ActivityPubClient : IActivityPubClient
                     _options.PublicKeyId = $"{_options.ActorId.TrimEnd('#')}#main-key";
                 }
 
-                _logger.LogInformation("Successfully initialized client for {ActorId}", _options.ActorId);
+                _logger.LogInformation("Successfully initialized client for {ActorId} with public key ID {PublicKeyId}", 
+                    _options.ActorId, _options.PublicKeyId);
+                _logger.LogDebug("Client is now authenticated: {IsAuthenticated}", _options.IsAuthenticated);
             }
             else
             {
@@ -440,6 +446,8 @@ public class ActivityPubClient : IActivityPubClient
             throw new InvalidOperationException("PublicKeyId and PrivateKeyPem are required for signing requests");
         }
 
+        _logger.LogDebug("Signing request to {Uri} with key ID {KeyId}", request.RequestUri, _options.PublicKeyId);
+
         var method = request.Method.ToString();
         var uri = request.RequestUri!;
         var contentType = request.Content?.Headers.ContentType?.ToString();
@@ -455,6 +463,8 @@ public class ActivityPubClient : IActivityPubClient
             contentType,
             async (ct) => request.Content != null ? await request.Content.ReadAsByteArrayAsync(ct) : Array.Empty<byte>(),
             cancellationToken);
+        
+        _logger.LogDebug("Request signed successfully");
     }
 
     /// <summary>
