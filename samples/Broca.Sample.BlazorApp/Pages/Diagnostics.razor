@@ -1,0 +1,141 @@
+@page "/diagnostics"
+@using Broca.ActivityPub.Components
+@using KristofferStrube.ActivityStreams
+
+<PageTitle>Admin Diagnostics - Broca ActivityPub</PageTitle>
+
+<link href="_content/Broca.ActivityPub.Components/admin-diagnostics.css" rel="stylesheet" />
+
+<AdminDiagnostics DefaultTab="actor" 
+                 EnableAdvancedDebug="true"
+                 OnActorSelected="HandleActorSelected">
+    <HeaderTemplate>
+        <div class="diagnostics-header custom-header">
+            <h2>🔧 Broca ActivityPub Admin Diagnostics</h2>
+            <p class="diagnostics-subtitle">
+                Test bed for ActivityPub components - explore actors, feeds, and profiles across the fediverse
+            </p>
+            <div class="header-tips">
+                <small>💡 Try searching for popular instances like mastodon.social, fosstodon.org, or pixelfed.social</small>
+            </div>
+        </div>
+    </HeaderTemplate>
+</AdminDiagnostics>
+
+@if (lastSelectedActor != null)
+{
+    <div class="toast-notification">
+        <span class="toast-icon">✓</span>
+        <span>Actor selected: @GetActorName(lastSelectedActor)</span>
+    </div>
+}
+
+<style>
+    .custom-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2.5rem;
+        margin-bottom: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    .header-tips {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        backdrop-filter: blur(10px);
+    }
+
+    .header-tips small {
+        color: rgba(255, 255, 255, 0.95);
+        font-size: 0.9rem;
+    }
+
+    .toast-notification {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        background: #10b981;
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        animation: slideIn 0.3s ease-out;
+        z-index: 1000;
+    }
+
+    .toast-icon {
+        font-size: 1.25rem;
+    }
+
+    @@keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .toast-notification {
+            bottom: 1rem;
+            right: 1rem;
+            left: 1rem;
+        }
+    }
+</style>
+
+@code {
+    private Actor? lastSelectedActor;
+    private System.Timers.Timer? notificationTimer;
+
+    private Task HandleActorSelected(KristofferStrube.ActivityStreams.Object actorObject)
+    {
+        if (actorObject is Actor actor)
+        {
+            lastSelectedActor = actor;
+            StateHasChanged();
+            
+            // Auto-hide notification after 3 seconds
+            notificationTimer?.Dispose();
+            notificationTimer = new System.Timers.Timer(3000);
+            notificationTimer.Elapsed += (s, e) =>
+            {
+                InvokeAsync(() =>
+                {
+                    lastSelectedActor = null;
+                    StateHasChanged();
+                });
+                notificationTimer?.Dispose();
+            };
+            notificationTimer.Start();
+        }
+        return Task.CompletedTask;
+    }
+
+    private string GetActorName(Actor actor)
+    {
+        var name = actor.Name?.FirstOrDefault();
+        var username = actor.PreferredUsername;
+        
+        if (!string.IsNullOrEmpty(name))
+            return name;
+        if (!string.IsNullOrEmpty(username))
+            return username;
+        
+        return "Unknown Actor";
+    }
+
+    public void Dispose()
+    {
+        notificationTimer?.Dispose();
+    }
+}

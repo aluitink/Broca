@@ -1,5 +1,6 @@
 using Broca.ActivityPub.Client.Extensions;
 using Broca.ActivityPub.Components.Extensions;
+using Broca.ActivityPub.Core.Models;
 using Broca.Sample.BlazorApp;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
@@ -19,6 +20,11 @@ builder.Services.AddHttpClient("ActivityPubApi", client =>
 {
     client.DefaultRequestHeaders.Add("Accept", "application/activity+json");
 });
+
+// Configure ActivityPub Client from configuration
+// This allows both static configuration from appsettings and dynamic configuration at runtime
+var activityPubClientSection = builder.Configuration.GetSection("ActivityPubClient");
+builder.Services.Configure<ActivityPubClientOptions>(activityPubClientSection);
 
 // Add Broca ActivityPub Components and Client services
 builder.Services.AddActivityPubComponents(options =>

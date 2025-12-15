@@ -1,0 +1,286 @@
+@page "/settings"
+@using Broca.ActivityPub.Components
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Microsoft.AspNetCore.Components
+
+<PageTitle>Settings - Broca</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="20">
+    <h1>Settings</h1>
+
+    <FluentCard Style="max-width: 600px;">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <h3>ActivityPub Authentication</h3>
+            
+            @if (provider?.IsAuthenticated == true)
+            {
+                <FluentMessageBar Intent="MessageIntent.Success">
+                    <strong>Authenticated</strong> - You are signed in as @provider.CurrentActorId
+                </FluentMessageBar>
+
+                <FluentButton Appearance="Appearance.Outline" OnClick="SignOut">
+                    Sign Out
+                </FluentButton>
+            }
+            else
+            {
+                <FluentMessageBar Intent="MessageIntent.Info">
+                    <strong>Anonymous Mode</strong> - Sign in to access authenticated features
+                </FluentMessageBar>
+
+                <FluentTabs>
+                    <FluentTab Label="API Key Authentication">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Style="padding-top: 16px;">
+                            <p style="font-size: 0.875rem; color: var(--neutral-foreground-rest);">
+                                Use an API key to securely authenticate with your ActivityPub server.
+                            </p>
+
+                            <FluentTextField 
+                                @bind-Value="actorId" 
+                                Label="Actor ID or Alias"
+                                Placeholder=@("username@mastodon.social or https://mastodon.social/users/username")
+                                Style="width: 100%;" />
+
+                            <FluentTextField 
+                                @bind-Value="apiKey" 
+                                Label="API Key"
+                                TextFieldType="TextFieldType.Password"
+                                Placeholder="Enter your API key"
+                                Style="width: 100%;" />
+
+                            @if (!string.IsNullOrEmpty(errorMessage))
+                            {
+                                <FluentMessageBar Intent="MessageIntent.Error">
+                                    @errorMessage
+                                </FluentMessageBar>
+                            }
+
+                            <FluentButton 
+                                Appearance="Appearance.Accent"
+                                OnClick="SignInWithApiKey"
+                                Disabled="@(isConfiguring || string.IsNullOrWhiteSpace(actorId) || string.IsNullOrWhiteSpace(apiKey))">
+                                @(isResolvingAlias ? "Resolving alias..." : isConfiguring ? "Signing in..." : "Sign In")
+                            </FluentButton>
+                        </FluentStack>
+                    </FluentTab>
+
+                    <FluentTab Label="Private Key Authentication">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Style="padding-top: 16px;">
+                            <p style="font-size: 0.875rem; color: var(--neutral-foreground-rest);">
+                                Advanced: Directly provide your private key for authentication.
+                            </p>
+
+                            <FluentTextField 
+                                @bind-Value="privateActorId" 
+                                Label="Actor ID or Alias"
+                                Placeholder=@("username@mastodon.social or https://mastodon.social/users/username")
+                                Style="width: 100%;" />
+
+                            <FluentTextArea 
+                                @bind-Value="privateKeyPem" 
+                                Label="Private Key (PEM)"
+                                Placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                                Rows="5"
+                                Style="width: 100%;" />
+
+                            <FluentTextField 
+                                @bind-Value="publicKeyId" 
+                                Label="Public Key ID"
+                                Placeholder=@("https://mastodon.social/users/username#main-key")
+                                Style="width: 100%;" />
+
+                            @if (!string.IsNullOrEmpty(privateKeyError))
+                            {
+                                <FluentMessageBar Intent="MessageIntent.Error">
+                                    @privateKeyError
+                                </FluentMessageBar>
+                            }
+
+                            <FluentButton 
+                                Appearance="Appearance.Accent"
+                                OnClick="SignInWithPrivateKey"
+                                Disabled="@(isConfiguring || string.IsNullOrWhiteSpace(privateActorId) || string.IsNullOrWhiteSpace(privateKeyPem) || string.IsNullOrWhiteSpace(publicKeyId))">
+                                @(isResolvingAlias ? "Resolving alias..." : isConfiguring ? "Signing in..." : "Sign In")
+                            </FluentButton>
+                        </FluentStack>
+                    </FluentTab>
+                </FluentTabs>
+            }
+        </FluentStack>
+    </FluentCard>
+
+    <FluentCard Style="max-width: 600px;">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <h3>About Authentication</h3>
+            <p style="font-size: 0.875rem; color: var(--neutral-foreground-rest);">
+                <strong>Anonymous Mode:</strong> Browse public ActivityPub content without signing in. 
+                Some features may be limited.
+            </p>
+            <p style="font-size: 0.875rem; color: var(--neutral-foreground-rest);">
+                <strong>API Key:</strong> Recommended for most users. The API key is used to fetch 
+                your credentials from the server securely.
+            </p>
+            <p style="font-size: 0.875rem; color: var(--neutral-foreground-rest);">
+                <strong>Private Key:</strong> For advanced users who want to manage their own keys. 
+                Your private key never leaves your browser.
+            </p>
+        </FluentStack>
+    </FluentCard>
+</FluentStack>
+
+@code {
+    [CascadingParameter]
+    private ActivityPubClientProvider? provider { get; set; }
+
+    private string actorId = string.Empty;
+    private string apiKey = string.Empty;
+    private string privateActorId = string.Empty;
+    private string privateKeyPem = string.Empty;
+    private string publicKeyId = string.Empty;
+    private string? errorMessage;
+    private string? privateKeyError;
+    private bool isConfiguring;
+    private bool isResolvingAlias;
+
+    private async Task SignInWithApiKey()
+    {
+        errorMessage = null;
+        isConfiguring = true;
+        isResolvingAlias = false;
+
+        try
+        {
+            var resolvedActorId = actorId.Trim();
+            
+            // Check if input looks like an alias (user@domain.xyz)
+            if (!Uri.TryCreate(resolvedActorId, UriKind.Absolute, out _))
+            {
+                // Try to resolve as alias
+                if (resolvedActorId.Contains('@'))
+                {
+                    isResolvingAlias = true;
+                    StateHasChanged();
+                    
+                    try
+                    {
+                        var actor = await provider!.Client.GetActorByAliasAsync(resolvedActorId);
+                        resolvedActorId = actor.Id ?? throw new InvalidOperationException("Actor ID not found in resolved actor");
+                    }
+                    catch (Exception ex)
+                    {
+                        errorMessage = $"Failed to resolve alias '{resolvedActorId}': {ex.Message}";
+                        return;
+                    }
+                    finally
+                    {
+                        isResolvingAlias = false;
+                    }
+                }
+                else
+                {
+                    errorMessage = "Actor ID must be a valid URL or user@domain alias";
+                    return;
+                }
+            }
+
+            if (provider != null)
+            {
+                await provider.SetApiKeyAsync(resolvedActorId, apiKey.Trim());
+            }
+
+            // Clear sensitive data
+            apiKey = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Authentication failed: {ex.Message}";
+        }
+        finally
+        {
+            isConfiguring = false;
+            isResolvingAlias = false;
+        }
+    }
+
+    private async Task SignInWithPrivateKey()
+    {
+        privateKeyError = null;
+        isConfiguring = true;
+        isResolvingAlias = false;
+
+        try
+        {
+            var resolvedActorId = privateActorId.Trim();
+            
+            // Check if input looks like an alias (user@domain.xyz)
+            if (!Uri.TryCreate(resolvedActorId, UriKind.Absolute, out _))
+            {
+                // Try to resolve as alias
+                if (resolvedActorId.Contains('@'))
+                {
+                    isResolvingAlias = true;
+                    StateHasChanged();
+                    
+                    try
+                    {
+                        var actor = await provider!.Client.GetActorByAliasAsync(resolvedActorId);
+                        resolvedActorId = actor.Id ?? throw new InvalidOperationException("Actor ID not found in resolved actor");
+                    }
+                    catch (Exception ex)
+                    {
+                        privateKeyError = $"Failed to resolve alias '{resolvedActorId}': {ex.Message}";
+                        return;
+                    }
+                    finally
+                    {
+                        isResolvingAlias = false;
+                    }
+                }
+                else
+                {
+                    privateKeyError = "Actor ID must be a valid URL or user@domain alias";
+                    return;
+                }
+            }
+
+            if (!Uri.TryCreate(publicKeyId, UriKind.Absolute, out _))
+            {
+                privateKeyError = "Public Key ID must be a valid URL";
+                return;
+            }
+
+            if (provider != null)
+            {
+                await provider.SetPrivateKeyAsync(
+                    resolvedActorId, 
+                    privateKeyPem.Trim(), 
+                    publicKeyId.Trim()
+                );
+            }
+
+            // Clear sensitive data
+            privateKeyPem = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            privateKeyError = $"Authentication failed: {ex.Message}";
+        }
+        finally
+        {
+            isConfiguring = false;
+            isResolvingAlias = false;
+        }
+    }
+
+    private void SignOut()
+    {
+        provider?.ClearAuthentication();
+        actorId = string.Empty;
+        apiKey = string.Empty;
+        privateActorId = string.Empty;
+        privateKeyPem = string.Empty;
+        publicKeyId = string.Empty;
+        errorMessage = null;
+        privateKeyError = null;
+    }
+}
