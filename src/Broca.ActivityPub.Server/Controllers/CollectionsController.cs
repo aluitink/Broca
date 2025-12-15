@@ -60,13 +60,13 @@ public class CollectionsController : ControllerBase
             // TODO: Add authentication check for private collections
             var visibleDefinitions = definitions.Where(d => d.Visibility == CollectionVisibility.Public).ToList();
 
-            var collectionLinks = visibleDefinitions.Select(d => new
+            var collectionItems = visibleDefinitions.Select(d => new Collection
             {
-                id = $"{baseUrl}/users/{username}/collections/{d.Id}",
-                type = "Collection",
-                name = d.Name,
-                summary = d.Description
-            }).ToList();
+                Id = $"{baseUrl}/users/{username}/collections/{d.Id}",
+                Type = new List<string> { "Collection" },
+                Name = new List<string> { d.Name },
+                Summary = d.Description != null ? new List<string> { d.Description } : null
+            } as IObjectOrLink).ToList();
 
             var catalog = new OrderedCollection
             {
@@ -76,12 +76,8 @@ public class CollectionsController : ControllerBase
                 },
                 Id = $"{baseUrl}/users/{username}/collections",
                 Type = new List<string> { "OrderedCollection" },
-                TotalItems = (uint)collectionLinks.Count,
-                OrderedItems = collectionLinks.Select(c => 
-                {
-                    var link = new Link { Href = new Uri(c.id) };
-                    return link as IObjectOrLink;
-                }).ToList()
+                TotalItems = (uint)collectionItems.Count,
+                OrderedItems = collectionItems
             };
 
             return Ok(catalog);
@@ -122,7 +118,7 @@ public class CollectionsController : ControllerBase
             // TODO: Add authentication check for private collections
             if (definition.Visibility == CollectionVisibility.Private)
             {
-                return Forbid();
+                return StatusCode(403, new { error = "Collection is private" });
             }
 
             var offset = page * limit;
@@ -183,7 +179,7 @@ public class CollectionsController : ControllerBase
             // TODO: Add authentication check for private collections
             if (definition.Visibility == CollectionVisibility.Private)
             {
-                return Forbid();
+                return StatusCode(403, new { error = "Collection is private" });
             }
 
             return Ok(definition);

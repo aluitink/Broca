@@ -264,4 +264,94 @@ public static class TestDataSeeder
             .WithDocument(attachmentUrl, attachmentMediaType, attachmentName)
             .Build();
     }
+
+    /// <summary>
+    /// Creates a generic Create activity wrapping an object
+    /// </summary>
+    public static Create CreateCreate(string actorId, IObject obj)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Create(obj);
+    }
+
+    /// <summary>
+    /// Creates an Add activity for adding an object to a collection
+    /// </summary>
+    public static Add CreateAdd(string actorId, IObject obj, string targetCollectionUrl)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Add(obj, targetCollectionUrl);
+    }
+
+    /// <summary>
+    /// Creates an Add activity for adding an object (by reference) to a collection
+    /// </summary>
+    public static Add CreateAdd(string actorId, string objectId, string targetCollectionUrl)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Add(objectId, targetCollectionUrl);
+    }
+
+    /// <summary>
+    /// Creates a Remove activity for removing an object from a collection
+    /// </summary>
+    public static Remove CreateRemove(string actorId, string objectId, string targetCollectionUrl)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Remove(objectId, targetCollectionUrl);
+    }
+
+    /// <summary>
+    /// Creates an Update activity for updating an object
+    /// </summary>
+    public static Update CreateUpdate(string actorId, IObject obj)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Update(obj);
+    }
+
+    /// <summary>
+    /// Creates an Announce activity
+    /// </summary>
+    public static Announce CreateAnnounce(string actorId, string objectId)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Announce(objectId);
+    }
+
+    /// <summary>
+    /// Creates an Accept activity
+    /// </summary>
+    public static Accept CreateAccept(string actorId, Activity originalActivity)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Accept(originalActivity);
+    }
+
+    /// <summary>
+    /// Creates a Reject activity
+    /// </summary>
+    public static Reject CreateReject(string actorId, Activity originalActivity)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Reject(originalActivity);
+    }
+
+    /// <summary>
+    /// Creates a Delete activity
+    /// </summary>
+    public static Delete CreateDelete(string actorId, string objectId)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Delete(objectId);
+    }
+
+    /// <summary>
+    /// Creates a Block activity
+    /// </summary>
+    public static Block CreateBlock(string actorId, string targetActorId)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.Block(targetActorId);
+    }
 }

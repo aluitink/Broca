@@ -2,29 +2,75 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
+using Broca.ActivityPub.IntegrationTests.Infrastructure;
 using Broca.ActivityPub.Persistence.InMemory;
 using KristofferStrube.ActivityStreams;
-using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Broca.ActivityPub.IntegrationTests;
 
-public class CustomCollectionsTests : IClassFixture<WebApplicationFactory<Program>>
+public class CustomCollectionsTests : IAsyncLifetime
 {
-    private readonly WebApplicationFactory<Program> _factory;
-    private readonly HttpClient _client;
+    private BrocaTestServer _server = null!;
+    private string _systemActorId = null!;
+    private string _systemPrivateKey = null!;
+    private IActivityPubClient _authenticatedClient = null!;
+    private HttpClient _client = null!;
     private readonly JsonSerializerOptions _jsonOptions;
 
-    public CustomCollectionsTests(WebApplicationFactory<Program> factory)
+    public CustomCollectionsTests()
     {
-        _factory = factory;
-        _client = factory.CreateClient();
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
+    }
+
+    public async Task InitializeAsync()
+    {
+        _server = new BrocaTestServer(
+            "https://test-server.local",
+            "test-server.local",
+            "TestServer");
+
+        await _server.InitializeAsync();
+        _client = _server.CreateClient();
+
+        // Get system actor credentials
+        using var scope = _server.Services.CreateScope();
+        var actorRepo = scope.ServiceProvider.GetRequiredService<IActorRepository>();
+        var systemActor = await actorRepo.GetActorByUsernameAsync("sys");
+        
+        Assert.NotNull(systemActor);
+        _systemActorId = systemActor.Id!;
+        
+        // Extract private key from system actor
+        if (systemActor.ExtensionData?.TryGetValue("privateKeyPem", out var privateKeyElement) == true)
+        {
+            _systemPrivateKey = privateKeyElement.GetString()!;
+        }
+        else if (systemActor.ExtensionData?.TryGetValue("privateKey", out var altPrivateKeyElement) == true)
+        {
+            _systemPrivateKey = altPrivateKeyElement.GetString()!;
+        }
+
+        Assert.NotNull(_systemPrivateKey);
+
+        // Create authenticated client
+        var httpClientFactory = new Func<HttpClient>(() => _server.CreateClient());
+        _authenticatedClient = TestClientFactory.CreateAuthenticatedClient(
+            httpClientFactory,
+            _systemActorId,
+            _systemPrivateKey);
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _server.DisposeAsync();
     }
 
     [Fact]
@@ -44,24 +90,18 @@ public class CustomCollectionsTests : IClassFixture<WebApplicationFactory<Progra
             Visibility = CollectionVisibility.Public
         };
 
-        var createActivity = new Create
+        var collection = new Collection
         {
-            Type = new List<string> { "Create" },
-            Actor = new List<IObjectOrLink> { new Link { Href = new Uri($"http://localhost/users/{username}") } },
-            Object = new List<IObjectOrLink>
+            Type = new List<string> { "Collection" },
+            Name = new List<string> { "Featured Posts" },
+            AttributedTo = new List<IObjectOrLink> { new Link { Href = new Uri($"{_server.BaseUrl}/users/{username}") } },
+            ExtensionData = new Dictionary<string, JsonElement>
             {
-                new Collection
-                {
-                    Type = new List<string> { "Collection" },
-                    Name = new List<string> { "Featured Posts" },
-                    AttributedTo = new List<IObjectOrLink> { new Link { Href = new Uri($"http://localhost/users/{username}") } },
-                    ExtensionData = new Dictionary<string, JsonElement>
-                    {
-                        ["collectionDefinition"] = JsonSerializer.SerializeToElement(collectionDefinition, _jsonOptions)
-                    }
-                }
+                ["collectionDefinition"] = JsonSerializer.SerializeToElement(collectionDefinition, _jsonOptions)
             }
         };
+
+        var createActivity = TestDataSeeder.CreateCreate(_systemActorId, collection);
 
         // Act - Post to system inbox
         var response = await PostToSystemInboxAsync(createActivity);
@@ -95,23 +135,18 @@ public class CustomCollectionsTests : IClassFixture<WebApplicationFactory<Progra
             }
         };
 
-        var createActivity = new Create
+        var collection = new Collection
         {
-            Type = new List<string> { "Create" },
-            Actor = new List<IObjectOrLink> { new Link { Href = new Uri($"http://localhost/users/{username}") } },
-            Object = new List<IObjectOrLink>
+            Type = new List<string> { "Collection" },
+            Name = new List<string> { "Media Posts" },
+            AttributedTo = new List<IObjectOrLink> { new Link { Href = new Uri($"{_server.BaseUrl}/users/{username}") } },
+            ExtensionData = new Dictionary<string, JsonElement>
             {
-                new Collection
-                {
-                    Type = new List<string> { "Collection" },
-                    Name = new List<string> { "Media Posts" },
-                    ExtensionData = new Dictionary<string, JsonElement>
-                    {
-                        ["collectionDefinition"] = JsonSerializer.SerializeToElement(collectionDefinition, _jsonOptions)
-                    }
-                }
+                ["collectionDefinition"] = JsonSerializer.SerializeToElement(collectionDefinition, _jsonOptions)
             }
         };
+
+        var createActivity = TestDataSeeder.CreateCreate(_systemActorId, collection);
 
         // Act
         var response = await PostToSystemInboxAsync(createActivity);
@@ -231,6 +266,260 @@ public class CustomCollectionsTests : IClassFixture<WebApplicationFactory<Progra
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    [Fact]
+    public async Task AddActivity_WithFullObject_AddsToCollectionAndStoresObject()
+    {
+        // Arrange - Create a test user with a manual collection
+        var username = $"testuser_{Guid.NewGuid():N}";
+        await CreateTestUserAsync(username);
+        await CreateTestCollectionAsync(username, "featured", "Featured Posts");
+
+        // Create a Note object to add (no ID - server will generate it)
+        var note = new Note
+        {
+            Type = new List<string> { "Note" },
+            Content = new List<string> { "This is a featured post!" },
+            AttributedTo = new List<IObjectOrLink> { new Link { Href = new Uri($"{_server.BaseUrl}/users/{username}") } },
+            Published = DateTime.UtcNow
+        };
+
+        // Use ActivityBuilder to create Add activity
+        var userActorId = $"{_server.BaseUrl}/users/{username}";
+        var targetCollectionUrl = $"{_server.BaseUrl}/users/{username}/collections/featured";
+        var addActivity = TestDataSeeder.CreateAdd(userActorId, note, targetCollectionUrl);
+
+        // Act - User posts Add activity to their outbox
+        var response = await PostToOutboxAsync(username, addActivity);
+
+        // Assert - Activity was accepted
+        Assert.True(response.IsSuccessStatusCode, $"Expected success but got {response.StatusCode}");
+
+        // Verify collection contains the object
+        var collectionResponse = await _client.GetAsync($"/users/{username}/collections/featured");
+        Assert.Equal(HttpStatusCode.OK, collectionResponse.StatusCode);
+        var collectionContent = await collectionResponse.Content.ReadAsStringAsync();
+        
+        // Collection should return the full object, not just the ID
+        Assert.Contains("This is a featured post!", collectionContent);
+    }
+
+    [Fact]
+    public async Task AddActivity_WithLinkReference_FetchesAndStoresObject()
+    {
+        // Arrange - Create a test user with two manual collections
+        var username = $"testuser_{Guid.NewGuid():N}";
+        await CreateTestUserAsync(username);
+        await CreateTestCollectionAsync(username, "featured", "Featured Posts");
+        await CreateTestCollectionAsync(username, "favorites", "Favorite Posts");
+
+        // First, create a post by adding it to the featured collection
+        // This will store the object and give it an ID
+        var note = new Note
+        {
+            Type = new List<string> { "Note" },
+            Content = new List<string> { "Original post content" },
+            AttributedTo = new List<IObjectOrLink> { new Link { Href = new Uri($"{_server.BaseUrl}/users/{username}") } },
+            Published = DateTime.UtcNow
+        };
+
+        var userActorId = $"{_server.BaseUrl}/users/{username}";
+        var featuredCollectionUrl = $"{_server.BaseUrl}/users/{username}/collections/featured";
+        var addToTempCollection = TestDataSeeder.CreateAdd(userActorId, note, featuredCollectionUrl);
+
+        var addResponse = await PostToOutboxAsync(username, addToTempCollection);
+        Assert.True(addResponse.IsSuccessStatusCode);
+
+        // Get the created note's ID from the featured collection
+        var featuredResponse = await _client.GetAsync($"/users/{username}/collections/featured");
+        var featuredContent = await featuredResponse.Content.ReadAsStringAsync();
+        
+        // Parse to get the note ID
+        using var doc = JsonDocument.Parse(featuredContent);
+        var root = doc.RootElement;
+        
+        string? noteId = null;
+        
+        if (root.TryGetProperty("orderedItems", out var orderedItemsElement))
+        {
+            // Handle both single object and array
+            if (orderedItemsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in orderedItemsElement.EnumerateArray())
+                {
+                    if (item.TryGetProperty("type", out var typeElement) && 
+                        typeElement.GetString() == "Note" &&
+                        item.TryGetProperty("id", out var idElement))
+                    {
+                        noteId = idElement.GetString();
+                        break;
+                    }
+                }
+            }
+            else if (orderedItemsElement.ValueKind == JsonValueKind.Object)
+            {
+                if (orderedItemsElement.TryGetProperty("type", out var typeElement) && 
+                    typeElement.GetString() == "Note" &&
+                    orderedItemsElement.TryGetProperty("id", out var idElement))
+                {
+                    noteId = idElement.GetString();
+                }
+            }
+        }
+        
+        Assert.NotNull(noteId);
+
+        // Use ActivityBuilder to create an Add activity with just a link reference
+        var favoritesCollectionUrl = $"{_server.BaseUrl}/users/{username}/collections/favorites";
+        var addActivity = TestDataSeeder.CreateAdd(userActorId, noteId, favoritesCollectionUrl);
+
+        // Act - Post Add activity to outbox
+        var response = await PostToOutboxAsync(username, addActivity);
+
+        // Assert
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Verify collection contains the object with full content
+        var collectionResponse = await _client.GetAsync($"/users/{username}/collections/favorites");
+        Assert.Equal(HttpStatusCode.OK, collectionResponse.StatusCode);
+        var collectionContent = await collectionResponse.Content.ReadAsStringAsync();
+        
+        // Should return the full object
+        Assert.Contains("Original post content", collectionContent);
+        Assert.Contains(noteId, collectionContent);
+    }
+
+    [Fact]
+    public async Task AddActivity_ToQueryCollection_ReturnsError()
+    {
+        // Arrange - Create a test user with a query collection
+        var username = $"testuser_{Guid.NewGuid():N}";
+        await CreateTestUserAsync(username);
+        
+        var queryCollection = new CustomCollectionDefinition
+        {
+            Id = "media",
+            Name = "Media Posts",
+            Type = CollectionType.Query,
+            Visibility = CollectionVisibility.Public,
+            QueryFilter = new CollectionQueryFilter { HasAttachment = true }
+        };
+        
+        await CreateTestCollectionAsync(username, queryCollection);
+
+        // Create an Add activity
+        var note = new Note
+        {
+            Type = new List<string> { "Note" },
+            Content = new List<string> { "Test post" }
+        };
+
+        var userActorId = $"{_server.BaseUrl}/users/{username}";
+        var mediaCollectionUrl = $"{_server.BaseUrl}/users/{username}/collections/media";
+        var addActivity = TestDataSeeder.CreateAdd(userActorId, note, mediaCollectionUrl);
+
+        // Act - Post to outbox
+        var response = await PostToOutboxAsync(username, addActivity);
+
+        // Assert - Should return InternalServerError since query collections are read-only
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RemoveActivity_RemovesFromCollection()
+    {
+        // Arrange - Create a test user with a manual collection containing an item
+        var username = $"testuser_{Guid.NewGuid():N}";
+        await CreateTestUserAsync(username);
+        await CreateTestCollectionAsync(username, "featured", "Featured Posts");
+
+        // Add an item first
+        var note = new Note
+        {
+            Type = new List<string> { "Note" },
+            Content = new List<string> { "Post to remove" }
+        };
+
+        var userActorId = $"{_server.BaseUrl}/users/{username}";
+        var featuredCollectionUrl = $"{_server.BaseUrl}/users/{username}/collections/featured";
+        var addActivity = TestDataSeeder.CreateAdd(userActorId, note, featuredCollectionUrl);
+
+        await PostToOutboxAsync(username, addActivity);
+
+        // Get the note ID from outbox
+        var outboxResponse = await _client.GetAsync($"/users/{username}/outbox?page=0&limit=10");
+        var outboxContent = await outboxResponse.Content.ReadAsStringAsync();
+        var outboxPage = JsonSerializer.Deserialize<OrderedCollectionPage>(outboxContent, _jsonOptions);
+        
+        // Find the Note object (not the Add activity)
+        var noteId = outboxPage?.OrderedItems?
+            .OfType<IObject>()
+            .FirstOrDefault(o => o.Type?.Contains("Note") == true)?.Id;
+        
+        Assert.NotNull(noteId);
+
+        // Use ActivityBuilder to create Remove activity
+        var removeActivity = TestDataSeeder.CreateRemove(userActorId, noteId, featuredCollectionUrl);
+
+        // Act
+        var response = await PostToOutboxAsync(username, removeActivity);
+
+        // Assert
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Verify collection no longer contains the object
+        var collectionResponse = await _client.GetAsync($"/users/{username}/collections/featured");
+        var collectionContent = await collectionResponse.Content.ReadAsStringAsync();
+        
+        // The removed item should not be in the collection
+        Assert.DoesNotContain("Post to remove", collectionContent);
+    }
+
+    [Fact]
+    public async Task GetCollectionItems_ReturnsFullObjects_NotJustLinks()
+    {
+        // Arrange - Create a user with a collection
+        var username = $"testuser_{Guid.NewGuid():N}";
+        await CreateTestUserAsync(username);
+        await CreateTestCollectionAsync(username, "featured", "Featured Posts");
+
+        // Add multiple items
+        var userActorId = $"{_server.BaseUrl}/users/{username}";
+        var featuredCollectionUrl = $"{_server.BaseUrl}/users/{username}/collections/featured";
+        
+        for (int i = 0; i < 3; i++)
+        {
+            var note = new Note
+            {
+                Type = new List<string> { "Note" },
+                Content = new List<string> { $"Featured post number {i + 1}" },
+                AttributedTo = new List<IObjectOrLink> { new Link { Href = new Uri($"{_server.BaseUrl}/users/{username}") } },
+                Published = DateTime.UtcNow.AddMinutes(-i)
+            };
+
+            var addActivity = TestDataSeeder.CreateAdd(userActorId, note, featuredCollectionUrl);
+
+            await PostToOutboxAsync(username, addActivity);
+        }
+
+        // Act - Get collection items
+        var response = await _client.GetAsync($"/users/{username}/collections/featured");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        
+        // Verify all objects are returned with full content
+        Assert.Contains("Featured post number 1", content);
+        Assert.Contains("Featured post number 2", content);
+        Assert.Contains("Featured post number 3", content);
+        
+        // Verify it's an OrderedCollectionPage
+        var collection = JsonSerializer.Deserialize<OrderedCollectionPage>(content, _jsonOptions);
+        Assert.NotNull(collection);
+        Assert.NotNull(collection.OrderedItems);
+        Assert.Equal(3, collection.OrderedItems.Count());
+    }
+
     // Helper methods
 
     private async Task CreateTestUserAsync(string username)
@@ -242,12 +531,7 @@ public class CustomCollectionsTests : IClassFixture<WebApplicationFactory<Progra
             Name = new List<string> { $"Test User {username}" }
         };
 
-        var createActivity = new Create
-        {
-            Type = new List<string> { "Create" },
-            Actor = new List<IObjectOrLink> { new Link { Href = new Uri("http://localhost/users/system") } },
-            Object = new List<IObjectOrLink> { actor }
-        };
+        var createActivity = TestDataSeeder.CreateCreate(_systemActorId, actor);
 
         await PostToSystemInboxAsync(createActivity);
     }
@@ -267,33 +551,45 @@ public class CustomCollectionsTests : IClassFixture<WebApplicationFactory<Progra
 
     private async Task CreateTestCollectionAsync(string username, CustomCollectionDefinition definition)
     {
-        var createActivity = new Create
+        var collection = new Collection
         {
-            Type = new List<string> { "Create" },
-            Actor = new List<IObjectOrLink> { new Link { Href = new Uri($"http://localhost/users/{username}") } },
-            Object = new List<IObjectOrLink>
+            Type = new List<string> { "Collection" },
+            Name = new List<string> { definition.Name },
+            AttributedTo = new List<IObjectOrLink> { new Link { Href = new Uri($"{_server.BaseUrl}/users/{username}") } },
+            ExtensionData = new Dictionary<string, JsonElement>
             {
-                new Collection
-                {
-                    Type = new List<string> { "Collection" },
-                    Name = new List<string> { definition.Name },
-                    ExtensionData = new Dictionary<string, JsonElement>
-                    {
-                        ["collectionDefinition"] = JsonSerializer.SerializeToElement(definition, _jsonOptions)
-                    }
-                }
+                ["collectionDefinition"] = JsonSerializer.SerializeToElement(definition, _jsonOptions)
             }
         };
+
+        var createActivity = TestDataSeeder.CreateCreate(_systemActorId, collection);
 
         await PostToSystemInboxAsync(createActivity);
     }
 
+    private async Task<HttpResponseMessage> PostToOutboxAsync(string username, Activity activity)
+    {
+        var json = JsonSerializer.Serialize<IObjectOrLink>(activity, _jsonOptions);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/activity+json");
+        
+        return await _client.PostAsync($"/users/{username}/outbox", content);
+    }
+
     private async Task<HttpResponseMessage> PostToSystemInboxAsync(Activity activity)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, "/users/system/inbox");
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/activity+json"));
-        request.Content = JsonContent.Create(activity, new MediaTypeHeaderValue("application/activity+json"), _jsonOptions);
+        var response = await _authenticatedClient.PostAsync(
+            new Uri($"{_server.BaseUrl}/users/sys/inbox"),
+            activity);
+        
+        return new HttpResponseMessage(response.IsSuccessStatusCode ? HttpStatusCode.Accepted : HttpStatusCode.BadRequest);
+    }
 
-        return await _client.SendAsync(request);
+    private async Task<HttpResponseMessage> PostToUserInboxAsync(string username, Activity activity)
+    {
+        var response = await _authenticatedClient.PostAsync(
+            new Uri($"{_server.BaseUrl}/users/{username}/inbox"),
+            activity);
+        
+        return new HttpResponseMessage(response.IsSuccessStatusCode ? HttpStatusCode.Accepted : HttpStatusCode.BadRequest);
     }
 }
