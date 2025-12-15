@@ -85,6 +85,44 @@ public interface IActivityBuilder
     /// <param name="targetActorId">The actor to block</param>
     /// <returns>Block activity</returns>
     Block Block(string targetActorId);
+
+    /// <summary>
+    /// Creates a Create activity wrapping an object
+    /// </summary>
+    /// <param name="obj">The object to create (Note, Document, Collection, etc.)</param>
+    /// <returns>Create activity</returns>
+    Create Create(IObject obj);
+
+    /// <summary>
+    /// Creates an Add activity for adding an object to a collection
+    /// </summary>
+    /// <param name="obj">The object to add</param>
+    /// <param name="targetCollectionUrl">The URL of the target collection</param>
+    /// <returns>Add activity</returns>
+    Add Add(IObject obj, string targetCollectionUrl);
+
+    /// <summary>
+    /// Creates an Add activity for adding an object (by reference) to a collection
+    /// </summary>
+    /// <param name="objectId">The ID of the object to add</param>
+    /// <param name="targetCollectionUrl">The URL of the target collection</param>
+    /// <returns>Add activity</returns>
+    Add Add(string objectId, string targetCollectionUrl);
+
+    /// <summary>
+    /// Creates a Remove activity for removing an object from a collection
+    /// </summary>
+    /// <param name="objectId">The ID of the object to remove</param>
+    /// <param name="targetCollectionUrl">The URL of the target collection</param>
+    /// <returns>Remove activity</returns>
+    Remove Remove(string objectId, string targetCollectionUrl);
+
+    /// <summary>
+    /// Creates an Update activity for updating an object
+    /// </summary>
+    /// <param name="obj">The updated object</param>
+    /// <returns>Update activity</returns>
+    Update Update(IObject obj);
 }
 
 /// <summary>

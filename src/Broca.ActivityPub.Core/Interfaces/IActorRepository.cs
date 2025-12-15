@@ -1,3 +1,4 @@
+using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 
 namespace Broca.ActivityPub.Core.Interfaces;
@@ -56,4 +57,36 @@ public interface IActorRepository
     /// Removes a following
     /// </summary>
     Task RemoveFollowingAsync(string username, string followingActorId, CancellationToken cancellationToken = default);
+
+    // Custom Collections
+
+    /// <summary>
+    /// Gets all custom collection definitions for an actor
+    /// </summary>
+    Task<IEnumerable<CustomCollectionDefinition>> GetCollectionDefinitionsAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets a specific collection definition by ID
+    /// </summary>
+    Task<CustomCollectionDefinition?> GetCollectionDefinitionAsync(string username, string collectionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates or updates a collection definition
+    /// </summary>
+    Task SaveCollectionDefinitionAsync(string username, CustomCollectionDefinition definition, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a collection definition
+    /// </summary>
+    Task DeleteCollectionDefinitionAsync(string username, string collectionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds an item to a manual collection
+    /// </summary>
+    Task AddToCollectionAsync(string username, string collectionId, string itemId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes an item from a manual collection
+    /// </summary>
+    Task RemoveFromCollectionAsync(string username, string collectionId, string itemId, CancellationToken cancellationToken = default);
 }

@@ -168,6 +168,12 @@ public class OutboxProcessor
             case "Undo":
                 await HandleOutgoingUndoAsync(username, activity, cancellationToken);
                 break;
+            case "Add":
+                await HandleOutgoingAddAsync(username, activity, cancellationToken);
+                break;
+            case "Remove":
+                await HandleOutgoingRemoveAsync(username, activity, cancellationToken);
+                break;
             default:
                 // No side effects for other activity types
                 break;
@@ -222,5 +228,145 @@ public class OutboxProcessor
                 _logger.LogInformation("User {Username} unfollowed {FollowingActorId}", username, followingActorId);
             }
         }
+    }
+
+    private async Task HandleOutgoingAddAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    {
+        if (activity is not Activity addActivity || addActivity.Object == null || addActivity.Target == null)
+        {
+            _logger.LogWarning("Add activity missing object or target");
+            return;
+        }
+
+        // Extract the collection ID from the target
+        var targetRef = addActivity.Target.FirstOrDefault();
+        var collectionUrl = targetRef switch
+        {
+            Link link => link.Href?.ToString(),
+            IObject targetObj => targetObj.Id,
+            _ => null
+        };
+
+        if (string.IsNullOrEmpty(collectionUrl))
+        {
+            _logger.LogWarning("Add activity has invalid target");
+            return;
+        }
+
+        // Extract collection ID from URL (e.g., .../collections/featured -> featured)
+        var collectionId = ExtractCollectionIdFromUrl(collectionUrl);
+        if (string.IsNullOrEmpty(collectionId))
+        {
+            _logger.LogWarning("Could not extract collection ID from URL {CollectionUrl}", collectionUrl);
+            return;
+        }
+
+        // Get the object to add
+        var objectRef = addActivity.Object.FirstOrDefault();
+        if (objectRef == null)
+        {
+            _logger.LogWarning("Add activity has no object");
+            return;
+        }
+
+        // Handle both full objects and links
+        string? objectId = null;
+        
+        if (objectRef is IObject obj)
+        {
+            // Full object provided - generate ID if needed and store it
+            objectId = obj.Id;
+            if (string.IsNullOrEmpty(objectId))
+            {
+                objectId = $"https://localhost/users/{username}/objects/{Guid.NewGuid()}";
+                obj.Id = objectId;
+            }
+
+            // Store the object in the outbox
+            await _activityRepository.SaveOutboxActivityAsync(username, objectId, obj, cancellationToken);
+            _logger.LogInformation("Stored object {ObjectId} for user {Username}", objectId, username);
+        }
+        else if (objectRef is Link link)
+        {
+            // Link reference - use the href as the object ID
+            objectId = link.Href?.ToString();
+            if (string.IsNullOrEmpty(objectId))
+            {
+                _logger.LogWarning("Add activity link has no href");
+                return;
+            }
+
+            // TODO: Optionally fetch and cache the remote object
+            // For now, we'll just store the reference
+        }
+
+        if (string.IsNullOrEmpty(objectId))
+        {
+            _logger.LogWarning("Add activity object has no ID");
+            return;
+        }
+
+        // Add to collection
+        await _actorRepository.AddToCollectionAsync(username, collectionId, objectId, cancellationToken);
+        _logger.LogInformation("Added {ObjectId} to collection {CollectionId} for user {Username}", 
+            objectId, collectionId, username);
+    }
+
+    private async Task HandleOutgoingRemoveAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    {
+        if (activity is not Activity removeActivity || removeActivity.Object == null || removeActivity.Target == null)
+        {
+            _logger.LogWarning("Remove activity missing object or target");
+            return;
+        }
+
+        // Extract the collection ID from the target
+        var targetRef = removeActivity.Target.FirstOrDefault();
+        var collectionUrl = targetRef switch
+        {
+            Link link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (string.IsNullOrEmpty(collectionUrl))
+        {
+            _logger.LogWarning("Remove activity has invalid target");
+            return;
+        }
+
+        var collectionId = ExtractCollectionIdFromUrl(collectionUrl);
+        if (string.IsNullOrEmpty(collectionId))
+        {
+            _logger.LogWarning("Could not extract collection ID from URL {CollectionUrl}", collectionUrl);
+            return;
+        }
+
+        // Get the object to remove
+        var objectRef = removeActivity.Object.FirstOrDefault();
+        var objectId = objectRef switch
+        {
+            Link link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (string.IsNullOrEmpty(objectId))
+        {
+            _logger.LogWarning("Remove activity has invalid object");
+            return;
+        }
+
+        // Remove from collection
+        await _actorRepository.RemoveFromCollectionAsync(username, collectionId, objectId, cancellationToken);
+        _logger.LogInformation("Removed {ObjectId} from collection {CollectionId} for user {Username}", 
+            objectId, collectionId, username);
+    }
+
+    private string? ExtractCollectionIdFromUrl(string url)
+    {
+        // Extract collection ID from URL pattern: .../users/{username}/collections/{collectionId}
+        var match = System.Text.RegularExpressions.Regex.Match(url, @"/collections/([^/?]+)");
+        return match.Success ? match.Groups[1].Value : null;
     }
 }

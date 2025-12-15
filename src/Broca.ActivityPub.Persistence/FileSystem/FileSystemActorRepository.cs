@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Broca.ActivityPub.Core.Interfaces;
+using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -212,6 +213,16 @@ public class FileSystemActorRepository : IActorRepository
         return Path.Combine(GetUserDirectory(username), "following.json");
     }
 
+    private string GetCollectionsDirectory(string username)
+    {
+        return Path.Combine(GetUserDirectory(username), "collections");
+    }
+
+    private string GetCollectionFilePath(string username, string collectionId)
+    {
+        return Path.Combine(GetCollectionsDirectory(username), $"{collectionId}.json");
+    }
+
     private void EnsureDirectoryExists(string path)
     {
         if (!Directory.Exists(path))
@@ -262,6 +273,154 @@ public class FileSystemActorRepository : IActorRepository
             {
                 json = JsonSerializer.Serialize(list, _jsonOptions);
                 await File.WriteAllTextAsync(filePath, json, cancellationToken);
+            }
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    // Custom Collections
+
+    public async Task<IEnumerable<CustomCollectionDefinition>> GetCollectionDefinitionsAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var collectionsDir = GetCollectionsDirectory(username);
+        if (!Directory.Exists(collectionsDir))
+        {
+            return Array.Empty<CustomCollectionDefinition>();
+        }
+
+        try
+        {
+            var definitions = new List<CustomCollectionDefinition>();
+            foreach (var file in Directory.GetFiles(collectionsDir, "*.json"))
+            {
+                var json = await File.ReadAllTextAsync(file, cancellationToken);
+                var definition = JsonSerializer.Deserialize<CustomCollectionDefinition>(json, _jsonOptions);
+                if (definition != null)
+                {
+                    definitions.Add(definition);
+                }
+            }
+            return definitions;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading collection definitions for {Username}", username);
+            return Array.Empty<CustomCollectionDefinition>();
+        }
+    }
+
+    public async Task<CustomCollectionDefinition?> GetCollectionDefinitionAsync(string username, string collectionId, CancellationToken cancellationToken = default)
+    {
+        var filePath = GetCollectionFilePath(username, collectionId);
+        if (!File.Exists(filePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(filePath, cancellationToken);
+            return JsonSerializer.Deserialize<CustomCollectionDefinition>(json, _jsonOptions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading collection {CollectionId} for {Username}", collectionId, username);
+            return null;
+        }
+    }
+
+    public async Task SaveCollectionDefinitionAsync(string username, CustomCollectionDefinition definition, CancellationToken cancellationToken = default)
+    {
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            var collectionsDir = GetCollectionsDirectory(username);
+            EnsureDirectoryExists(collectionsDir);
+
+            var filePath = GetCollectionFilePath(username, definition.Id);
+            var json = JsonSerializer.Serialize(definition, _jsonOptions);
+            await File.WriteAllTextAsync(filePath, json, cancellationToken);
+
+            _logger.LogInformation("Saved collection definition {CollectionId} for {Username}", definition.Id, username);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public async Task DeleteCollectionDefinitionAsync(string username, string collectionId, CancellationToken cancellationToken = default)
+    {
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            var filePath = GetCollectionFilePath(username, collectionId);
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+                _logger.LogInformation("Deleted collection {CollectionId} for {Username}", collectionId, username);
+            }
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public async Task AddToCollectionAsync(string username, string collectionId, string itemId, CancellationToken cancellationToken = default)
+    {
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            var definition = await GetCollectionDefinitionAsync(username, collectionId, cancellationToken);
+            if (definition == null)
+            {
+                throw new InvalidOperationException($"Collection {collectionId} not found");
+            }
+
+            if (definition.Type != CollectionType.Manual)
+            {
+                throw new InvalidOperationException($"Cannot manually add items to query collection {collectionId}");
+            }
+
+            if (!definition.Items.Contains(itemId))
+            {
+                definition.Items.Add(itemId);
+                definition.Updated = DateTimeOffset.UtcNow;
+                await SaveCollectionDefinitionAsync(username, definition, cancellationToken);
+                _logger.LogInformation("Added item {ItemId} to collection {CollectionId} for {Username}", itemId, collectionId, username);
+            }
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public async Task RemoveFromCollectionAsync(string username, string collectionId, string itemId, CancellationToken cancellationToken = default)
+    {
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            var definition = await GetCollectionDefinitionAsync(username, collectionId, cancellationToken);
+            if (definition == null)
+            {
+                return;
+            }
+
+            if (definition.Type != CollectionType.Manual)
+            {
+                throw new InvalidOperationException($"Cannot manually remove items from query collection {collectionId}");
+            }
+
+            if (definition.Items.Remove(itemId))
+            {
+                definition.Updated = DateTimeOffset.UtcNow;
+                await SaveCollectionDefinitionAsync(username, definition, cancellationToken);
+                _logger.LogInformation("Removed item {ItemId} from collection {CollectionId} for {Username}", itemId, collectionId, username);
             }
         }
         finally

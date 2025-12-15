@@ -53,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IActivityBuilderFactory, ActivityBuilderFactory>();
         services.AddScoped<AdminOperationsHandler>();
         services.AddScoped<AttachmentProcessingService>();
+        services.AddScoped<ICollectionService, CollectionService>();
 
         // Register background worker for activity delivery
         services.AddHostedService<ActivityDeliveryWorker>();

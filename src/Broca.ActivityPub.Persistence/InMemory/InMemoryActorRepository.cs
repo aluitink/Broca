@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Broca.ActivityPub.Core.Interfaces;
+using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 
 namespace Broca.ActivityPub.Persistence.InMemory;
@@ -14,6 +15,7 @@ public class InMemoryActorRepository : IActorRepository
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _followers = new();
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _following = new();
     private readonly ConcurrentDictionary<string, string> _actorIdToUsername = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, CustomCollectionDefinition>> _collections = new();
 
     public Task<Actor?> GetActorByUsernameAsync(string username, CancellationToken cancellationToken = default)
     {
@@ -124,5 +126,83 @@ public class InMemoryActorRepository : IActorRepository
         _followers.Clear();
         _following.Clear();
         _actorIdToUsername.Clear();
+        _collections.Clear();
+    }
+
+    // Custom Collections
+
+    public Task<IEnumerable<CustomCollectionDefinition>> GetCollectionDefinitionsAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        if (_collections.TryGetValue(key, out var collections))
+        {
+            return Task.FromResult<IEnumerable<CustomCollectionDefinition>>(collections.Values.ToList());
+        }
+        return Task.FromResult<IEnumerable<CustomCollectionDefinition>>(Array.Empty<CustomCollectionDefinition>());
+    }
+
+    public Task<CustomCollectionDefinition?> GetCollectionDefinitionAsync(string username, string collectionId, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        if (_collections.TryGetValue(key, out var collections) && collections.TryGetValue(collectionId, out var definition))
+        {
+            return Task.FromResult<CustomCollectionDefinition?>(definition);
+        }
+        return Task.FromResult<CustomCollectionDefinition?>(null);
+    }
+
+    public Task SaveCollectionDefinitionAsync(string username, CustomCollectionDefinition definition, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        var collections = _collections.GetOrAdd(key, _ => new ConcurrentDictionary<string, CustomCollectionDefinition>());
+        collections[definition.Id] = definition;
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteCollectionDefinitionAsync(string username, string collectionId, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        if (_collections.TryGetValue(key, out var collections))
+        {
+            collections.TryRemove(collectionId, out _);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task AddToCollectionAsync(string username, string collectionId, string itemId, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        if (_collections.TryGetValue(key, out var collections) && collections.TryGetValue(collectionId, out var definition))
+        {
+            if (definition.Type != CollectionType.Manual)
+            {
+                throw new InvalidOperationException($"Cannot manually add items to query collection {collectionId}");
+            }
+
+            if (!definition.Items.Contains(itemId))
+            {
+                definition.Items.Add(itemId);
+                definition.Updated = DateTimeOffset.UtcNow;
+            }
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveFromCollectionAsync(string username, string collectionId, string itemId, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        if (_collections.TryGetValue(key, out var collections) && collections.TryGetValue(collectionId, out var definition))
+        {
+            if (definition.Type != CollectionType.Manual)
+            {
+                throw new InvalidOperationException($"Cannot manually remove items from query collection {collectionId}");
+            }
+
+            if (definition.Items.Remove(itemId))
+            {
+                definition.Updated = DateTimeOffset.UtcNow;
+            }
+        }
+        return Task.CompletedTask;
     }
 }
