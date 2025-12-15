@@ -1,0 +1,540 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-admin-diagnostics @CssClass">
+    @if (HeaderTemplate != null)
+    {
+        @HeaderTemplate
+    }
+    else
+    {
+        <div class="diagnostics-header">
+            <h2>🔧 ActivityPub Diagnostics</h2>
+            <p class="diagnostics-subtitle">Test and explore ActivityPub components</p>
+        </div>
+    }
+
+    <div class="diagnostics-tabs">
+        <button class="@GetTabClass("actor")" @onclick='() => activeTab = "actor"'>
+            🔍 Actor Browser
+        </button>
+        <button class="@GetTabClass("feed")" @onclick='() => activeTab = "feed"'>
+            📋 Activity Feed
+        </button>
+        <button class="@GetTabClass("profile")" @onclick='() => activeTab = "profile"'>
+            👤 Profile Viewer
+        </button>
+        <button class="@GetTabClass("query")" @onclick='() => activeTab = "query"'>
+            🌐 Direct Query
+        </button>
+        <button class="@GetTabClass("debug")" @onclick='() => activeTab = "debug"'>
+            🐛 Debug Info
+        </button>
+    </div>
+
+    <div class="diagnostics-content">
+        @if (activeTab == "actor")
+        {
+            <div class="diagnostics-panel">
+                <h3>Actor Browser</h3>
+                <p class="panel-description">Search for and explore ActivityPub actors across the fediverse.</p>
+                
+                <ActorBrowser OnActorFound="@HandleActorFound">
+                    <LoadingTemplate>
+                        <div class="loading-state">
+                            <div class="spinner"></div>
+                            <span>Searching for actor...</span>
+                        </div>
+                    </LoadingTemplate>
+                    <ErrorTemplate Context="error">
+                        <div class="error-state">
+                            <span class="error-icon">⚠️</span>
+                            <p>@error</p>
+                        </div>
+                    </ErrorTemplate>
+                </ActorBrowser>
+
+                @if (selectedActor != null)
+                {
+                    @if (selectedActor is Actor actor)
+                    {
+                    <div class="actor-details">
+                        <h4>Actor Details</h4>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <strong>ID:</strong>
+                                <code>@selectedActor.Id</code>
+                            </div>
+                            <div class="detail-item">
+                                <strong>Type:</strong>
+                                <code>@(selectedActor.Type?.FirstOrDefault())</code>
+                            </div>
+                            @if (selectedActor.Name?.Any() == true)
+                            {
+                                <div class="detail-item">
+                                    <strong>Name:</strong>
+                                    <span>@selectedActor.Name.FirstOrDefault()</span>
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(actor.PreferredUsername))
+                            {
+                                <div class="detail-item">
+                                    <strong>Username:</strong>
+                                    <span>@actor.PreferredUsername</span>
+                                </div>
+                            }
+                            @if (actor.Inbox != null)
+                            {
+                                <div class="detail-item">
+                                    <strong>Inbox:</strong>
+                                    <code>@GetLinkHref(actor.Inbox)</code>
+                                </div>
+                            }
+                            @if (actor.Outbox != null)
+                            {
+                                <div class="detail-item">
+                                    <strong>Outbox:</strong>
+                                    <code>@GetLinkHref(actor.Outbox)</code>
+                                </div>
+                            }
+                            @if (actor.Followers != null)
+                            {
+                                <div class="detail-item">
+                                    <strong>Followers:</strong>
+                                    <code>@GetLinkHref(actor.Followers)</code>
+                                </div>
+                            }
+                            @if (actor.Following != null)
+                            {
+                                <div class="detail-item">
+                                    <strong>Following:</strong>
+                                    <code>@GetLinkHref(actor.Following)</code>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="quick-actions">
+                            <h5>Quick Actions</h5>
+                            <button class="action-button" @onclick="LoadActorOutbox">
+                                📤 View Outbox
+                            </button>
+                            <button class="action-button" @onclick="LoadActorFollowers">
+                                👥 View Followers
+                            </button>
+                            <button class="action-button" @onclick="LoadActorFollowing">
+                                🔗 View Following
+                            </button>
+                        </div>
+                    </div>
+                    }
+                }
+            </div>
+        }
+        else if (activeTab == "feed")
+        {
+            <div class="diagnostics-panel">
+                <h3>Activity Feed Viewer</h3>
+                <p class="panel-description">Display activity streams from any collection URL with pagination.</p>
+                
+                <div class="feed-controls">
+                    <label>
+                        <strong>Collection URL:</strong>
+                        <input type="text" 
+                               @bind="feedUrl" 
+                               placeholder="https://mastodon.social/users/username/outbox"
+                               class="url-input" />
+                    </label>
+                    <label>
+                        <strong>Page Size:</strong>
+                        <input type="number" 
+                               @bind="feedPageSize" 
+                               min="1" 
+                               max="50"
+                               class="number-input" />
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" @bind="useVirtualization" />
+                        Use Virtualization
+                    </label>
+                    <button @onclick="LoadFeed" class="action-button">Load Feed</button>
+                </div>
+
+                @if (currentFeedUrl != null)
+                {
+                    <div class="feed-display">
+                        <ActivityFeed CollectionUrl="@currentFeedUrl" 
+                                     PageSize="@feedPageSize"
+                                     UseVirtualization="@useVirtualization"
+                                     Title="Activity Stream">
+                            <ActivityTemplate Context="activity">
+                                <div class="activity-card">
+                                    <div class="activity-header">
+                                        <span class="activity-type">@(activity.Type?.FirstOrDefault())</span>
+                                        @if (activity.Published.HasValue)
+                                        {
+                                            <time>@activity.Published.Value.ToString("g")</time>
+                                        }
+                                    </div>
+                                    @if (activity.Actor?.Any() == true)
+                                    {
+                                        <div class="activity-actor">
+                                            <strong>Actor:</strong> <code>@GetActorId(activity.Actor.FirstOrDefault())</code>
+                                        </div>
+                                    }
+                                    @if (activity.Object?.Any() == true)
+                                    {
+                                        <div class="activity-object">
+                                            <ObjectDisplay Object="@activity.Object.FirstOrDefault()" />
+                                        </div>
+                                    }
+                                </div>
+                            </ActivityTemplate>
+                            <EmptyTemplate>
+                                <div class="empty-state">
+                                    <p>No activities found in this collection.</p>
+                                </div>
+                            </EmptyTemplate>
+                        </ActivityFeed>
+                    </div>
+                }
+            </div>
+        }
+        else if (activeTab == "profile")
+        {
+            <div class="diagnostics-panel">
+                <h3>Profile Viewer</h3>
+                <p class="panel-description">View complete actor profiles with integrated outbox feeds.</p>
+                
+                <div class="profile-controls">
+                    <label>
+                        <strong>Actor Handle:</strong>
+                        <input type="text" 
+                               @bind="profileHandle" 
+                               placeholder="user@domain.com"
+                               class="handle-input" />
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" @bind="showOutbox" />
+                        Show Recent Activities
+                    </label>
+                    <label>
+                        <strong>Activity Count:</strong>
+                        <input type="number" 
+                               @bind="outboxCount" 
+                               min="1" 
+                               max="20"
+                               class="number-input" />
+                    </label>
+                </div>
+
+                @if (!string.IsNullOrEmpty(profileHandle))
+                {
+                    <div class="profile-display">
+                        <ActorProfile ActorHandle="@profileHandle" 
+                                     ShowOutbox="@showOutbox"
+                                     OutboxPageSize="@outboxCount"
+                                     ShowDetails="true" />
+                    </div>
+                }
+            </div>
+        }
+        else if (activeTab == "query")
+        {
+            <div class="diagnostics-panel">
+                <h3>Direct Query</h3>
+                <p class="panel-description">Perform direct HTTP queries to ActivityPub resources.</p>
+                
+                <div class="query-controls">
+                    <label>
+                        <strong>Resource URL:</strong>
+                        <input type="text" 
+                               @bind="queryUrl" 
+                               placeholder="https://mastodon.social/users/username"
+                               class="url-input" />
+                    </label>
+                    <button @onclick="ExecuteQuery" class="action-button" disabled="@isQuerying">
+                        @(isQuerying ? "Querying..." : "Execute Query")
+                    </button>
+                </div>
+
+                @if (queryResult != null)
+                {
+                    <div class="query-result">
+                        <h4>Query Result</h4>
+                        <div class="result-meta">
+                            <span><strong>Status:</strong> Success ✓</span>
+                            <span><strong>Type:</strong> @queryResult.GetType().Name</span>
+                        </div>
+                        <div class="result-display">
+                            <ObjectDisplay Object="@queryResult" />
+                        </div>
+                        <details class="result-raw">
+                            <summary>View Raw JSON</summary>
+                            <pre><code>@System.Text.Json.JsonSerializer.Serialize(queryResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</code></pre>
+                        </details>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(queryError))
+                {
+                    <div class="query-error">
+                        <h4>Query Error</h4>
+                        <p>@queryError</p>
+                    </div>
+                }
+            </div>
+        }
+        else if (activeTab == "debug")
+        {
+            <div class="diagnostics-panel">
+                <h3>Debug Information</h3>
+                <p class="panel-description">System and component state information.</p>
+                
+                <div class="debug-grid">
+                    <div class="debug-card">
+                        <h4>🔌 Client Status</h4>
+                        <div class="debug-info">
+                            <div class="debug-item">
+                                <strong>Client Type:</strong>
+                                <code>@Client.GetType().Name</code>
+                            </div>
+                            <div class="debug-item">
+                                <strong>Status:</strong>
+                                <span class="status-badge status-active">Active</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="debug-card">
+                        <h4>📊 Session Stats</h4>
+                        <div class="debug-info">
+                            <div class="debug-item">
+                                <strong>Queries Executed:</strong>
+                                <span>@queryCount</span>
+                            </div>
+                            <div class="debug-item">
+                                <strong>Actors Searched:</strong>
+                                <span>@actorSearchCount</span>
+                            </div>
+                            <div class="debug-item">
+                                <strong>Active Tab:</strong>
+                                <span>@activeTab</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (EnableAdvancedDebug)
+                    {
+                        <div class="debug-card">
+                            <h4>🔍 Component State</h4>
+                            <div class="debug-info">
+                                <div class="debug-item">
+                                    <strong>Selected Actor:</strong>
+                                    <code>@(selectedActor?.Id ?? "None")</code>
+                                </div>
+                                <div class="debug-item">
+                                    <strong>Current Feed URL:</strong>
+                                    <code>@(currentFeedUrl?.ToString() ?? "None")</code>
+                                </div>
+                                <div class="debug-item">
+                                    <strong>Profile Handle:</strong>
+                                    <code>@(profileHandle ?? "None")</code>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="debug-card">
+                        <h4>⚙️ Settings</h4>
+                        <div class="debug-info">
+                            <div class="debug-item">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" @bind="EnableAdvancedDebug" />
+                                    Enable Advanced Debug
+                                </label>
+                            </div>
+                            <button class="action-button" @onclick="ResetDiagnostics">
+                                🔄 Reset Diagnostics
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string activeTab = "actor";
+    private KristofferStrube.ActivityStreams.Object? selectedActor;
+    private string feedUrl = "";
+    private Uri? currentFeedUrl;
+    private int feedPageSize = 10;
+    private bool useVirtualization = false;
+    private string profileHandle = "";
+    private bool showOutbox = true;
+    private int outboxCount = 5;
+    private string queryUrl = "";
+    private object? queryResult;
+    private string? queryError;
+    private bool isQuerying = false;
+    private int queryCount = 0;
+    private int actorSearchCount = 0;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes for the container.
+    /// </summary>
+    [Parameter]
+    public string CssClass { get; set; } = "";
+
+    /// <summary>
+    /// Gets or sets the header template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? HeaderTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show advanced debug information.
+    /// </summary>
+    [Parameter]
+    public bool EnableAdvancedDebug { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the default active tab.
+    /// </summary>
+    [Parameter]
+    public string DefaultTab { get; set; } = "actor";
+
+    /// <summary>
+    /// Event callback when an actor is selected.
+    /// </summary>
+    [Parameter]
+    public EventCallback<KristofferStrube.ActivityStreams.Object> OnActorSelected { get; set;}
+
+    protected override void OnInitialized()
+    {
+        activeTab = DefaultTab;
+    }
+
+    private string GetTabClass(string tab)
+    {
+        return activeTab == tab ? "tab-button active" : "tab-button";
+    }
+
+    private void HandleActorFound(KristofferStrube.ActivityStreams.Object actor)
+    {
+        selectedActor = actor;
+        actorSearchCount++;
+        OnActorSelected.InvokeAsync(actor);
+    }
+
+    private void LoadActorOutbox()
+    {
+        if (selectedActor is Actor actor && actor.Outbox != null)
+        {
+            feedUrl = GetLinkHref(actor.Outbox) ?? "";
+            LoadFeed();
+            activeTab = "feed";
+        }
+    }
+
+    private void LoadActorFollowers()
+    {
+        if (selectedActor is Actor actor && actor.Followers != null)
+        {
+            feedUrl = GetLinkHref(actor.Followers) ?? "";
+            LoadFeed();
+            activeTab = "feed";
+        }
+    }
+
+    private void LoadActorFollowing()
+    {
+        if (selectedActor is Actor actor && actor.Following != null)
+        {
+            feedUrl = GetLinkHref(actor.Following) ?? "";
+            LoadFeed();
+            activeTab = "feed";
+        }
+    }
+
+    private void LoadFeed()
+    {
+        if (!string.IsNullOrWhiteSpace(feedUrl) && Uri.TryCreate(feedUrl, UriKind.Absolute, out var uri))
+        {
+            currentFeedUrl = uri;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExecuteQuery()
+    {
+        if (string.IsNullOrWhiteSpace(queryUrl))
+            return;
+
+        isQuerying = true;
+        queryResult = null;
+        queryError = null;
+        StateHasChanged();
+
+        try
+        {
+            if (!Uri.TryCreate(queryUrl, UriKind.Absolute, out var uri))
+            {
+                queryError = "Invalid URL format";
+                return;
+            }
+
+            var result = await Client.GetAsync<object>(uri);
+            queryResult = result;
+            queryCount++;
+            queryError = null;
+        }
+        catch (Exception ex)
+        {
+            queryError = $"Error: {ex.Message}";
+            queryResult = null;
+        }
+        finally
+        {
+            isQuerying = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ResetDiagnostics()
+    {
+        selectedActor = null;
+        currentFeedUrl = null;
+        feedUrl = "";
+        profileHandle = "";
+        queryUrl = "";
+        queryResult = null;
+        queryError = null;
+        queryCount = 0;
+        actorSearchCount = 0;
+        activeTab = DefaultTab;
+        StateHasChanged();
+    }
+
+    private string? GetLinkHref(ILink link)
+    {
+        return link switch
+        {
+            Link l => l.Href?.ToString(),
+            KristofferStrube.ActivityStreams.Object obj => obj.Id,
+            _ => link.ToString()
+        };
+    }
+
+    private string? GetActorId(IObjectOrLink? actorLink)
+    {
+        return actorLink switch
+        {
+            Link link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => actorLink?.ToString()
+        };
+    }
+}

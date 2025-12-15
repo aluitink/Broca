@@ -33,11 +33,13 @@ public static class TestDataSeeder
     /// <param name="actorRepository">The actor repository to seed into</param>
     /// <param name="username">The username for the actor</param>
     /// <param name="baseUrl">The base URL of the server</param>
+    /// <param name="manuallyApprovesFollowers">Whether the actor manually approves followers</param>
     /// <returns>Tuple containing the actor and the generated private key PEM</returns>
     public static async Task<(Actor actor, string privateKeyPem)> SeedActorAsync(
         IActorRepository actorRepository, 
         string username, 
-        string baseUrl)
+        string baseUrl,
+        bool manuallyApprovesFollowers = false)
     {
         var (privateKeyPem, publicKeyPem) = KeyGenerator.GenerateKeyPair();
         
@@ -76,8 +78,12 @@ public static class TestDataSeeder
                     })
                 },
                 {
-                    "privateKey",
+                    "privateKeyPem",
                     JsonSerializer.SerializeToElement(privateKeyPem)
+                },
+                {
+                    "manuallyApprovesFollowers",
+                    JsonSerializer.SerializeToElement(manuallyApprovesFollowers)
                 }
             }
         };

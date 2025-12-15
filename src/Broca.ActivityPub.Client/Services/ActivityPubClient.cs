@@ -53,6 +53,109 @@ public class ActivityPubClient : IActivityPubClient
         };
     }
 
+    /// <summary>
+    /// Initializes the client by fetching credentials from the server using the API key
+    /// </summary>
+    /// <remarks>
+    /// This method should be called when the client is configured with ActorId and ApiKey
+    /// but not PrivateKeyPem. It fetches the actor's profile including the private key
+    /// using the API key as authentication.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <exception cref="InvalidOperationException">Thrown if ApiKey is not configured or actor cannot be fetched</exception>
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_options.RequiresInitialization)
+        {
+            _logger.LogDebug("Client does not require initialization (already has private key or missing API key)");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.ActorId))
+        {
+            throw new InvalidOperationException("ActorId must be configured to initialize the client");
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            throw new InvalidOperationException("ApiKey must be configured to initialize the client");
+        }
+
+        _logger.LogInformation("Initializing ActivityPub client for actor {ActorId} using API key", _options.ActorId);
+
+        try
+        {
+            // Fetch actor profile with API key to get private key
+            var client = CreateHttpClient();
+            var request = new HttpRequestMessage(HttpMethod.Get, new Uri(_options.ActorId));
+            
+            // Set Accept headers for ActivityPub
+            request.Headers.Accept.Clear();
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/activity+json"));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/ld+json", 0.9));
+            
+            // Add API key as Bearer token
+            _logger.LogDebug("Adding Authorization header with API key for initialization request");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+
+            _logger.LogDebug("Sending initialization request to {ActorId}", _options.ActorId);
+            var response = await client.SendAsync(request, cancellationToken);
+            
+            _logger.LogInformation("Initialization request returned status {StatusCode}", response.StatusCode);
+            response.EnsureSuccessStatusCode();
+
+            var actor = await response.Content.ReadFromJsonAsync<Actor>(_jsonOptions, cancellationToken);
+            if (actor == null)
+            {
+                throw new InvalidOperationException($"Failed to deserialize actor from {_options.ActorId}");
+            }
+
+            // Extract private key from extension data
+            if (actor.ExtensionData?.TryGetValue("privateKeyPem", out var privateKeyElement) == true)
+            {
+                var privateKeyPem = privateKeyElement.GetString();
+                if (string.IsNullOrWhiteSpace(privateKeyPem))
+                {
+                    throw new InvalidOperationException($"Actor {_options.ActorId} response did not include privateKeyPem. Ensure the API key is valid and the server is configured to return private keys.");
+                }
+
+                // Update options with private key
+                _options.PrivateKeyPem = privateKeyPem;
+                
+                // Set public key ID if not already set
+                if (string.IsNullOrWhiteSpace(_options.PublicKeyId))
+                {
+                    _options.PublicKeyId = $"{_options.ActorId.TrimEnd('#')}#main-key";
+                }
+
+                _logger.LogInformation("Successfully initialized client for {ActorId} with public key ID {PublicKeyId}", 
+                    _options.ActorId, _options.PublicKeyId);
+                _logger.LogDebug("Client is now authenticated: {IsAuthenticated}", _options.IsAuthenticated);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Failed to initialize client: Actor {_options.ActorId} response did not include privateKeyPem. " +
+                    "Ensure the API key is valid and the server is configured with a matching AdminApiToken.");
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Failed to fetch actor credentials from {ActorId}", _options.ActorId);
+            throw new InvalidOperationException($"Failed to initialize client: unable to fetch actor from {_options.ActorId}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException as-is (already has proper message)
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error initializing client for {ActorId}", _options.ActorId);
+            throw new InvalidOperationException($"Failed to initialize client: {ex.Message}", ex);
+        }
+    }
+
     /// <inheritdoc/>
     public async Task<Actor?> GetSelfAsync(CancellationToken cancellationToken = default)
     {
@@ -343,6 +446,8 @@ public class ActivityPubClient : IActivityPubClient
             throw new InvalidOperationException("PublicKeyId and PrivateKeyPem are required for signing requests");
         }
 
+        _logger.LogDebug("Signing request to {Uri} with key ID {KeyId}", request.RequestUri, _options.PublicKeyId);
+
         var method = request.Method.ToString();
         var uri = request.RequestUri!;
         var contentType = request.Content?.Headers.ContentType?.ToString();
@@ -358,6 +463,8 @@ public class ActivityPubClient : IActivityPubClient
             contentType,
             async (ct) => request.Content != null ? await request.Content.ReadAsByteArrayAsync(ct) : Array.Empty<byte>(),
             cancellationToken);
+        
+        _logger.LogDebug("Request signed successfully");
     }
 
     /// <summary>

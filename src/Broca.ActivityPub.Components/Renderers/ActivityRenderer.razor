@@ -1,0 +1,165 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-activity @CssClass">
+    @if (Activity != null)
+    {
+        <div class="activity-header">
+            @if (!string.IsNullOrEmpty(GetActorId()))
+            {
+                <div class="activity-actor">
+                    <span class="actor-id">@GetActorId()</span>
+                </div>
+            }
+
+            <div class="activity-type">
+                <span class="type-badge">@Activity.Type</span>
+            </div>
+
+            @if (Activity.Published.HasValue)
+            {
+                <div class="activity-time">
+                    <time datetime="@Activity.Published.Value.ToString("o")">
+                        @FormatDateTime(Activity.Published.Value)
+                    </time>
+                </div>
+            }
+        </div>
+
+        @if (Activity.Summary?.Any() == true)
+        {
+            <div class="activity-summary">
+                @Activity.Summary.First()
+            </div>
+        }
+
+        @if (ShowObject && Activity.Object?.Any() == true)
+        {
+            <div class="activity-objects">
+                @foreach (var obj in Activity.Object)
+                {
+                    <div class="activity-object">
+                        @if (ObjectRenderer != null)
+                        {
+                            @ObjectRenderer(obj)
+                        }
+                        else
+                        {
+                            <ObjectDisplay Object="@obj" />
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (ShowRecipients && HasRecipients())
+        {
+            <div class="activity-recipients">
+                <span class="recipients-label">To:</span>
+                @RenderRecipients()
+            </div>
+        }
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Activity)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Activity to render.
+    /// </summary>
+    [Parameter]
+    public Activity? Activity { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the activity object(s).
+    /// </summary>
+    [Parameter]
+    public bool ShowObject { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the recipients.
+    /// </summary>
+    [Parameter]
+    public bool ShowRecipients { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom renderer for objects.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<object>? ObjectRenderer { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Activity>? AdditionalContent { get; set; }
+
+    private string GetActorId()
+    {
+        return Activity?.Actor?.FirstOrDefault()?.ToString() ?? string.Empty;
+    }
+
+    private bool HasRecipients()
+    {
+        return Activity?.To?.Any() == true || 
+               Activity?.Cc?.Any() == true || 
+               Activity?.Bcc?.Any() == true;
+    }
+
+    private RenderFragment RenderRecipients()
+    {
+        return builder =>
+        {
+            var sequence = 0;
+            
+            if (Activity?.To?.Any() == true)
+            {
+                foreach (var recipient in Activity.To)
+                {
+                    builder.OpenElement(sequence++, "span");
+                    builder.AddAttribute(sequence++, "class", "recipient");
+                    builder.AddContent(sequence++, recipient.ToString());
+                    builder.CloseElement();
+                }
+            }
+
+            if (Activity?.Cc?.Any() == true)
+            {
+                foreach (var recipient in Activity.Cc)
+                {
+                    builder.OpenElement(sequence++, "span");
+                    builder.AddAttribute(sequence++, "class", "recipient cc");
+                    builder.AddContent(sequence++, recipient.ToString());
+                    builder.CloseElement();
+                }
+            }
+        };
+    }
+
+    private string FormatDateTime(DateTimeOffset dateTime)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - dateTime;
+
+        if (diff.TotalMinutes < 1)
+            return "just now";
+        if (diff.TotalMinutes < 60)
+            return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24)
+            return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7)
+            return $"{(int)diff.TotalDays}d ago";
+        
+        return dateTime.ToString("MMM d, yyyy");
+    }
+}

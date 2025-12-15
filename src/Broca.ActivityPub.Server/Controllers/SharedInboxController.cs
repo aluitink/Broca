@@ -155,10 +155,17 @@ public class SharedInboxController : ControllerBase
             }
 
             // Verify signature
-            var headers = Request.Headers.ToDictionary(
-                h => h.Key.ToLowerInvariant(),
-                h => h.Value.ToString()
-            );
+            var headers = new Dictionary<string, string>();
+            
+            // Add (request-target) pseudo-header
+            var requestTarget = $"{Request.Method.ToLower()} {Request.Path}";
+            headers["(request-target)"] = requestTarget;
+            
+            // Add all headers from the request (lowercase keys)
+            foreach (var header in Request.Headers)
+            {
+                headers[header.Key.ToLowerInvariant()] = header.Value.ToString();
+            }
             
             return await _signatureService.VerifyHttpSignatureAsync(
                 headers,

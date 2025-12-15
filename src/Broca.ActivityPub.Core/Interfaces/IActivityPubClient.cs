@@ -9,6 +9,10 @@ namespace Broca.ActivityPub.Core.Interfaces;
 /// Supports both anonymous and authenticated usage:
 /// - Anonymous: Browse public content without authentication
 /// - Authenticated: Use actor credentials to sign requests
+/// 
+/// Authentication can be configured via:
+/// 1. Direct private key: Provide ActorId, PrivateKeyPem, and PublicKeyId
+/// 2. API key: Provide ActorId and ApiKey, then call InitializeAsync() to fetch private key
 /// </remarks>
 public interface IActivityPubClient
 {
@@ -16,6 +20,17 @@ public interface IActivityPubClient
     /// Gets the current authenticated actor, or null if anonymous
     /// </summary>
     string? ActorId { get; }
+
+    /// <summary>
+    /// Initializes the client by fetching credentials from the server using an API key
+    /// </summary>
+    /// <remarks>
+    /// Call this method when the client is configured with ActorId and ApiKey.
+    /// It will fetch the actor's private key from the server using the API key.
+    /// If the client already has a private key or doesn't have an API key, this is a no-op.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task InitializeAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets or fetches the actor for the authenticated user

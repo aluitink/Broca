@@ -1,0 +1,247 @@
+@page "/settings"
+@using Broca.ActivityPub.Components
+
+<PageTitle>Settings - Broca Sample</PageTitle>
+
+<div class="settings-container">
+    <h1>Settings</h1>
+
+    <div class="settings-card">
+        <h3>ActivityPub Authentication</h3>
+        
+        @if (provider?.IsAuthenticated == true)
+        {
+            <div class="alert alert-success">
+                <strong>✓ Authenticated</strong> - You are signed in as @provider.CurrentActorId
+            </div>
+
+            <button class="btn btn-outline" @onclick="SignOut">
+                Sign Out
+            </button>
+        }
+        else
+        {
+            <div class="alert alert-info">
+                <strong>Anonymous Mode</strong> - Sign in to access authenticated features
+            </div>
+
+            <div class="tabs">
+                <input type="radio" name="auth-tab" id="api-key-tab" checked @onchange="@(() => selectedTab = 0)" />
+                <label for="api-key-tab">API Key Authentication</label>
+                
+                <input type="radio" name="auth-tab" id="private-key-tab" @onchange="@(() => selectedTab = 1)" />
+                <label for="private-key-tab">Private Key Authentication</label>
+
+                <div class="tab-content" style="@(selectedTab == 0 ? "display: block;" : "display: none;")">
+                    <p class="description">
+                        Use an API key to securely authenticate with your ActivityPub server.
+                    </p>
+
+                    <div class="form-group">
+                        <label for="actorId">Actor ID</label>
+                        <input 
+                            id="actorId"
+                            type="text" 
+                            class="form-control" 
+                            @bind="actorId" 
+                            placeholder="https://mastodon.social/@@username"
+                            disabled="@isConfiguring" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="apiKey">API Key</label>
+                        <input 
+                            id="apiKey"
+                            type="password" 
+                            class="form-control" 
+                            @bind="apiKey" 
+                            placeholder="Enter your API key"
+                            disabled="@isConfiguring" />
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-error">
+                            @errorMessage
+                        </div>
+                    }
+
+                    <button 
+                        class="btn btn-primary" 
+                        @onclick="SignInWithApiKey"
+                        disabled="@(isConfiguring || string.IsNullOrWhiteSpace(actorId) || string.IsNullOrWhiteSpace(apiKey))">
+                        @(isConfiguring ? "Signing in..." : "Sign In")
+                    </button>
+                </div>
+
+                <div class="tab-content" style="@(selectedTab == 1 ? "display: block;" : "display: none;")">
+                    <p class="description">
+                        Advanced: Directly provide your private key for authentication.
+                    </p>
+
+                    <div class="form-group">
+                        <label for="privateActorId">Actor ID</label>
+                        <input 
+                            id="privateActorId"
+                            type="text" 
+                            class="form-control" 
+                            @bind="privateActorId" 
+                            placeholder="https://mastodon.social/@@username"
+                            disabled="@isConfiguring" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="privateKeyPem">Private Key (PEM)</label>
+                        <textarea 
+                            id="privateKeyPem"
+                            class="form-control" 
+                            @bind="privateKeyPem" 
+                            placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                            rows="5"
+                            disabled="@isConfiguring"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="publicKeyId">Public Key ID</label>
+                        <input 
+                            id="publicKeyId"
+                            type="text" 
+                            class="form-control" 
+                            @bind="publicKeyId" 
+                            placeholder="https://mastodon.social/@@username#main-key"
+                            disabled="@isConfiguring" />
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(privateKeyError))
+                    {
+                        <div class="alert alert-error">
+                            @privateKeyError
+                        </div>
+                    }
+
+                    <button 
+                        class="btn btn-primary" 
+                        @onclick="SignInWithPrivateKey"
+                        disabled="@(isConfiguring || string.IsNullOrWhiteSpace(privateActorId) || string.IsNullOrWhiteSpace(privateKeyPem) || string.IsNullOrWhiteSpace(publicKeyId))">
+                        @(isConfiguring ? "Signing in..." : "Sign In")
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="settings-card">
+        <h3>About Authentication</h3>
+        <p class="info-text">
+            <strong>Anonymous Mode:</strong> Browse public ActivityPub content without signing in. 
+            Some features may be limited.
+        </p>
+        <p class="info-text">
+            <strong>API Key:</strong> Recommended for most users. The API key is used to fetch 
+            your credentials from the server securely.
+        </p>
+        <p class="info-text">
+            <strong>Private Key:</strong> For advanced users who want to manage their own keys. 
+            Your private key never leaves your browser.
+        </p>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter]
+    private ActivityPubClientProvider? provider { get; set; }
+
+    private int selectedTab = 0;
+    private string actorId = string.Empty;
+    private string apiKey = string.Empty;
+    private string privateActorId = string.Empty;
+    private string privateKeyPem = string.Empty;
+    private string publicKeyId = string.Empty;
+    private string? errorMessage;
+    private string? privateKeyError;
+    private bool isConfiguring;
+
+    private async Task SignInWithApiKey()
+    {
+        errorMessage = null;
+        isConfiguring = true;
+
+        try
+        {
+            if (!Uri.TryCreate(actorId, UriKind.Absolute, out _))
+            {
+                errorMessage = "Actor ID must be a valid URL";
+                return;
+            }
+
+            if (provider != null)
+            {
+                await provider.SetApiKeyAsync(actorId.Trim(), apiKey.Trim());
+            }
+
+            // Clear sensitive data
+            apiKey = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Authentication failed: {ex.Message}";
+        }
+        finally
+        {
+            isConfiguring = false;
+        }
+    }
+
+    private async Task SignInWithPrivateKey()
+    {
+        privateKeyError = null;
+        isConfiguring = true;
+
+        try
+        {
+            if (!Uri.TryCreate(privateActorId, UriKind.Absolute, out _))
+            {
+                privateKeyError = "Actor ID must be a valid URL";
+                return;
+            }
+
+            if (!Uri.TryCreate(publicKeyId, UriKind.Absolute, out _))
+            {
+                privateKeyError = "Public Key ID must be a valid URL";
+                return;
+            }
+
+            if (provider != null)
+            {
+                await provider.SetPrivateKeyAsync(
+                    privateActorId.Trim(), 
+                    privateKeyPem.Trim(), 
+                    publicKeyId.Trim()
+                );
+            }
+
+            // Clear sensitive data
+            privateKeyPem = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            privateKeyError = $"Authentication failed: {ex.Message}";
+        }
+        finally
+        {
+            isConfiguring = false;
+        }
+    }
+
+    private void SignOut()
+    {
+        provider?.ClearAuthentication();
+        actorId = string.Empty;
+        apiKey = string.Empty;
+        privateActorId = string.Empty;
+        privateKeyPem = string.Empty;
+        publicKeyId = string.Empty;
+        errorMessage = null;
+        privateKeyError = null;
+    }
+}

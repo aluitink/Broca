@@ -1,0 +1,167 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-actor-profile @CssClass">
+    @if (isLoading)
+    {
+        @if (LoadingTemplate != null)
+        {
+            @LoadingTemplate
+        }
+        else
+        {
+            <div class="profile-loading">Loading profile...</div>
+        }
+    }
+    else if (error != null)
+    {
+        @if (ErrorTemplate != null)
+        {
+            @ErrorTemplate(error)
+        }
+        else
+        {
+            <div class="profile-error">@error</div>
+        }
+    }
+    else if (actor != null)
+    {
+        @if (ProfileTemplate != null)
+        {
+            @ProfileTemplate(actor)
+        }
+        else
+        {
+            <ActorRenderer Actor="@actor" ShowDetails="@ShowDetails" />
+        }
+
+        @if (ShowOutbox && !string.IsNullOrEmpty(GetOutboxUrl()))
+        {
+            <div class="profile-outbox">
+                <h4>Recent Activities</h4>
+                <ActivityFeed CollectionUrl="@(new Uri(GetOutboxUrl()))" 
+                             PageSize="@OutboxPageSize"
+                             UseVirtualization="@false" />
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private KristofferStrube.ActivityStreams.Object? actor;
+    private bool isLoading;
+    private string? error;
+
+    /// <summary>
+    /// Gets or sets the actor URI to display.
+    /// </summary>
+    [Parameter]
+    public Uri? ActorUri { get; set; }
+
+    /// <summary>
+    /// Gets or sets the actor handle/alias (e.g., user@domain.com).
+    /// </summary>
+    [Parameter]
+    public string? ActorHandle { get; set; }
+
+    /// <summary>
+    /// Gets or sets the actor object directly.
+    /// </summary>
+    [Parameter]
+    public KristofferStrube.ActivityStreams.Object? Actor { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show detailed information.
+    /// </summary>
+    [Parameter]
+    public bool ShowDetails { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the actor's outbox.
+    /// </summary>
+    [Parameter]
+    public bool ShowOutbox { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the page size for the outbox feed.
+    /// </summary>
+    [Parameter]
+    public int OutboxPageSize { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom profile rendering template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? ProfileTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loading template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Actor != null)
+        {
+            actor = Actor;
+            return;
+        }
+
+        if (ActorUri != null || !string.IsNullOrEmpty(ActorHandle))
+        {
+            await LoadActorAsync();
+        }
+    }
+
+    private async Task LoadActorAsync()
+    {
+        isLoading = true;
+        error = null;
+        StateHasChanged();
+
+        try
+        {
+            if (ActorUri != null)
+            {
+                actor = await Client.GetActorAsync(ActorUri);
+            }
+            else if (!string.IsNullOrEmpty(ActorHandle))
+            {
+                actor = await Client.GetActorByAliasAsync(ActorHandle);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load actor: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetOutboxUrl()
+    {
+        if (actor is Person person && person.Outbox != null)
+        {
+            return person.Outbox.ToString() ?? string.Empty;
+        }
+        return string.Empty;
+    }
+}
+

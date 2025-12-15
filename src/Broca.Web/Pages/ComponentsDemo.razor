@@ -1,0 +1,142 @@
+@page "/components-demo"
+@using Broca.ActivityPub.Components
+@using KristofferStrube.ActivityStreams
+
+<PageTitle>Component Demo</PageTitle>
+
+<div class="components-demo">
+    <h1>Broca ActivityPub Components Demo</h1>
+    
+    <section class="demo-section">
+        <h2>Actor Browser</h2>
+        <p>Search for ActivityPub actors by handle or URI.</p>
+        
+        <ActorBrowser>
+            <SearchTemplate Context="search">
+                <div class="search-container">
+                    <input type="text" 
+                           @bind="search.Query" 
+                           placeholder="Enter actor handle (e.g., user@mastodon.social)"
+                           class="search-input" />
+                    <button @onclick="search.Execute" 
+                            disabled="@search.IsLoading"
+                            class="search-button">
+                        @if (search.IsLoading)
+                        {
+                            <span>Searching...</span>
+                        }
+                        else
+                        {
+                            <span>Search</span>
+                        }
+                    </button>
+                </div>
+            </SearchTemplate>
+            <ProfileTemplate Context="actor">
+                <div class="profile-result">
+                    <ActorRenderer Actor="@actor" ShowDetails="true" />
+                </div>
+            </ProfileTemplate>
+        </ActorBrowser>
+    </section>
+
+    <section class="demo-section">
+        <h2>Activity Feed</h2>
+        <p>Display an activity stream from an outbox or collection.</p>
+        
+        @if (!string.IsNullOrEmpty(feedUrl))
+        {
+            <ActivityFeed CollectionUrl="@(new Uri(feedUrl))" 
+                         Title="Activity Stream"
+                         PageSize="10"
+                         UseVirtualization="false">
+                <ActivityTemplate Context="activity">
+                    <div class="activity-card">
+                        <ActivityRenderer Activity="@activity" 
+                                        ShowObject="true" 
+                                        ShowRecipients="false" />
+                    </div>
+                </ActivityTemplate>
+                <EmptyTemplate>
+                    <div class="empty-feed">
+                        <p>No activities to display</p>
+                    </div>
+                </EmptyTemplate>
+            </ActivityFeed>
+        }
+        else
+        {
+            <div class="feed-input">
+                <input type="text" 
+                       @bind="tempFeedUrl" 
+                       placeholder="Enter collection URL (e.g., https://mastodon.social/users/username/outbox)"
+                       class="url-input" />
+                <button @onclick="LoadFeed" class="load-button">Load Feed</button>
+            </div>
+        }
+    </section>
+
+    <section class="demo-section">
+        <h2>Actor Profile</h2>
+        <p>Display a complete actor profile with optional outbox.</p>
+        
+        <div class="profile-input">
+            <input type="text" 
+                   @bind="actorHandle" 
+                   placeholder="Enter actor handle (e.g., user@domain.com)"
+                   class="handle-input" />
+            <button @onclick="LoadProfile" class="load-button">Load Profile</button>
+        </div>
+
+        @if (showProfile && !string.IsNullOrEmpty(actorHandle))
+        {
+            <ActorProfile ActorHandle="@actorHandle" 
+                         ShowOutbox="true"
+                         OutboxPageSize="5">
+                <LoadingTemplate>
+                    <div class="loading-profile">
+                        <div class="spinner"></div>
+                        <p>Loading profile...</p>
+                    </div>
+                </LoadingTemplate>
+                <ErrorTemplate Context="error">
+                    <div class="error-message">
+                        <p>Error: @error</p>
+                    </div>
+                </ErrorTemplate>
+            </ActorProfile>
+        }
+    </section>
+
+    <section class="demo-section">
+        <h2>Object Display</h2>
+        <p>Polymorphic rendering of ActivityStreams objects.</p>
+        
+        <div class="object-examples">
+            <p>Object display examples will appear here when objects are loaded from feeds above.</p>
+        </div>
+    </section>
+</div>
+
+@code {
+    private string? feedUrl;
+    private string tempFeedUrl = string.Empty;
+    private string actorHandle = string.Empty;
+    private bool showProfile = false;
+
+    private void LoadFeed()
+    {
+        if (!string.IsNullOrWhiteSpace(tempFeedUrl))
+        {
+            feedUrl = tempFeedUrl;
+        }
+    }
+
+    private void LoadProfile()
+    {
+        if (!string.IsNullOrWhiteSpace(actorHandle))
+        {
+            showProfile = true;
+        }
+    }
+}

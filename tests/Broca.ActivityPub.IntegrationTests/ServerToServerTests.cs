@@ -321,4 +321,237 @@ public class ServerToServerTests : TwoServerFixture
             Assert.DoesNotContain(aliceId, bobFollowersAfterUndo);
         }
     }
+
+    [Fact]
+    public async Task S2S_FollowWithAutoAccept_BothCollectionsUpdated()
+    {
+        // Arrange - Seed Alice on Server A and Bob on Server B
+        // Bob has manuallyApprovesFollowers = false (auto-accept)
+        string alicePrivateKey;
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (alice, privateKey) = await TestDataSeeder.SeedActorAsync(
+                actorRepo, 
+                "alice", 
+                ServerA.BaseUrl, 
+                manuallyApprovesFollowers: false);
+            alicePrivateKey = privateKey;
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await TestDataSeeder.SeedActorAsync(
+                actorRepo, 
+                "bob", 
+                ServerB.BaseUrl, 
+                manuallyApprovesFollowers: false); // Auto-accept follows
+        }
+
+        var aliceId = $"{ServerA.BaseUrl}/users/alice";
+        var bobId = $"{ServerB.BaseUrl}/users/bob";
+
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => ServerA.CreateClient(),
+            aliceId,
+            alicePrivateKey);
+
+        var c2sHelper = new ClientToServerHelper(aliceClient, aliceId, ClientA);
+
+        // Act - Alice follows Bob
+        var followActivity = TestDataSeeder.CreateFollow(aliceId, bobId);
+        var response = await c2sHelper.PostToOutboxAsync(followActivity);
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Wait for the Follow to be delivered to Bob's inbox
+        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+            "bob", 
+            "Follow",
+            TimeSpan.FromSeconds(10));
+        Assert.NotNull(deliveredFollow);
+
+        // Assert - Verify Alice's following collection includes Bob
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var aliceFollowing = await actorRepo.GetFollowingAsync("alice");
+            Assert.Contains(bobId, aliceFollowing);
+        }
+
+        // Assert - Verify Bob's followers collection includes Alice (auto-accepted)
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            var bobFollowers = await actorRepo.GetFollowersAsync("bob");
+            Assert.Contains(aliceId, bobFollowers);
+        }
+
+        // Assert - Verify Accept activity was sent back to Alice
+        // TODO: This depends on implementing Accept sending in HandleFollowAsync
+        // For now, we verify the collections are correct
+    }
+
+    [Fact]
+    public async Task S2S_FollowWithAutoAccept_CompleteLifecycle()
+    {
+        // This test verifies the complete follow/unfollow lifecycle:
+        // 1. Alice follows Bob (auto-accepted)
+        // 2. Verify both collections are updated
+        // 3. Alice unfollows Bob
+        // 4. Verify both collections are cleared
+        
+        // Arrange - Seed Alice on Server A and Bob on Server B
+        string alicePrivateKey;
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (alice, privateKey) = await TestDataSeeder.SeedActorAsync(
+                actorRepo, 
+                "alice", 
+                ServerA.BaseUrl);
+            alicePrivateKey = privateKey;
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await TestDataSeeder.SeedActorAsync(
+                actorRepo, 
+                "bob", 
+                ServerB.BaseUrl,
+                manuallyApprovesFollowers: false); // Auto-accept
+        }
+
+        var aliceId = $"{ServerA.BaseUrl}/users/alice";
+        var bobId = $"{ServerB.BaseUrl}/users/bob";
+
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => ServerA.CreateClient(),
+            aliceId,
+            alicePrivateKey);
+
+        var c2sHelper = new ClientToServerHelper(aliceClient, aliceId, ClientA);
+        var s2sHelperA = new ServerToServerHelper(ServerA, TimeSpan.FromSeconds(5));
+        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
+
+        // Step 1: Alice follows Bob
+        var followActivity = TestDataSeeder.CreateFollow(aliceId, bobId);
+        await c2sHelper.PostToOutboxAsync(followActivity);
+
+        // Wait for delivery
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+            "bob", 
+            "Follow",
+            TimeSpan.FromSeconds(10));
+        Assert.NotNull(deliveredFollow);
+
+        // Step 2: Verify collections after follow
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var aliceFollowing = await actorRepo.GetFollowingAsync("alice");
+            Assert.Contains(bobId, aliceFollowing);
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            var bobFollowers = await actorRepo.GetFollowersAsync("bob");
+            Assert.Contains(aliceId, bobFollowers);
+        }
+
+        // Step 3: Alice unfollows Bob
+        var undoActivity = TestDataSeeder.CreateUndo(aliceId, followActivity);
+        await c2sHelper.PostToOutboxAsync(undoActivity);
+
+        // Manually trigger delivery
+        await s2sHelperA.ProcessPendingDeliveriesAsync();
+
+        // Wait for Undo to be delivered
+        var deliveredUndo = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+            "bob", 
+            "Undo",
+            TimeSpan.FromSeconds(10));
+        Assert.NotNull(deliveredUndo);
+
+        // Step 4: Verify collections after unfollow
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var aliceFollowing = await actorRepo.GetFollowingAsync("alice");
+            Assert.DoesNotContain(bobId, aliceFollowing);
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            var bobFollowers = await actorRepo.GetFollowersAsync("bob");
+            Assert.DoesNotContain(aliceId, bobFollowers);
+        }
+    }
+
+    [Fact]
+    public async Task S2S_FollowersAndFollowingCollections_VerifyViaHTTP()
+    {
+        // This test verifies that the followers/following collections are accessible via HTTP
+        // and contain the correct data after follow operations
+        
+        // Arrange - Seed Alice on Server A and Bob on Server B
+        string alicePrivateKey;
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (alice, privateKey) = await TestDataSeeder.SeedActorAsync(
+                actorRepo, 
+                "alice", 
+                ServerA.BaseUrl);
+            alicePrivateKey = privateKey;
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await TestDataSeeder.SeedActorAsync(
+                actorRepo, 
+                "bob", 
+                ServerB.BaseUrl);
+        }
+
+        var aliceId = $"{ServerA.BaseUrl}/users/alice";
+        var bobId = $"{ServerB.BaseUrl}/users/bob";
+
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => ServerA.CreateClient(),
+            aliceId,
+            alicePrivateKey);
+
+        var c2sHelper = new ClientToServerHelper(aliceClient, aliceId, ClientA);
+        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
+
+        // Act - Alice follows Bob
+        var followActivity = TestDataSeeder.CreateFollow(aliceId, bobId);
+        await c2sHelper.PostToOutboxAsync(followActivity);
+
+        // Wait for delivery
+        await s2sHelperB.WaitForInboxActivityByTypeAsync(
+            "bob", 
+            "Follow",
+            TimeSpan.FromSeconds(10));
+
+        // Assert - Fetch Alice's following collection via HTTP
+        var aliceFollowingResponse = await ClientA.GetAsync("/users/alice/following");
+        Assert.True(aliceFollowingResponse.IsSuccessStatusCode);
+        
+        var aliceFollowingJson = await aliceFollowingResponse.Content.ReadAsStringAsync();
+        Assert.Contains(bobId, aliceFollowingJson);
+
+        // Assert - Fetch Bob's followers collection via HTTP
+        var bobFollowersResponse = await ClientB.GetAsync("/users/bob/followers");
+        Assert.True(bobFollowersResponse.IsSuccessStatusCode);
+        
+        var bobFollowersJson = await bobFollowersResponse.Content.ReadAsStringAsync();
+        Assert.Contains(aliceId, bobFollowersJson);
+    }
 }

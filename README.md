@@ -20,7 +20,7 @@ Broca provides a complete, standards-compliant implementation of the ActivityPub
 - **Broca.ActivityPub.Client** - Client library for federated requests
 - **Broca.ActivityPub.Server** - Server components for hosting actors
 - **Broca.ActivityPub.Persistence** - Storage abstractions (in-memory, file-based)
-- **Broca.ActivityPub.WebClient** - Blazor components for web UIs
+- **Broca.ActivityPub.Components** - Blazor components for web UIs
 
 ## Quick Start: Using the Libraries
 

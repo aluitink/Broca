@@ -431,7 +431,7 @@ public class ActivityDeliveryService
 
             // Extract private key from actor's extension data
             string? privateKeyPem = null;
-            if (senderActor.ExtensionData?.TryGetValue("privateKey", out var privateKeyObj) == true)
+            if (senderActor.ExtensionData?.TryGetValue("privateKeyPem", out var privateKeyObj) == true)
             {
                 if (privateKeyObj is JsonElement privateKeyElement && privateKeyElement.ValueKind == JsonValueKind.String)
                 {
@@ -441,6 +441,13 @@ public class ActivityDeliveryService
 
             if (string.IsNullOrEmpty(privateKeyPem))
             {
+                // Log diagnostic information about what keys are available
+                var availableKeys = senderActor.ExtensionData?.Keys.ToList() ?? new List<string>();
+                _logger.LogWarning(
+                    "Sender {Username} has no private key. Available ExtensionData keys: {Keys}", 
+                    item.SenderUsername, 
+                    string.Join(", ", availableKeys));
+                    
                 await _deliveryQueue.MarkAsFailedAsync(item.Id, "Sender has no private key", cancellationToken);
                 return;
             }

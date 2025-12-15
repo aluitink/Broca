@@ -136,7 +136,7 @@ See [docs/DOCKER.md](./docs/DOCKER.md) for detailed Docker setup.
   - `Broca.ActivityPub.Client` - Client library
   - `Broca.ActivityPub.Server` - Server components
   - `Broca.ActivityPub.Persistence` - Storage implementations
-  - `Broca.ActivityPub.WebClient` - Blazor components
+  - `Broca.ActivityPub.Components` - Blazor components
   
 - **`tests/`** - Test projects
   - `Broca.ActivityPub.IntegrationTests` - Integration tests

@@ -19,6 +19,7 @@ public class ActivityPubClientOptions
     /// <remarks>
     /// Required for authenticated requests. Must match the public key
     /// advertised in the actor's profile.
+    /// Can be provided directly or fetched using ApiKey.
     /// </remarks>
     public string? PrivateKeyPem { get; set; }
 
@@ -29,6 +30,18 @@ public class ActivityPubClientOptions
     /// Used in the HTTP signature keyId parameter
     /// </remarks>
     public string? PublicKeyId { get; set; }
+
+    /// <summary>
+    /// API key for fetching actor identity and private key from the server
+    /// </summary>
+    /// <remarks>
+    /// When provided, the client will automatically fetch the actor's
+    /// private key from the server using this API key as a Bearer token.
+    /// This key will be sent in the Authorization header when requesting
+    /// the actor profile. The server must be configured with a matching
+    /// AdminApiToken to return the private key.
+    /// </remarks>
+    public string? ApiKey { get; set; }
 
     /// <summary>
     /// User agent string for HTTP requests
@@ -53,7 +66,36 @@ public class ActivityPubClientOptions
     /// <summary>
     /// Gets whether the client is configured for authenticated mode
     /// </summary>
-    public bool IsAuthenticated => !string.IsNullOrWhiteSpace(ActorId) 
-        && !string.IsNullOrWhiteSpace(PrivateKeyPem) 
+    /// <remarks>
+    /// Authenticated mode requires either:
+    /// 1. ActorId + PrivateKeyPem + PublicKeyId (direct private key - no server fetch needed)
+    /// 2. ActorId + ApiKey (will fetch private key from server via InitializeAsync)
+    /// </remarks>
+    public bool IsAuthenticated => 
+        !string.IsNullOrWhiteSpace(ActorId) 
+        && (HasPrivateKey || HasApiKey);
+    
+    /// <summary>
+    /// Gets whether the client has a private key configured directly
+    /// </summary>
+    private bool HasPrivateKey => 
+        !string.IsNullOrWhiteSpace(PrivateKeyPem) 
         && !string.IsNullOrWhiteSpace(PublicKeyId);
+    
+    /// <summary>
+    /// Gets whether the client has an API key configured
+    /// </summary>
+    private bool HasApiKey => !string.IsNullOrWhiteSpace(ApiKey);
+    
+    /// <summary>
+    /// Gets whether the client needs to initialize by fetching credentials from the server
+    /// </summary>
+    /// <remarks>
+    /// Returns true when ApiKey is provided but PrivateKeyPem is not yet fetched.
+    /// After calling InitializeAsync(), this will return false.
+    /// </remarks>
+    public bool RequiresInitialization => 
+        !string.IsNullOrWhiteSpace(ActorId) 
+        && HasApiKey
+        && !HasPrivateKey;
 }
