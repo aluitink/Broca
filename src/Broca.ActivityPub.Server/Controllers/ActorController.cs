@@ -277,7 +277,7 @@ public class ActorController : ControllerBase
             var offset = page * limit;
             var liked = await _activityRepository.GetLikedByActorAsync(username, limit, offset);
             var totalCount = await _activityRepository.GetLikedByActorCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             if (page == 0 && limit == 20)
             {
@@ -341,7 +341,7 @@ public class ActorController : ControllerBase
             var offset = page * limit;
             var shared = await _activityRepository.GetSharedByActorAsync(username, limit, offset);
             var totalCount = await _activityRepository.GetSharedByActorCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             if (page == 0 && limit == 20)
             {
