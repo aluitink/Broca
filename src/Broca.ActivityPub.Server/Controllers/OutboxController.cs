@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Broca.ActivityPub.Core.Interfaces;
+using Broca.ActivityPub.Core.Models;
 using Broca.ActivityPub.Server.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using KristofferStrube.ActivityStreams;
 using KristofferStrube.ActivityStreams.JsonLD;
 
@@ -15,6 +17,7 @@ public class OutboxController : ControllerBase
     private readonly IActorRepository _actorRepository;
     private readonly OutboxProcessor _outboxProcessor;
     private readonly AttachmentProcessingService _attachmentProcessingService;
+    private readonly ActivityPubServerOptions _options;
     private readonly ILogger<OutboxController> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
@@ -23,12 +26,14 @@ public class OutboxController : ControllerBase
         IActorRepository actorRepository,
         OutboxProcessor outboxProcessor,
         AttachmentProcessingService attachmentProcessingService,
+        IOptions<ActivityPubServerOptions> options,
         ILogger<OutboxController> logger)
     {
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
         _outboxProcessor = outboxProcessor;
         _attachmentProcessingService = attachmentProcessingService;
+        _options = options.Value;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
         {
@@ -63,7 +68,7 @@ public class OutboxController : ControllerBase
             }
             
             var totalCount = await _activityRepository.GetOutboxCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             // Check if pagination parameters were explicitly provided
             var hasPageParam = Request.Query.ContainsKey("page");

@@ -1,5 +1,7 @@
 using Broca.ActivityPub.Core.Interfaces;
+using Broca.ActivityPub.Core.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 using KristofferStrube.ActivityStreams;
 using KristofferStrube.ActivityStreams.JsonLD;
@@ -16,16 +18,19 @@ public class ObjectController : ControllerBase
 {
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
+    private readonly ActivityPubServerOptions _options;
     private readonly ILogger<ObjectController> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public ObjectController(
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
+        IOptions<ActivityPubServerOptions> options,
         ILogger<ObjectController> logger)
     {
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
+        _options = options.Value;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
         {
@@ -59,7 +64,7 @@ public class ObjectController : ControllerBase
             }
 
             // Ensure the object has the correct ID set
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
             if (obj is KristofferStrube.ActivityStreams.Object asObject && string.IsNullOrEmpty(asObject.Id))
             {
                 asObject.Id = $"{baseUrl}/users/{username}/objects/{objectId}";
@@ -101,7 +106,7 @@ public class ObjectController : ControllerBase
             var offset = page * limit;
             var replies = await _activityRepository.GetRepliesAsync(objectId, limit, offset);
             var totalCount = await _activityRepository.GetRepliesCountAsync(objectId);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             if (page == 0 && limit == 20)
             {
@@ -177,7 +182,7 @@ public class ObjectController : ControllerBase
             var offset = page * limit;
             var likes = await _activityRepository.GetLikesAsync(objectId, limit, offset);
             var totalCount = await _activityRepository.GetLikesCountAsync(objectId);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             if (page == 0 && limit == 20)
             {
@@ -253,7 +258,7 @@ public class ObjectController : ControllerBase
             var offset = page * limit;
             var shares = await _activityRepository.GetSharesAsync(objectId, limit, offset);
             var totalCount = await _activityRepository.GetSharesCountAsync(objectId);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             if (page == 0 && limit == 20)
             {

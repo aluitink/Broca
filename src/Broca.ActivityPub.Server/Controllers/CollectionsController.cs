@@ -54,7 +54,7 @@ public class CollectionsController : ControllerBase
             }
 
             var definitions = await _collectionService.GetCollectionDefinitionsAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             // Filter by visibility - only show public collections unless authenticated
             // TODO: Add authentication check for private collections
@@ -124,7 +124,7 @@ public class CollectionsController : ControllerBase
             var offset = page * limit;
             var items = await _collectionService.GetCollectionItemsAsync(username, collectionId, limit, offset);
             var totalCount = await _collectionService.GetCollectionItemCountAsync(username, collectionId);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             var collection = new OrderedCollectionPage
             {

@@ -81,7 +81,7 @@ public class InboxController : ControllerBase
             }
             
             var totalCount = await _activityRepository.GetInboxCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             if (page == 0 && limit == 20)
             {
