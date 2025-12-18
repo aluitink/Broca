@@ -1,0 +1,188 @@
+@page "/relationships"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Components
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>Relationships - Broca</PageTitle>
+
+@if (!AuthState.IsAuthenticated)
+{
+    <FluentCard>
+        <h2>Authentication Required</h2>
+        <p>Please login to view your relationships.</p>
+        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/relationships")}"))">
+            Login
+        </FluentButton>
+    </FluentCard>
+}
+else
+{
+    <div class="relationships-container">
+        <FluentCard Class="relationships-header">
+            <h1>
+                <FluentIcon Value="@(new Icons.Regular.Size24.People())" Color="Color.Accent" />
+                Relationships
+            </h1>
+            <p>Manage your followers and following</p>
+        </FluentCard>
+
+        <FluentTabs>
+            <FluentTab Label="Followers">
+                <div class="tab-content">
+                    @if (_followersUrl != null)
+                    {
+                        <CollectionLoader TItem="KristofferStrube.ActivityStreams.Actor"
+                                         CollectionUrl="@_followersUrl"
+                                         PageSize="20"
+                                         UseVirtualization="true">
+                            <ItemTemplate Context="actor">
+                                <FluentCard Class="actor-card">
+                                    <ActorProfile ActorUri="@(new Uri(actor.Id ?? string.Empty))" ShowActions="false" />
+                                </FluentCard>
+                            </ItemTemplate>
+                            <EmptyTemplate>
+                                <FluentCard Class="empty-state">
+                                    <FluentIcon Value="@(new Icons.Regular.Size48.People())" Color="Color.Neutral" />
+                                    <h3>No followers yet</h3>
+                                    <p>When others follow you, they will appear here.</p>
+                                </FluentCard>
+                            </EmptyTemplate>
+                            <ErrorTemplate Context="error">
+                                <FluentCard Class="error-state">
+                                    <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
+                                    <h3>Failed to load followers</h3>
+                                    <p>@error</p>
+                                </FluentCard>
+                            </ErrorTemplate>
+                        </CollectionLoader>
+                    }
+                    else
+                    {
+                        <FluentCard>
+                            <p>Unable to determine followers URL.</p>
+                        </FluentCard>
+                    }
+                </div>
+            </FluentTab>
+
+            <FluentTab Label="Following">
+                <div class="tab-content">
+                    @if (_followingUrl != null)
+                    {
+                        <CollectionLoader TItem="KristofferStrube.ActivityStreams.Actor"
+                                         CollectionUrl="@_followingUrl"
+                                         PageSize="20"
+                                         UseVirtualization="true">
+                            <ItemTemplate Context="actor">
+                                <FluentCard Class="actor-card">
+                                    <ActorProfile ActorUri="@(new Uri(actor.Id ?? string.Empty))" ShowActions="false" />
+                                </FluentCard>
+                            </ItemTemplate>
+                            <EmptyTemplate>
+                                <FluentCard Class="empty-state">
+                                    <FluentIcon Value="@(new Icons.Regular.Size48.PersonAdd())" Color="Color.Neutral" />
+                                    <h3>Not following anyone yet</h3>
+                                    <p>Start following other actors to see them here.</p>
+                                </FluentCard>
+                            </EmptyTemplate>
+                            <ErrorTemplate Context="error">
+                                <FluentCard Class="error-state">
+                                    <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
+                                    <h3>Failed to load following</h3>
+                                    <p>@error</p>
+                                </FluentCard>
+                            </ErrorTemplate>
+                        </CollectionLoader>
+                    }
+                    else
+                    {
+                        <FluentCard>
+                            <p>Unable to determine following URL.</p>
+                        </FluentCard>
+                    }
+                </div>
+            </FluentTab>
+        </FluentTabs>
+    </div>
+}
+
+@code {
+    private Uri? _followersUrl;
+    private Uri? _followingUrl;
+
+    protected override void OnInitialized()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthStateChanged;
+        UpdateCollectionUrls();
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        UpdateCollectionUrls();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateCollectionUrls()
+    {
+        _followersUrl = AuthState.GetFollowersUrl();
+        _followingUrl = AuthState.GetFollowingUrl();
+    }
+
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}
+
+<style>
+    .relationships-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        max-width: 1000px;
+        margin: 0 auto;
+    }
+
+    .relationships-header h1 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .relationships-header p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+
+    .tab-content {
+        padding: 1rem 0;
+    }
+
+    .actor-card {
+        margin-bottom: 1rem;
+    }
+
+    .empty-state,
+    .error-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 2rem;
+        text-align: center;
+        gap: 1rem;
+    }
+
+    .empty-state h3,
+    .error-state h3 {
+        margin: 0;
+    }
+
+    .empty-state p,
+    .error-state p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+</style>

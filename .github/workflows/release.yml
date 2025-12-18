@@ -40,6 +40,9 @@ jobs:
     - name: Pack Broca.ActivityPub.Client
       run: dotnet pack src/Broca.ActivityPub.Client/Broca.ActivityPub.Client.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
       
+    - name: Pack Broca.ActivityPub.Client.WebCrypto
+      run: dotnet pack src/Broca.ActivityPub.Client.WebCrypto/Broca.ActivityPub.Client.WebCrypto.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+      
     - name: Pack Broca.ActivityPub.Persistence
       run: dotnet pack src/Broca.ActivityPub.Persistence/Broca.ActivityPub.Persistence.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
       

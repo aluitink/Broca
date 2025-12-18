@@ -1,10 +1,21 @@
 ﻿@inherits LayoutComponentBase
 @using Broca.ActivityPub.Components
+@using Broca.Web.Services
+@inject AuthenticationStateService AuthState
 
 <ActivityPubClientProvider>
     <FluentLayout>
         <FluentHeader>
-            Broca.Web
+            <div class="header-content">
+                <span class="header-title">Broca.Web</span>
+                @if (AuthState.IsAuthenticated && AuthState.CurrentActor != null)
+                {
+                    <div class="header-user">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.PersonCircle())" Color="Color.Accent" />
+                        <span class="header-user-text">@GetUsername()</span>
+                    </div>
+                }
+            </div>
         </FluentHeader>
         <FluentStack Class="main" Orientation="Orientation.Horizontal" Width="100%">
             <NavMenu />
@@ -28,3 +39,61 @@
         </FluentFooter>
     </FluentLayout>
 </ActivityPubClientProvider>
+
+@code {
+    protected override void OnInitialized()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthStateChanged;
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string GetDisplayName()
+    {
+        if (AuthState.CurrentActor?.Name?.FirstOrDefault() is string name && !string.IsNullOrWhiteSpace(name))
+            return name;
+        
+        return GetUsername();
+    }
+
+    private string GetUsername()
+    {
+        if (AuthState.CurrentActor is Person person && !string.IsNullOrWhiteSpace(person.PreferredUsername))
+            return $"@{person.PreferredUsername}";
+        
+        return "User";
+    }
+
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}
+
+<style>
+    .header-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 0 1rem;
+    }
+
+    .header-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+    }
+
+    .header-user {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-user-text {
+        font-size: 0.875rem;
+    }
+</style>

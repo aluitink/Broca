@@ -1,7 +1,180 @@
 ﻿@page "/"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Components
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Home - Broca</PageTitle>
 
-<h1>Hello, world!</h1>
+@if (!AuthState.IsAuthenticated)
+{
+    <div class="welcome-container">
+        <FluentCard Class="welcome-card">
+            <h1>Welcome to Broca</h1>
+            <p class="subtitle">A modern ActivityPub client for the decentralized web</p>
+            
+            <div class="features">
+                <div class="feature">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Shield())" Color="Color.Accent" />
+                    <h3>Decentralized</h3>
+                    <p>Connect directly with ActivityPub servers using standard protocols</p>
+                </div>
+                <div class="feature">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Key())" Color="Color.Accent" />
+                    <h3>Secure</h3>
+                    <p>HTTP signatures ensure authenticated and verified requests</p>
+                </div>
+                <div class="feature">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Globe())" Color="Color.Accent" />
+                    <h3>Federated</h3>
+                    <p>Interact with users across the Fediverse</p>
+                </div>
+            </div>
 
-Welcome to your new Fluent Blazor app.
+            <div class="cta">
+                <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/login"))">
+                    Get Started
+                </FluentButton>
+            </div>
+        </FluentCard>
+    </div>
+}
+else
+{
+    <div class="home-authenticated">
+        <FluentCard Class="home-header">
+            <h1>Welcome back, @GetDisplayName()</h1>
+            <p>Here's your latest activity</p>
+        </FluentCard>
+
+        @if (_inboxUrl != null)
+        {
+            <ActivityFeed 
+                CollectionUrl="@_inboxUrl" 
+                Title="Recent Inbox Activity"
+                PageSize="10"
+                UseVirtualization="false"
+                ShowObjects="true"
+                ShowRecipients="false">
+            </ActivityFeed>
+
+            <FluentCard Class="view-all">
+                <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/inbox"))">
+                    View Full Inbox
+                </FluentButton>
+            </FluentCard>
+        }
+    </div>
+}
+
+@code {
+    private Uri? _inboxUrl;
+
+    protected override void OnInitialized()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthStateChanged;
+        UpdateInboxUrl();
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        UpdateInboxUrl();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateInboxUrl()
+    {
+        _inboxUrl = AuthState.GetInboxUrl();
+    }
+
+    private string GetDisplayName()
+    {
+        if (AuthState.CurrentActor?.Name?.FirstOrDefault() is string name && !string.IsNullOrWhiteSpace(name))
+            return name;
+        
+        if (AuthState.CurrentActor is Person person && !string.IsNullOrWhiteSpace(person.PreferredUsername))
+            return person.PreferredUsername;
+        
+        return "User";
+    }
+
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}
+
+<style>
+    .welcome-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 70vh;
+        padding: 20px;
+    }
+
+    .welcome-card {
+        max-width: 800px;
+        width: 100%;
+        padding: 3rem;
+        text-align: center;
+    }
+
+    .welcome-card h1 {
+        margin: 0 0 1rem 0;
+        font-size: 2.5rem;
+    }
+
+    .subtitle {
+        font-size: 1.25rem;
+        color: var(--neutral-foreground-hint);
+        margin-bottom: 3rem;
+    }
+
+    .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+    }
+
+    .feature {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .feature h3 {
+        margin: 0.5rem 0 0.25rem 0;
+    }
+
+    .feature p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+        font-size: 0.875rem;
+    }
+
+    .home-authenticated {
+        max-width: 800px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .home-header h1 {
+        margin: 0 0 0.5rem 0;
+    }
+
+    .home-header p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+
+    .view-all {
+        display: flex;
+        justify-content: center;
+        padding: 1.5rem;
+    }
+</style>
