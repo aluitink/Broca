@@ -12,7 +12,7 @@ namespace Broca.ActivityPub.IntegrationTests.Infrastructure;
 /// Server factory for creating isolated ActivityPub server instances for testing
 /// Each instance has its own in-memory repositories and base URL
 /// </summary>
-public class BrocaTestServer : WebApplicationFactory<Program>, IAsyncDisposable
+public class BrocaTestServer : WebApplicationFactory<Broca.API.Program>, IAsyncDisposable
 {
     private readonly string _baseUrl;
     private readonly string _domain;

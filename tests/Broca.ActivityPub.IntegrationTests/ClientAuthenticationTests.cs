@@ -190,7 +190,7 @@ public class ClientAuthenticationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ClientWithNoApiKeyOrPrivateKey_IsNotAuthenticated()
+    public Task ClientWithNoApiKeyOrPrivateKey_IsNotAuthenticated()
     {
         // Arrange - Create anonymous client
         var services = new ServiceCollection();
@@ -207,6 +207,7 @@ public class ClientAuthenticationTests : IAsyncLifetime
         Assert.Null(options.ActorId);
         Assert.Null(options.PrivateKeyPem);
         Assert.Null(options.ApiKey);
+        return Task.CompletedTask;
     }
 
     /// <summary>
