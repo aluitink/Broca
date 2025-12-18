@@ -49,7 +49,8 @@ public class ActivitiesController : ControllerBase
         {
             // Construct the full activity ID from the route parameter
             var baseUrl = (_options.BaseUrl ?? $"{Request.Scheme}://{Request.Host}").TrimEnd('/');
-            var fullActivityId = $"{baseUrl}/activities/{activityId}";
+            var routePrefix = _options.NormalizedRoutePrefix;
+            var fullActivityId = $"{baseUrl}{routePrefix}/activities/{activityId}";
 
             _logger.LogDebug("Retrieving activity: {ActivityId}", fullActivityId);
 

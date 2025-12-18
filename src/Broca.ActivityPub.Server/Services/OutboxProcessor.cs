@@ -43,7 +43,8 @@ public class OutboxProcessor
             if (string.IsNullOrEmpty(activityObj?.Id))
             {
                 var baseUrl = (_options.BaseUrl ?? "http://localhost").TrimEnd('/');
-                var generatedActivityId = $"{baseUrl}/activities/{Guid.NewGuid()}";
+                var routePrefix = _options.NormalizedRoutePrefix;
+                var generatedActivityId = $"{baseUrl}{routePrefix}/activities/{Guid.NewGuid()}";
                 if (activityObj != null)
                 {
                     activityObj.Id = generatedActivityId;
@@ -362,7 +363,9 @@ public class OutboxProcessor
             objectId = obj.Id;
             if (string.IsNullOrEmpty(objectId))
             {
-                objectId = $"https://localhost/users/{username}/objects/{Guid.NewGuid()}";
+                var baseUrl = (_options.BaseUrl ?? "http://localhost").TrimEnd('/');
+                var routePrefix = _options.NormalizedRoutePrefix;
+                objectId = $"{baseUrl}{routePrefix}/users/{username}/objects/{Guid.NewGuid()}";
                 obj.Id = objectId;
             }
 
