@@ -14,22 +14,51 @@ public class ClientCollectionService : ICollectionService
 {
     private readonly HttpClient _httpClient;
     private readonly IActivityPubClient _activityPubClient;
+    private readonly AuthenticationStateService _authState;
     private readonly ILogger<ClientCollectionService> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public ClientCollectionService(
         HttpClient httpClient,
         IActivityPubClient activityPubClient,
+        AuthenticationStateService authState,
         ILogger<ClientCollectionService> logger)
     {
         _httpClient = httpClient;
         _activityPubClient = activityPubClient;
+        _authState = authState;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
+    }
+
+    private async Task<string?> GetActorIdForUsername(string username, CancellationToken cancellationToken = default)
+    {
+        // If we're fetching for the current user, use their actor ID
+        if (_authState.CurrentActor?.PreferredUsername == username && _authState.CurrentActorId != null)
+        {
+            return _authState.CurrentActorId;
+        }
+
+        // Otherwise, construct the actor URI from the base using webfinger or direct construction
+        // For now, use direct construction with the standard pattern
+        var baseUri = _httpClient.BaseAddress ?? new Uri("http://localhost");
+        
+        // Try to fetch the actor to get its proper ID
+        try
+        {
+            var testUri = new Uri(baseUri, $"ap/users/{username}");
+            var actor = await _activityPubClient.GetActorAsync(testUri, cancellationToken);
+            return actor?.Id;
+        }
+        catch
+        {
+            // Fallback to constructed URI
+            return $"{baseUri.Scheme}://{baseUri.Authority}/ap/users/{username}";
+        }
     }
 
     public async Task<CustomCollectionDefinition> CreateCollectionAsync(
@@ -159,16 +188,23 @@ public class ClientCollectionService : ICollectionService
     {
         try
         {
-            var response = await _httpClient.GetAsync(
-                $"api/actors/{username}/collections/{collectionId}/definition",
-                cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
+            // Get the actor ID to build the proper collection URI
+            var actorId = await GetActorIdForUsername(username, cancellationToken);
+            if (actorId == null)
             {
+                _logger.LogWarning("Could not determine actor ID for username {Username}", username);
                 return null;
             }
 
-            return await response.Content.ReadFromJsonAsync<CustomCollectionDefinition>(_jsonOptions, cancellationToken);
+            // Build the definition URI based on the actor's base URI
+            var actorUri = new Uri(actorId);
+            var definitionUri = new Uri(actorUri.GetLeftPart(UriPartial.Path) + $"/collections/{collectionId}/definition");
+            
+            var response = await _activityPubClient.GetAsync<CustomCollectionDefinition>(
+                definitionUri,
+                cancellationToken: cancellationToken);
+
+            return response;
         }
         catch (Exception ex)
         {
@@ -183,17 +219,53 @@ public class ClientCollectionService : ICollectionService
     {
         try
         {
-            var response = await _httpClient.GetAsync(
-                $"api/actors/{username}/collections/definitions",
-                cancellationToken);
+            // Get the actor ID to build the proper collections catalog URI
+            var actorId = await GetActorIdForUsername(username, cancellationToken);
+            if (actorId == null)
+            {
+                _logger.LogWarning("Could not determine actor ID for username {Username}", username);
+                return Enumerable.Empty<CustomCollectionDefinition>();
+            }
 
-            if (!response.IsSuccessStatusCode)
+            // Build the collections catalog URI from the actor's base URI
+            var actorUri = new Uri(actorId);
+            var catalogUri = new Uri(actorUri.GetLeftPart(UriPartial.Path) + "/collections");
+            
+            var catalog = await _activityPubClient.GetAsync<OrderedCollection>(catalogUri, cancellationToken: cancellationToken);
+            
+            if (catalog?.OrderedItems == null)
             {
                 return Enumerable.Empty<CustomCollectionDefinition>();
             }
 
-            var definitions = await response.Content.ReadFromJsonAsync<List<CustomCollectionDefinition>>(_jsonOptions, cancellationToken);
-            return definitions ?? Enumerable.Empty<CustomCollectionDefinition>();
+            // For each collection in the catalog, fetch its definition
+            var definitions = new List<CustomCollectionDefinition>();
+            foreach (var item in catalog.OrderedItems)
+            {
+                // Extract collection ID from the collection URI
+                string? collectionId = null;
+                if (item is Collection collection && collection.Id != null)
+                {
+                    var uriSegments = collection.Id.Split('/');
+                    collectionId = uriSegments.Last();
+                }
+                else if (item is Link link && link.Href != null)
+                {
+                    var uriSegments = link.Href.ToString().Split('/');
+                    collectionId = uriSegments.Last();
+                }
+
+                if (!string.IsNullOrEmpty(collectionId))
+                {
+                    var definition = await GetCollectionDefinitionAsync(username, collectionId, cancellationToken);
+                    if (definition != null)
+                    {
+                        definitions.Add(definition);
+                    }
+                }
+            }
+
+            return definitions;
         }
         catch (Exception ex)
         {
@@ -348,7 +420,7 @@ public class ClientCollectionService : ICollectionService
         CustomCollectionDefinition definition,
         CancellationToken cancellationToken = default)
     {
-        // Client-side validation
+        // Client-side validation (matches server-side)
         if (string.IsNullOrWhiteSpace(definition.Id))
         {
             return Task.FromResult<(bool, string?)>((false, "Collection ID is required"));
@@ -359,9 +431,20 @@ public class ClientCollectionService : ICollectionService
             return Task.FromResult<(bool, string?)>((false, "Collection name is required"));
         }
 
-        if (!System.Text.RegularExpressions.Regex.IsMatch(definition.Id, @"^[a-zA-Z0-9_-]+$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(definition.Id, @"^[a-z0-9][a-z0-9_-]*$"))
         {
-            return Task.FromResult<(bool, string?)>((false, "Collection ID must contain only letters, numbers, hyphens, and underscores"));
+            return Task.FromResult<(bool, string?)>((false, "Collection ID must start with a letter or number and contain only lowercase letters, numbers, hyphens, and underscores"));
+        }
+
+        if (definition.Id.Length > 64)
+        {
+            return Task.FromResult<(bool, string?)>((false, "Collection ID must be 64 characters or less"));
+        }
+
+        var reservedNames = new[] { "inbox", "outbox", "followers", "following", "liked", "shares", "collections", "endpoints" };
+        if (reservedNames.Contains(definition.Id.ToLowerInvariant()))
+        {
+            return Task.FromResult<(bool, string?)>((false, $"Collection ID '{definition.Id}' is reserved and cannot be used"));
         }
 
         if (definition.Type == CollectionType.Query && definition.QueryFilter == null)

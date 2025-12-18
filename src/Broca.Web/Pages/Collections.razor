@@ -184,6 +184,7 @@ else
 }
 
 @code {
+ 
     private List<CustomCollectionDefinition> _collections = new();
     private CustomCollectionDefinition? _selectedCollection;
     private List<IObjectOrLink> _collectionItems = new();
@@ -271,12 +272,17 @@ else
         try
         {
             var username = GetUsernameFromActorId();
-            if (string.IsNullOrEmpty(username)) return;
+            if (string.IsNullOrEmpty(username))
+            {
+                Logger.LogWarning("Could not determine username for collection creation.");
+                return;
+            }
 
-            // Create the collection definition
+            // Create the collection definition with URL-safe ID
+            var collectionId = GenerateCollectionId(_newCollectionName);
             var definition = new CustomCollectionDefinition
             {
-                Id = _newCollectionName.ToLowerInvariant().Replace(" ", "-"),
+                Id = collectionId,
                 Name = _newCollectionName,
                 Description = _newCollectionDescription,
                 Type = Enum.Parse<CollectionType>(_newCollectionType),
@@ -284,36 +290,44 @@ else
                 SortOrder = CollectionSortOrder.Chronological
             };
 
+            // Validate the collection definition
+            var (isValid, errorMessage) = await CollectionService.ValidateCollectionDefinitionAsync(definition);
+            if (!isValid)
+            {
+                Logger.LogError("Collection validation failed: {ErrorMessage}", errorMessage);
+                return;
+            }
+
             // Add query filter if this is a query collection
             if (definition.Type == CollectionType.Query)
             {
                 definition.QueryFilter = new CollectionQueryFilter();
-                
+
                 if (!string.IsNullOrWhiteSpace(_queryObjectTypes))
                 {
                     definition.QueryFilter.ObjectTypes = _queryObjectTypes
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                         .ToList();
                 }
-                
+
                 if (!string.IsNullOrWhiteSpace(_queryTags))
                 {
                     definition.QueryFilter.Tags = _queryTags
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                         .ToList();
                 }
-                
+
                 if (!string.IsNullOrWhiteSpace(_querySearchQuery))
                 {
                     definition.QueryFilter.SearchQuery = _querySearchQuery;
                 }
-                
+
                 // Only set boolean filters if they're explicitly true
                 if (_queryHasAttachment)
                 {
                     definition.QueryFilter.HasAttachment = true;
                 }
-                
+
                 if (_queryIsReply)
                 {
                     definition.QueryFilter.IsReply = true;
@@ -322,7 +336,7 @@ else
 
             // Create the collection directly through the service
             await CollectionService.CreateCollectionAsync(username, definition);
-            
+
             _hideCreateDialog = true;
             await LoadCollections();
         }
@@ -421,9 +435,30 @@ else
 
     private string GetUsernameFromActorId()
     {
-        if (AuthState.CurrentActor is Person person && !string.IsNullOrWhiteSpace(person.PreferredUsername))
-            return person.PreferredUsername;
-        return "";
+        return AuthState.CurrentActor?.PreferredUsername ?? "";
+    }
+
+    private string GenerateCollectionId(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return Guid.NewGuid().ToString("N").Substring(0, 8);
+        }
+
+        // Convert to lowercase and replace spaces and invalid characters with hyphens
+        var id = name.ToLowerInvariant();
+        id = System.Text.RegularExpressions.Regex.Replace(id, @"[^a-z0-9]+", "-");
+        
+        // Remove leading/trailing hyphens
+        id = id.Trim('-');
+        
+        // Ensure it's not empty after sanitization
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            id = Guid.NewGuid().ToString("N").Substring(0, 8);
+        }
+        
+        return id;
     }
 
     private int GetCollectionItemCount(CustomCollectionDefinition collection)

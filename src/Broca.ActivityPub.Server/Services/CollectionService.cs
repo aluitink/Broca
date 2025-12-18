@@ -248,9 +248,22 @@ public class CollectionService : ICollectionService
         }
 
         // Validate collection ID format (alphanumeric, hyphens, underscores only)
-        if (!System.Text.RegularExpressions.Regex.IsMatch(definition.Id, @"^[a-zA-Z0-9_-]+$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(definition.Id, @"^[a-z0-9][a-z0-9_-]*$"))
         {
-            return Task.FromResult<(bool, string?)>((false, "Collection ID must contain only letters, numbers, hyphens, and underscores"));
+            return Task.FromResult<(bool, string?)>((false, "Collection ID must start with a letter or number and contain only lowercase letters, numbers, hyphens, and underscores"));
+        }
+
+        // Validate ID length (reasonable for URLs)
+        if (definition.Id.Length > 64)
+        {
+            return Task.FromResult<(bool, string?)>((false, "Collection ID must be 64 characters or less"));
+        }
+
+        // Prevent reserved collection names that could conflict with standard ActivityPub properties
+        var reservedNames = new[] { "inbox", "outbox", "followers", "following", "liked", "shares", "collections", "endpoints" };
+        if (reservedNames.Contains(definition.Id.ToLowerInvariant()))
+        {
+            return Task.FromResult<(bool, string?)>((false, $"Collection ID '{definition.Id}' is reserved and cannot be used"));
         }
 
         // Validate query collection has a filter
@@ -280,13 +293,26 @@ public class CollectionService : ICollectionService
         // Get all outbox activities for the user
         var allActivities = await _activityRepository.GetOutboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
         
-        // Filter to only the requested IDs
+        // Filter to only the requested IDs and unwrap Create activities
         foreach (var activity in allActivities)
         {
             var id = (activity as IObject)?.Id;
             if (id != null && itemIds.Contains(id))
             {
-                items.Add(activity);
+                // Unwrap Create activities to get the underlying object
+                if (activity is Create createActivity)
+                {
+                    var obj = createActivity.Object?.FirstOrDefault();
+                    if (obj != null)
+                    {
+                        items.Add(obj);
+                    }
+                }
+                else
+                {
+                    // For non-Create activities, add as-is
+                    items.Add(activity);
+                }
             }
         }
         
@@ -416,7 +442,27 @@ public class CollectionService : ICollectionService
             });
         }
 
-        return filteredActivities;
+        // Unwrap Create activities to return the underlying objects
+        // Collections should contain objects (Note, Article, etc.), not the Create activities that wrap them
+        var unwrappedItems = new List<IObjectOrLink>();
+        foreach (var activity in filteredActivities)
+        {
+            if (activity is Create createActivity)
+            {
+                var obj = createActivity.Object?.FirstOrDefault();
+                if (obj != null)
+                {
+                    unwrappedItems.Add(obj);
+                }
+            }
+            else
+            {
+                // For non-Create activities, add as-is
+                unwrappedItems.Add(activity);
+            }
+        }
+
+        return unwrappedItems;
     }
 
     private IEnumerable<IObjectOrLink> ApplySorting(
