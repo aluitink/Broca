@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Glihm.JSInterop.Browser.WebCryptoAPI" Version="1.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Broca.ActivityPub.Core\Broca.ActivityPub.Core.csproj" />
+    <ProjectReference Include="..\Broca.ActivityPub.Client\Broca.ActivityPub.Client.csproj" />
+  </ItemGroup>
+
+</Project>

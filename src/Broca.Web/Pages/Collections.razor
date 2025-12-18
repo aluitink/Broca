@@ -1,0 +1,606 @@
+@page "/collections"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Core.Models
+@using Broca.ActivityPub.Core.Interfaces
+@using System.Text.Json
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+@inject ICollectionService CollectionService
+@inject ILogger<Collections> Logger
+
+<PageTitle>Custom Collections - Broca</PageTitle>
+
+@if (!AuthState.IsAuthenticated)
+{
+    <FluentCard>
+        <h2>Authentication Required</h2>
+        <p>Please login to view your collections.</p>
+        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/collections")}"))">
+            Login
+        </FluentButton>
+    </FluentCard>
+}
+else
+{
+    <div class="collections-container">
+        <FluentCard Class="collections-header">
+            <h1>
+                <FluentIcon Value="@(new Icons.Regular.Size24.Grid())" Color="Color.Accent" />
+                Custom Collections
+            </h1>
+            <p>Create and manage your custom collections</p>
+            <FluentButton Appearance="Appearance.Accent" OnClick="@ShowCreateDialog">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
+                Create Collection
+            </FluentButton>
+        </FluentCard>
+
+        @if (_isLoading)
+        {
+            <FluentCard>
+                <FluentProgressRing />
+                <p>Loading collections...</p>
+            </FluentCard>
+        }
+        else if (_collections.Any())
+        {
+            <div class="collections-list">
+                @foreach (var collection in _collections)
+                {
+                    <FluentCard Class="collection-card">
+                        <div class="collection-header">
+                            <div class="collection-info">
+                                <h3>@collection.Name</h3>
+                                <p class="collection-description">@collection.Description</p>
+                                <div class="collection-meta">
+                                    <FluentBadge Appearance="Appearance.Neutral">@collection.Type</FluentBadge>
+                                    <FluentBadge Appearance="@GetVisibilityAppearance(collection.Visibility)">@collection.Visibility</FluentBadge>
+                                    <span class="collection-count">@GetCollectionItemCount(collection) items</span>
+                                </div>
+                            </div>
+                            <div class="collection-actions">
+                                <FluentButton Appearance="Appearance.Lightweight" OnClick="@(() => ViewCollection(collection))">
+                                    <FluentIcon Value="@(new Icons.Regular.Size20.Eye())" />
+                                </FluentButton>
+                                <FluentButton Appearance="Appearance.Lightweight" OnClick="@(() => DeleteCollection(collection))">
+                                    <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Color="Color.Error" />
+                                </FluentButton>
+                            </div>
+                        </div>
+                        
+                        @if (_selectedCollection?.Id == collection.Id && _showItems)
+                        {
+                            <FluentDivider Style="margin: 1rem 0;" />
+                            <div class="collection-items">
+                                <div class="items-header">
+                                    <h4>Items in Collection</h4>
+                                    @if (collection.Type == CollectionType.Manual)
+                                    {
+                                        <FluentButton Appearance="Appearance.Outline" OnClick="@ShowAddItemDialog">
+                                            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Slot="start" />
+                                            Add Item
+                                        </FluentButton>
+                                    }
+                                </div>
+                                @if (_collectionItems.Any())
+                                {
+                                    <div class="items-list">
+                                        @foreach (var item in _collectionItems)
+                                        {
+                                            <div class="item-row">
+                                                <span class="item-id">@GetItemDisplayText(item)</span>
+                                                @if (collection.Type == CollectionType.Manual)
+                                                {
+                                                    <FluentButton Appearance="Appearance.Lightweight" OnClick="@(() => RemoveItemFromCollection(collection, GetItemId(item)))">
+                                                        <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Color="Color.Error" />
+                                                    </FluentButton>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <p class="empty-message">No items in this collection yet.</p>
+                                }
+                            </div>
+                        }
+                    </FluentCard>
+                }
+            </div>
+        }
+        else
+        {
+            <FluentCard Class="empty-state">
+                <FluentIcon Value="@(new Icons.Regular.Size48.Apps())" Color="Color.Neutral" />
+                <h3>No custom collections yet</h3>
+                <p>Create your first custom collection to organize your content.</p>
+            </FluentCard>
+        }
+    </div>
+
+    <!-- Create Collection Dialog -->
+    <FluentDialog @bind-Hidden="@_hideCreateDialog" Modal="true">
+        <FluentDialogHeader>
+            <h3>Create New Collection</h3>
+        </FluentDialogHeader>
+        <FluentDialogBody>
+            <FluentTextField @bind-Value="@_newCollectionName" Label="Collection Name" Required Style="width: 100%; margin-bottom: 1rem;" />
+            <FluentTextField @bind-Value="@_newCollectionDescription" Label="Description" Style="width: 100%; margin-bottom: 1rem;" />
+            
+            <FluentSelect TOption="string" @bind-Value="@_newCollectionType" Label="Collection Type" Style="width: 100%; margin-bottom: 1rem;">
+                <FluentOption TOption="string" Value="@CollectionType.Manual.ToString()">Manual - Add items explicitly</FluentOption>
+                <FluentOption TOption="string" Value="@CollectionType.Query.ToString()">Query - Auto-populate based on filters</FluentOption>
+            </FluentSelect>
+            
+            @if (_newCollectionType == CollectionType.Query.ToString())
+            {
+                <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Query Filters</h4>
+                
+                <FluentTextField @bind-Value="@_queryObjectTypes" Label="Object Types (comma-separated)" Placeholder="Note, Article" Style="width: 100%; margin-bottom: 1rem;" />
+                
+                <FluentTextField @bind-Value="@_queryTags" Label="Tags/Hashtags (comma-separated)" Placeholder="technology, activitypub" Style="width: 100%; margin-bottom: 1rem;" />
+                
+                <FluentTextField @bind-Value="@_querySearchQuery" Label="Search Query" Placeholder="Search in content..." Style="width: 100%; margin-bottom: 1rem;" />
+                
+                <FluentCheckbox @bind-Value="@_queryHasAttachment" Label="Has Attachment" Style="margin-bottom: 1rem;" />
+                
+                <FluentCheckbox @bind-Value="@_queryIsReply" Label="Is Reply" Style="margin-bottom: 1rem;" />
+            }
+            
+            <FluentSelect TOption="string" @bind-Value="@_newCollectionVisibility" Label="Visibility" Style="width: 100%; margin-bottom: 1rem;">
+                <FluentOption TOption="string" Value="@CollectionVisibility.Public.ToString()">Public - Visible to everyone</FluentOption>
+                <FluentOption TOption="string" Value="@CollectionVisibility.Unlisted.ToString()">Unlisted - Not advertised but accessible</FluentOption>
+                <FluentOption TOption="string" Value="@CollectionVisibility.Private.ToString()">Private - Only you can see</FluentOption>
+            </FluentSelect>
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Accent" OnClick="@CreateCollection" Disabled="@string.IsNullOrWhiteSpace(_newCollectionName)">
+                Create
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" OnClick="@(() => _hideCreateDialog = true)">
+                Cancel
+            </FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+
+    <!-- Add Item Dialog -->
+    <FluentDialog @bind-Hidden="@_hideAddItemDialog" Modal="true">
+        <FluentDialogHeader>
+            <h3>Add Item to Collection</h3>
+        </FluentDialogHeader>
+        <FluentDialogBody>
+            <FluentTextField @bind-Value="@_newItemId" Label="Item URI or ID" Placeholder="https://example.com/items/123" Required Style="width: 100%;" />
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Accent" OnClick="@AddItemToCollection" Disabled="@string.IsNullOrWhiteSpace(_newItemId)">
+                Add
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" OnClick="@(() => _hideAddItemDialog = true)">
+                Cancel
+            </FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
+
+@code {
+    private List<CustomCollectionDefinition> _collections = new();
+    private CustomCollectionDefinition? _selectedCollection;
+    private List<IObjectOrLink> _collectionItems = new();
+    private bool _isLoading = true;
+    private bool _showItems = false;
+
+    // Create dialog state
+    private bool _hideCreateDialog = true;
+    private string _newCollectionName = "";
+    private string _newCollectionDescription = "";
+    private string _newCollectionType = CollectionType.Manual.ToString();
+    private string _newCollectionVisibility = CollectionVisibility.Public.ToString();
+
+    // Add item dialog state
+    private bool _hideAddItemDialog = true;
+    private string _newItemId = "";
+
+    // Query filter state
+    private string _queryObjectTypes = "";
+    private string _queryTags = "";
+    private string _querySearchQuery = "";
+    private bool _queryHasAttachment = false;
+    private bool _queryIsReply = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthStateChanged;
+        await LoadCollections();
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        InvokeAsync(async () =>
+        {
+            await LoadCollections();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadCollections()
+    {
+        if (!AuthState.IsAuthenticated || string.IsNullOrEmpty(AuthState.CurrentActorId))
+        {
+            _collections.Clear();
+            _isLoading = false;
+            return;
+        }
+
+        try
+        {
+            _isLoading = true;
+            var username = GetUsernameFromActorId();
+            if (!string.IsNullOrEmpty(username))
+            {
+                var collections = await CollectionService.GetCollectionDefinitionsAsync(username);
+                _collections = collections.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load collections");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ShowCreateDialog()
+    {
+        _newCollectionName = "";
+        _newCollectionDescription = "";
+        _newCollectionType = CollectionType.Manual.ToString();
+        _newCollectionVisibility = CollectionVisibility.Public.ToString();
+        _queryObjectTypes = "";
+        _queryTags = "";
+        _querySearchQuery = "";
+        _queryHasAttachment = false;
+        _queryIsReply = false;
+        _hideCreateDialog = false;
+    }
+
+    private async Task CreateCollection()
+    {
+        try
+        {
+            var username = GetUsernameFromActorId();
+            if (string.IsNullOrEmpty(username)) return;
+
+            // Create the collection definition
+            var definition = new CustomCollectionDefinition
+            {
+                Id = _newCollectionName.ToLowerInvariant().Replace(" ", "-"),
+                Name = _newCollectionName,
+                Description = _newCollectionDescription,
+                Type = Enum.Parse<CollectionType>(_newCollectionType),
+                Visibility = Enum.Parse<CollectionVisibility>(_newCollectionVisibility),
+                SortOrder = CollectionSortOrder.Chronological
+            };
+
+            // Add query filter if this is a query collection
+            if (definition.Type == CollectionType.Query)
+            {
+                definition.QueryFilter = new CollectionQueryFilter();
+                
+                if (!string.IsNullOrWhiteSpace(_queryObjectTypes))
+                {
+                    definition.QueryFilter.ObjectTypes = _queryObjectTypes
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .ToList();
+                }
+                
+                if (!string.IsNullOrWhiteSpace(_queryTags))
+                {
+                    definition.QueryFilter.Tags = _queryTags
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .ToList();
+                }
+                
+                if (!string.IsNullOrWhiteSpace(_querySearchQuery))
+                {
+                    definition.QueryFilter.SearchQuery = _querySearchQuery;
+                }
+                
+                // Only set boolean filters if they're explicitly true
+                if (_queryHasAttachment)
+                {
+                    definition.QueryFilter.HasAttachment = true;
+                }
+                
+                if (_queryIsReply)
+                {
+                    definition.QueryFilter.IsReply = true;
+                }
+            }
+
+            // Create the collection directly through the service
+            await CollectionService.CreateCollectionAsync(username, definition);
+            
+            _hideCreateDialog = true;
+            await LoadCollections();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating collection");
+        }
+    }
+
+    private async Task ViewCollection(CustomCollectionDefinition collection)
+    {
+        if (_selectedCollection?.Id == collection.Id && _showItems)
+        {
+            _showItems = false;
+            _selectedCollection = null;
+            _collectionItems.Clear();
+            return;
+        }
+
+        try
+        {
+            _selectedCollection = collection;
+            var username = GetUsernameFromActorId();
+            if (!string.IsNullOrEmpty(username))
+            {
+                var items = await CollectionService.GetCollectionItemsAsync(username, collection.Id, limit: 50);
+                _collectionItems = items.ToList();
+                _showItems = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load collection items");
+        }
+    }
+
+    private void ShowAddItemDialog()
+    {
+        _newItemId = "";
+        _hideAddItemDialog = false;
+    }
+
+    private async Task AddItemToCollection()
+    {
+        if (_selectedCollection == null || string.IsNullOrWhiteSpace(_newItemId)) return;
+
+        try
+        {
+            var username = GetUsernameFromActorId();
+            if (string.IsNullOrEmpty(username)) return;
+
+            await CollectionService.AddItemToCollectionAsync(username, _selectedCollection.Id, _newItemId);
+            
+            _hideAddItemDialog = true;
+            await ViewCollection(_selectedCollection);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error adding item to collection");
+        }
+    }
+
+    private async Task RemoveItemFromCollection(CustomCollectionDefinition collection, string itemId)
+    {
+        try
+        {
+            var username = GetUsernameFromActorId();
+            if (string.IsNullOrEmpty(username)) return;
+
+            await CollectionService.RemoveItemFromCollectionAsync(username, collection.Id, itemId);
+            
+            await ViewCollection(collection);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error removing item from collection");
+        }
+    }
+
+    private async Task DeleteCollection(CustomCollectionDefinition collection)
+    {
+        try
+        {
+            var username = GetUsernameFromActorId();
+            if (string.IsNullOrEmpty(username)) return;
+
+            await CollectionService.DeleteCollectionAsync(username, collection.Id);
+            
+            await LoadCollections();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting collection");
+        }
+    }
+
+    private string GetUsernameFromActorId()
+    {
+        if (AuthState.CurrentActor is Person person && !string.IsNullOrWhiteSpace(person.PreferredUsername))
+            return person.PreferredUsername;
+        return "";
+    }
+
+    private int GetCollectionItemCount(CustomCollectionDefinition collection)
+    {
+        if (collection.Type == CollectionType.Manual)
+            return collection.Items?.Count ?? 0;
+        
+        // For query collections, we'd need to fetch the count
+        return 0;
+    }
+
+    private Appearance GetVisibilityAppearance(CollectionVisibility visibility)
+    {
+        return visibility switch
+        {
+            CollectionVisibility.Public => Appearance.Accent,
+            CollectionVisibility.Unlisted => Appearance.Neutral,
+            CollectionVisibility.Private => Appearance.Lightweight,
+            _ => Appearance.Neutral
+        };
+    }
+
+    private string GetItemDisplayText(IObjectOrLink item)
+    {
+        if (item is KristofferStrube.ActivityStreams.Link link && link.Href != null)
+            return link.Href.ToString();
+        if (item is KristofferStrube.ActivityStreams.IObject obj && obj.Id != null)
+            return obj.Id.ToString();
+        return "Unknown item";
+    }
+
+    private string GetItemId(IObjectOrLink item)
+    {
+        if (item is KristofferStrube.ActivityStreams.Link link && link.Href != null)
+            return link.Href.ToString();
+        if (item is KristofferStrube.ActivityStreams.IObject obj && obj.Id != null)
+            return obj.Id.ToString();
+        return "";
+    }
+
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}
+
+<style>
+    .collections-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .collections-header {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .collections-header h1 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0;
+    }
+
+    .collections-header p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+
+    .collections-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .collection-card {
+        padding: 1.5rem;
+    }
+
+    .collection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .collection-info {
+        flex: 1;
+    }
+
+    .collection-info h3 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.25rem;
+    }
+
+    .collection-description {
+        margin: 0 0 0.75rem 0;
+        color: var(--neutral-foreground-hint);
+    }
+
+    .collection-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .collection-count {
+        font-size: 0.875rem;
+        color: var(--neutral-foreground-hint);
+    }
+
+    .collection-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .collection-items {
+        margin-top: 1rem;
+    }
+
+    .items-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .items-header h4 {
+        margin: 0;
+    }
+
+    .items-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .item-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+        background-color: var(--neutral-layer-2);
+        border-radius: 4px;
+    }
+
+    .item-id {
+        font-size: 0.875rem;
+        word-break: break-all;
+    }
+
+    .empty-message {
+        padding: 1rem;
+        text-align: center;
+        color: var(--neutral-foreground-hint);
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 2rem;
+        text-align: center;
+        gap: 1rem;
+    }
+
+    .empty-state h3 {
+        margin: 0;
+    }
+
+    .empty-state p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+</style>

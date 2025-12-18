@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Broca.ActivityPub.Components\Broca.ActivityPub.Components.csproj" />
-    <ProjectReference Include="..\Broca.ActivityPub.Client\Broca.ActivityPub.Client.csproj" />
+    <ProjectReference Include="..\Broca.ActivityPub.Client.WebCrypto\Broca.ActivityPub.Client.WebCrypto.csproj" />
   </ItemGroup>
 
 </Project>

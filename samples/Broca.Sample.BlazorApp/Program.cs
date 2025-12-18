@@ -1,4 +1,4 @@
-using Broca.ActivityPub.Client.Extensions;
+using Broca.ActivityPub.Client.WebCrypto.Extensions;
 using Broca.ActivityPub.Components.Extensions;
 using Broca.ActivityPub.Core.Models;
 using Broca.Sample.BlazorApp;
@@ -25,6 +25,9 @@ builder.Services.AddHttpClient("ActivityPubApi", client =>
 // This allows both static configuration from appsettings and dynamic configuration at runtime
 var activityPubClientSection = builder.Configuration.GetSection("ActivityPubClient");
 builder.Services.Configure<ActivityPubClientOptions>(activityPubClientSection);
+
+// Add Broca ActivityPub Client with WebCrypto for WASM
+builder.Services.AddActivityPubClientWithWebCrypto();
 
 // Add Broca ActivityPub Components and Client services
 builder.Services.AddActivityPubComponents(options =>

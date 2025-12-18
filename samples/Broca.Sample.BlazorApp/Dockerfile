@@ -6,7 +6,9 @@ WORKDIR /src
 COPY ["Broca.ActivityPub.sln", "./"]
 COPY ["samples/Broca.Sample.BlazorApp/Broca.Sample.BlazorApp.csproj", "samples/Broca.Sample.BlazorApp/"]
 COPY ["src/Broca.ActivityPub.Core/Broca.ActivityPub.Core.csproj", "src/Broca.ActivityPub.Core/"]
+COPY ["src/Broca.ActivityPub.Client.WebCrypto/Broca.ActivityPub.Client.WebCrypto.csproj", "src/Broca.ActivityPub.Client.WebCrypto/"]
 COPY ["src/Broca.ActivityPub.Client/Broca.ActivityPub.Client.csproj", "src/Broca.ActivityPub.Client/"]
+COPY ["src/Broca.ActivityPub.Components/Broca.ActivityPub.Components.csproj", "src/Broca.ActivityPub.Components/"]
 
 # Restore dependencies
 RUN dotnet restore "samples/Broca.Sample.BlazorApp/Broca.Sample.BlazorApp.csproj"
@@ -14,7 +16,9 @@ RUN dotnet restore "samples/Broca.Sample.BlazorApp/Broca.Sample.BlazorApp.csproj
 # Copy source code
 COPY ["samples/Broca.Sample.BlazorApp/", "samples/Broca.Sample.BlazorApp/"]
 COPY ["src/Broca.ActivityPub.Core/", "src/Broca.ActivityPub.Core/"]
+COPY ["src/Broca.ActivityPub.Client.WebCrypto/", "src/Broca.ActivityPub.Client.WebCrypto/"]
 COPY ["src/Broca.ActivityPub.Client/", "src/Broca.ActivityPub.Client/"]
+COPY ["src/Broca.ActivityPub.Components/", "src/Broca.ActivityPub.Components/"]
 
 # Build and publish
 WORKDIR "/src/samples/Broca.Sample.BlazorApp"

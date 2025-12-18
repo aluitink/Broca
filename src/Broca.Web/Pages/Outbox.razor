@@ -1,0 +1,135 @@
+@page "/outbox"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Components
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>Outbox - Broca</PageTitle>
+
+@if (!AuthState.IsAuthenticated)
+{
+    <FluentCard>
+        <h2>Authentication Required</h2>
+        <p>Please login to view your outbox.</p>
+        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/outbox")}"))">
+            Login
+        </FluentButton>
+    </FluentCard>
+}
+else
+{
+    <div class="outbox-container">
+        <FluentCard Class="outbox-header">
+            <h1>
+                <FluentIcon Value="@(new Icons.Regular.Size24.Send())" Color="Color.Accent" />
+                Outbox
+            </h1>
+            <p>Activities you have sent</p>
+        </FluentCard>
+
+        @if (_outboxUrl != null)
+        {
+            <ActivityFeed 
+                CollectionUrl="@_outboxUrl" 
+                PageSize="20"
+                UseVirtualization="true"
+                ShowObjects="true"
+                ShowRecipients="true">
+                <EmptyTemplate>
+                    <FluentCard Class="empty-state">
+                        <FluentIcon Value="@(new Icons.Regular.Size48.Send())" Color="Color.Neutral" />
+                        <h3>Your outbox is empty</h3>
+                        <p>Activities you send will appear here.</p>
+                    </FluentCard>
+                </EmptyTemplate>
+                <ErrorTemplate Context="error">
+                    <FluentCard Class="error-state">
+                        <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
+                        <h3>Failed to load outbox</h3>
+                        <p>@error</p>
+                        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => StateHasChanged())">
+                            Retry
+                        </FluentButton>
+                    </FluentCard>
+                </ErrorTemplate>
+            </ActivityFeed>
+        }
+        else
+        {
+            <FluentCard>
+                <FluentIcon Value="@(new Icons.Regular.Size24.Warning())" Color="Color.Warning" />
+                <p>Unable to determine outbox URL for this actor.</p>
+            </FluentCard>
+        }
+    </div>
+}
+
+@code {
+    private Uri? _outboxUrl;
+
+    protected override void OnInitialized()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthStateChanged;
+        UpdateOutboxUrl();
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        UpdateOutboxUrl();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateOutboxUrl()
+    {
+        _outboxUrl = AuthState.GetOutboxUrl();
+    }
+
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}
+
+<style>
+    .outbox-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .outbox-header h1 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .outbox-header p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+
+    .empty-state,
+    .error-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 2rem;
+        text-align: center;
+        gap: 1rem;
+    }
+
+    .empty-state h3,
+    .error-state h3 {
+        margin: 0;
+    }
+
+    .empty-state p,
+    .error-state p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+</style>
