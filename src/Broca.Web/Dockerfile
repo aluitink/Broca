@@ -6,6 +6,7 @@ WORKDIR /src
 COPY ["Broca.ActivityPub.sln", "./"]
 COPY ["src/Broca.Web/Broca.Web.csproj", "src/Broca.Web/"]
 COPY ["src/Broca.ActivityPub.Components/Broca.ActivityPub.Components.csproj", "src/Broca.ActivityPub.Components/"]
+COPY ["src/Broca.ActivityPub.Client.WebCrypto/Broca.ActivityPub.Client.WebCrypto.csproj", "src/Broca.ActivityPub.Client.WebCrypto/"]
 COPY ["src/Broca.ActivityPub.Client/Broca.ActivityPub.Client.csproj", "src/Broca.ActivityPub.Client/"]
 COPY ["src/Broca.ActivityPub.Core/Broca.ActivityPub.Core.csproj", "src/Broca.ActivityPub.Core/"]
 
@@ -15,6 +16,7 @@ RUN dotnet restore "src/Broca.Web/Broca.Web.csproj"
 # Copy source code
 COPY ["src/Broca.Web/", "src/Broca.Web/"]
 COPY ["src/Broca.ActivityPub.Components/", "src/Broca.ActivityPub.Components/"]
+COPY ["src/Broca.ActivityPub.Client.WebCrypto/", "src/Broca.ActivityPub.Client.WebCrypto/"]
 COPY ["src/Broca.ActivityPub.Client/", "src/Broca.ActivityPub.Client/"]
 COPY ["src/Broca.ActivityPub.Core/", "src/Broca.ActivityPub.Core/"]
 

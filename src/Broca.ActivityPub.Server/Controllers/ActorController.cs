@@ -68,7 +68,7 @@ public class ActorController : ControllerBase
             actor = JsonSerializer.Deserialize<Actor>(actorJson, _jsonOptions)!;
 
             // Add endpoints property to advertise capabilities
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
             actor.ExtensionData ??= new Dictionary<string, JsonElement>();
             
             actor.ExtensionData["endpoints"] = JsonSerializer.SerializeToElement(new

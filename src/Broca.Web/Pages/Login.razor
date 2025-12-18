@@ -1,0 +1,177 @@
+@page "/login"
+@using Broca.Web.Services
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>Login - Broca</PageTitle>
+
+<div class="login-container">
+    <FluentCard Class="login-card">
+        <h2>Login to Broca</h2>
+        <p class="login-subtitle">Enter your credentials to access your ActivityPub account</p>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <FluentMessageBar Intent="MessageIntent.Error" Class="login-error">
+                @_errorMessage
+            </FluentMessageBar>
+        }
+
+        <EditForm Model="@_loginModel" OnValidSubmit="@HandleLoginAsync">
+            <DataAnnotationsValidator />
+            
+            <div class="form-field">
+                <FluentTextField 
+                    @bind-Value="_loginModel.ActorId"
+                    Label="Actor ID"
+                    Placeholder="https://example.com/users/alice"
+                    Required="true"
+                    Style="width: 100%;"
+                    Disabled="@_isLoading">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Slot="start" Color="Color.Neutral" />
+                </FluentTextField>
+                <ValidationMessage For="@(() => _loginModel.ActorId)" />
+            </div>
+
+            <div class="form-field">
+                <FluentTextField 
+                    @bind-Value="_loginModel.ApiKey"
+                    Label="API Key"
+                    Placeholder="Enter your API key"
+                    Type="TextFieldType.Password"
+                    Required="true"
+                    Style="width: 100%;"
+                    Disabled="@_isLoading">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Key())" Slot="start" Color="Color.Neutral" />
+                </FluentTextField>
+                <ValidationMessage For="@(() => _loginModel.ApiKey)" />
+            </div>
+
+            <div class="form-actions">
+                <FluentButton 
+                    Type="ButtonType.Submit" 
+                    Appearance="Appearance.Accent"
+                    Loading="@_isLoading"
+                    Style="width: 100%;">
+                    @if (_isLoading)
+                    {
+                        <text>Authenticating...</text>
+                    }
+                    else
+                    {
+                        <text>Login</text>
+                    }
+                </FluentButton>
+            </div>
+        </EditForm>
+
+        <div class="login-info">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Info())" Color="Color.Accent" />
+            <div>
+                <p><strong>Development Login</strong></p>
+                <p>This is a temporary authentication method using API keys. Full OAuth support will be added in a future release.</p>
+                <p>When you login, your actor profile and private key will be fetched from the server, allowing you to interact with ActivityPub content.</p>
+            </div>
+        </div>
+    </FluentCard>
+</div>
+
+@code {
+    private LoginModel _loginModel = new();
+    private bool _isLoading;
+    private string? _errorMessage;
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private async Task HandleLoginAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var success = await AuthState.LoginAsync(_loginModel.ActorId!, _loginModel.ApiKey!);
+
+            if (success)
+            {
+                // Navigate to return URL or home
+                var destination = string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : ReturnUrl;
+                Navigation.NavigateTo(destination);
+            }
+            else
+            {
+                _errorMessage = "Authentication failed. Please check your Actor ID and API Key.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Login error: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private class LoginModel
+    {
+        public string? ActorId { get; set; }
+        public string? ApiKey { get; set; }
+    }
+}
+
+<style>
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 80vh;
+        padding: 20px;
+    }
+
+    .login-card {
+        max-width: 500px;
+        width: 100%;
+        padding: 2rem;
+    }
+
+    .login-subtitle {
+        color: var(--neutral-foreground-hint);
+        margin-bottom: 1.5rem;
+    }
+
+    .form-field {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-actions {
+        margin-top: 2rem;
+    }
+
+    .login-error {
+        margin-bottom: 1.5rem;
+    }
+
+    .login-info {
+        margin-top: 2rem;
+        padding: 1rem;
+        background-color: var(--neutral-layer-2);
+        border-radius: 4px;
+        display: flex;
+        gap: 1rem;
+    }
+
+    .login-info p {
+        margin: 0.25rem 0;
+        font-size: 0.875rem;
+        color: var(--neutral-foreground-rest);
+    }
+
+    .login-info p:first-child {
+        font-weight: 600;
+    }
+</style>

@@ -1,0 +1,142 @@
+@page "/profile"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Components
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>Profile - Broca</PageTitle>
+
+@if (!AuthState.IsAuthenticated)
+{
+    <FluentCard>
+        <h2>Authentication Required</h2>
+        <p>Please login to view your profile.</p>
+        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/profile")}"))">
+            Login
+        </FluentButton>
+    </FluentCard>
+}
+else if (AuthState.CurrentActorId != null)
+{
+    <div class="profile-container">
+        <FluentCard Class="profile-header">
+            <h1>
+                <FluentIcon Value="@(new Icons.Regular.Size24.Person())" Color="Color.Accent" />
+                Your Profile
+            </h1>
+        </FluentCard>
+
+        <ActorProfile ActorUri="@(new Uri(AuthState.CurrentActorId))" ShowActions="true" />
+
+        <FluentCard Class="profile-info">
+            <h3>Account Information</h3>
+            <FluentDataGrid Items="@GetProfileData()" GridTemplateColumns="200px 1fr">
+                <PropertyColumn Property="@(p => p.Label)" Title="Property" Class="property-label" />
+                <PropertyColumn Property="@(p => p.Value)" Title="Value" Class="property-value" />
+            </FluentDataGrid>
+        </FluentCard>
+
+        <FluentCard Class="danger-zone">
+            <h3>
+                <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Color="Color.Error" />
+                Danger Zone
+            </h3>
+            <p>Logging out will clear your session and require you to login again.</p>
+            <FluentButton Appearance="Appearance.Outline" OnClick="@HandleLogoutAsync">
+                Logout
+            </FluentButton>
+        </FluentCard>
+    </div>
+}
+
+@code {
+    private IQueryable<ProfileDataItem> GetProfileData()
+    {
+        var items = new List<ProfileDataItem>();
+
+        if (AuthState.CurrentActor != null)
+        {
+            items.Add(new ProfileDataItem { Label = "Actor ID", Value = AuthState.CurrentActorId ?? "N/A" });
+            items.Add(new ProfileDataItem { Label = "Name", Value = AuthState.CurrentActor.Name?.FirstOrDefault() ?? "N/A" });
+            items.Add(new ProfileDataItem { Label = "Preferred Username", Value = (AuthState.CurrentActor as Person)?.PreferredUsername ?? "N/A" });
+            items.Add(new ProfileDataItem { Label = "Type", Value = GetActorType() });
+            items.Add(new ProfileDataItem { Label = "Inbox", Value = AuthState.GetInboxUrl()?.ToString() ?? "N/A" });
+            items.Add(new ProfileDataItem { Label = "Outbox", Value = AuthState.GetOutboxUrl()?.ToString() ?? "N/A" });
+            items.Add(new ProfileDataItem { Label = "Followers", Value = AuthState.GetFollowersUrl()?.ToString() ?? "N/A" });
+            items.Add(new ProfileDataItem { Label = "Following", Value = AuthState.GetFollowingUrl()?.ToString() ?? "N/A" });
+        }
+
+        return items.AsQueryable();
+    }
+
+    private string GetActorType()
+    {
+        if (AuthState.CurrentActor?.Type == null) return "N/A";
+        
+        var types = AuthState.CurrentActor.Type.ToList();
+        return string.Join(", ", types);
+    }
+
+    private async Task HandleLogoutAsync()
+    {
+        await AuthState.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+
+    private class ProfileDataItem
+    {
+        public string Label { get; set; } = "";
+        public string Value { get; set; } = "";
+    }
+}
+
+<style>
+    .profile-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .profile-header h1 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0;
+    }
+
+    .profile-info h3 {
+        margin-top: 0;
+        margin-bottom: 1rem;
+    }
+
+    .property-label {
+        font-weight: 600;
+        color: var(--neutral-foreground-rest);
+    }
+
+    .property-value {
+        font-family: monospace;
+        font-size: 0.875rem;
+        word-break: break-all;
+    }
+
+    .danger-zone {
+        border: 1px solid var(--error-foreground-rest);
+    }
+
+    .danger-zone h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+        color: var(--error-foreground-rest);
+    }
+
+    .danger-zone p {
+        margin-bottom: 1rem;
+        color: var(--neutral-foreground-hint);
+    }
+</style>
