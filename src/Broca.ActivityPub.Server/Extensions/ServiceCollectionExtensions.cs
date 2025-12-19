@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<OutboxProcessor>();
         services.AddScoped<ActivityDeliveryService>();
         services.AddScoped<WebFingerService>();
+        services.AddScoped<NodeInfoService>();
         services.AddSingleton<ISystemIdentityService, SystemIdentityService>();
         services.AddSingleton<IActivityBuilderFactory, ActivityBuilderFactory>();
         services.AddScoped<AdminOperationsHandler>();
