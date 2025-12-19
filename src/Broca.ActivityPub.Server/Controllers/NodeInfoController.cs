@@ -41,12 +41,13 @@ public class NodeInfoController : ControllerBase
     /// NodeInfo 2.0 endpoint
     /// </summary>
     [HttpGet("nodeinfo/2.0")]
-    [Produces("application/json; profile=\"http://nodeinfo.diaspora.software/ns/schema/2.0#\"")]
+    [Produces("application/json")]
     public async Task<IActionResult> GetNodeInfo20()
     {
         try
         {
             var result = await _nodeInfoService.GetNodeInfo20Async(HttpContext.RequestAborted);
+            Response.Headers.Append("Content-Profile", "http://nodeinfo.diaspora.software/ns/schema/2.0#");
             return Ok(result);
         }
         catch (Exception ex)
@@ -60,12 +61,13 @@ public class NodeInfoController : ControllerBase
     /// NodeInfo 2.1 endpoint
     /// </summary>
     [HttpGet("nodeinfo/2.1")]
-    [Produces("application/json; profile=\"http://nodeinfo.diaspora.software/ns/schema/2.1#\"")]
+    [Produces("application/json")]
     public async Task<IActionResult> GetNodeInfo21()
     {
         try
         {
             var result = await _nodeInfoService.GetNodeInfo21Async(HttpContext.RequestAborted);
+            Response.Headers.Append("Content-Profile", "http://nodeinfo.diaspora.software/ns/schema/2.1#");
             return Ok(result);
         }
         catch (Exception ex)
