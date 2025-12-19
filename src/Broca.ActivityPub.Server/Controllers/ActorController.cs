@@ -85,15 +85,15 @@ public class ActorController : ControllerBase
                 
                 if (publicCollections.Any())
                 {
-                    // Add collections catalog as a top-level property (like inbox, outbox, followers)
+                    // Add collections catalog as a standard endpoint (like inbox, outbox)
                     actor.ExtensionData["collections"] = JsonSerializer.SerializeToElement(
-                        $"{baseUrl}/users/{username}/collections", 
+                        $"{baseUrl}/users/{username}/collections",
                         _jsonOptions);
                     
-                    // Add individual collection links as top-level properties with collection ID as key
+                    // Add individual collection links with broca: prefix
                     foreach (var collection in publicCollections)
                     {
-                        actor.ExtensionData[collection.Id] = JsonSerializer.SerializeToElement(
+                        actor.ExtensionData[$"broca:{collection.Id}"] = JsonSerializer.SerializeToElement(
                             $"{baseUrl}/users/{username}/collections/{collection.Id}",
                             _jsonOptions);
                     }
