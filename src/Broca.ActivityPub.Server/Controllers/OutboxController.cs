@@ -11,7 +11,7 @@ namespace Broca.ActivityPub.Server.Controllers;
 
 [ApiController]
 [Route("users/{username}/outbox")]
-public class OutboxController : ControllerBase
+public class OutboxController : ActivityPubControllerBase
 {
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
@@ -68,7 +68,7 @@ public class OutboxController : ControllerBase
             }
             
             var totalCount = await _activityRepository.GetOutboxCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
 
             // Check if pagination parameters were explicitly provided
             var hasPageParam = Request.Query.ContainsKey("page");

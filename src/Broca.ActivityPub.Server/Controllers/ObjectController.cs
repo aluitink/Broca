@@ -14,7 +14,7 @@ namespace Broca.ActivityPub.Server.Controllers;
 /// </summary>
 [ApiController]
 [Route("users/{username}/objects")]
-public class ObjectController : ControllerBase
+public class ObjectController : ActivityPubControllerBase
 {
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
@@ -57,7 +57,7 @@ public class ObjectController : ControllerBase
             }
 
             // Construct the full object ID from the route
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
 
             // Get the object/activity
@@ -100,7 +100,7 @@ public class ObjectController : ControllerBase
             }
 
             // Construct the full object ID
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
 
             // Verify object exists
@@ -179,7 +179,7 @@ public class ObjectController : ControllerBase
             }
 
             // Construct the full object ID
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
 
             // Verify object exists
@@ -258,7 +258,7 @@ public class ObjectController : ControllerBase
             }
 
             // Construct the full object ID
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
 
             // Verify object exists

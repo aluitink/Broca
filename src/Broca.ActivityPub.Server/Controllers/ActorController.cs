@@ -11,7 +11,7 @@ namespace Broca.ActivityPub.Server.Controllers;
 
 [ApiController]
 [Route("users/{username}")]
-public class ActorController : ControllerBase
+public class ActorController : ActivityPubControllerBase
 {
     private readonly IActorRepository _actorRepository;
     private readonly IActivityRepository _activityRepository;
@@ -68,7 +68,7 @@ public class ActorController : ControllerBase
             actor = JsonSerializer.Deserialize<Actor>(actorJson, _jsonOptions)!;
 
             // Add endpoints property to advertise capabilities
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             actor.ExtensionData ??= new Dictionary<string, JsonElement>();
             
             actor.ExtensionData["endpoints"] = JsonSerializer.SerializeToElement(new
@@ -204,7 +204,7 @@ public class ActorController : ControllerBase
             }
 
             var followers = await _actorRepository.GetFollowersAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = GetBaseUrl();
 
             var collection = new OrderedCollection
             {
@@ -239,7 +239,7 @@ public class ActorController : ControllerBase
             }
 
             var following = await _actorRepository.GetFollowingAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = GetBaseUrl();
 
             var collection = new OrderedCollection
             {
@@ -276,7 +276,7 @@ public class ActorController : ControllerBase
             var offset = page * limit;
             var liked = await _activityRepository.GetLikedByActorAsync(username, limit, offset);
             var totalCount = await _activityRepository.GetLikedByActorCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
 
             if (page == 0 && limit == 20)
             {
@@ -340,7 +340,7 @@ public class ActorController : ControllerBase
             var offset = page * limit;
             var shared = await _activityRepository.GetSharedByActorAsync(username, limit, offset);
             var totalCount = await _activityRepository.GetSharedByActorCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
 
             if (page == 0 && limit == 20)
             {

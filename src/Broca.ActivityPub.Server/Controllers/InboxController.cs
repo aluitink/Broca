@@ -14,7 +14,7 @@ namespace Broca.ActivityPub.Server.Controllers;
 
 [ApiController]
 [Route("users/{username}/inbox")]
-public class InboxController : ControllerBase
+public class InboxController : ActivityPubControllerBase
 {
     private readonly IInboxHandler _inboxHandler;
     private readonly IActivityRepository _activityRepository;
@@ -81,7 +81,7 @@ public class InboxController : ControllerBase
             }
             
             var totalCount = await _activityRepository.GetInboxCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
 
             if (page == 0 && limit == 20)
             {
