@@ -85,19 +85,18 @@ public class ActorController : ControllerBase
                 
                 if (publicCollections.Any())
                 {
-                    // Add collections endpoint
-                    var collectionsData = new Dictionary<string, object>
-                    {
-                        ["collections"] = $"{baseUrl}/users/{username}/collections"
-                    };
+                    // Add collections catalog as a standard endpoint (like inbox, outbox)
+                    actor.ExtensionData["collections"] = JsonSerializer.SerializeToElement(
+                        $"{baseUrl}/users/{username}/collections",
+                        _jsonOptions);
                     
-                    // Add individual collection links as extension properties
+                    // Add individual collection links with broca: prefix
                     foreach (var collection in publicCollections)
                     {
-                        collectionsData[collection.Id] = $"{baseUrl}/users/{username}/collections/{collection.Id}";
+                        actor.ExtensionData[$"broca:{collection.Id}"] = JsonSerializer.SerializeToElement(
+                            $"{baseUrl}/users/{username}/collections/{collection.Id}",
+                            _jsonOptions);
                     }
-                    
-                    actor.ExtensionData["broca:collections"] = JsonSerializer.SerializeToElement(collectionsData, _jsonOptions);
                 }
             }
             catch (Exception ex)

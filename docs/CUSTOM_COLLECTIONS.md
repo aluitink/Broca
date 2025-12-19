@@ -193,7 +193,7 @@ Authorization: Bearer {token}
 
 ## Actor Profile Integration
 
-Public collections are automatically advertised in the actor's profile via the `broca:collections` extension:
+Public collections are automatically advertised in the actor's profile:
 
 ```json
 {
@@ -206,13 +206,16 @@ Public collections are automatically advertised in the actor's profile via the `
   "preferredUsername": "alice",
   "inbox": "https://example.com/users/alice/inbox",
   "outbox": "https://example.com/users/alice/outbox",
-  "broca:collections": {
-    "collections": "https://example.com/users/alice/collections",
-    "featured": "https://example.com/users/alice/collections/featured",
-    "media": "https://example.com/users/alice/collections/media"
-  }
+  "followers": "https://example.com/users/alice/followers",
+  "following": "https://example.com/users/alice/following",
+  "collections": "https://example.com/users/alice/collections",
+  "broca:featured": "https://example.com/users/alice/collections/featured",
+  "broca:media": "https://example.com/users/alice/collections/media"
 }
 ```
+
+- The `collections` property is a standard endpoint (like `inbox`, `outbox`) that returns a catalog of all public collections
+- Individual custom collections are prefixed with `broca:` to avoid namespace conflicts
 
 ## Usage Examples
 
