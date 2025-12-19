@@ -47,7 +47,8 @@ public class ActivityBuilderFactory : IActivityBuilderFactory
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
 
         var baseUrl = _options.BaseUrl?.TrimEnd('/') ?? "http://localhost";
-        var actorId = $"{baseUrl}/users/{username}";
+        var routePrefix = _options.NormalizedRoutePrefix;
+        var actorId = $"{baseUrl}{routePrefix}/users/{username}";
 
         return new ActivityBuilder(actorId, baseUrl, _logger);
     }

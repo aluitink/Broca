@@ -56,18 +56,21 @@ public class ObjectController : ControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            // Construct the full object ID from the route
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
+
             // Get the object/activity
-            var obj = await _activityRepository.GetActivityByIdAsync(objectId);
+            var obj = await _activityRepository.GetActivityByIdAsync(fullObjectId);
             if (obj == null)
             {
                 return NotFound(new { error = "Object not found" });
             }
 
             // Ensure the object has the correct ID set
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
             if (obj is KristofferStrube.ActivityStreams.Object asObject && string.IsNullOrEmpty(asObject.Id))
             {
-                asObject.Id = $"{baseUrl}/users/{username}/objects/{objectId}";
+                asObject.Id = fullObjectId;
             }
 
             return Ok(obj);
@@ -96,17 +99,20 @@ public class ObjectController : ControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            // Construct the full object ID
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
+
             // Verify object exists
-            var obj = await _activityRepository.GetActivityByIdAsync(objectId);
+            var obj = await _activityRepository.GetActivityByIdAsync(fullObjectId);
             if (obj == null)
             {
                 return NotFound(new { error = "Object not found" });
             }
 
             var offset = page * limit;
-            var replies = await _activityRepository.GetRepliesAsync(objectId, limit, offset);
-            var totalCount = await _activityRepository.GetRepliesCountAsync(objectId);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var replies = await _activityRepository.GetRepliesAsync(fullObjectId, limit, offset);
+            var totalCount = await _activityRepository.GetRepliesCountAsync(fullObjectId);
 
             if (page == 0 && limit == 20)
             {
@@ -172,17 +178,20 @@ public class ObjectController : ControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            // Construct the full object ID
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
+
             // Verify object exists
-            var obj = await _activityRepository.GetActivityByIdAsync(objectId);
+            var obj = await _activityRepository.GetActivityByIdAsync(fullObjectId);
             if (obj == null)
             {
                 return NotFound(new { error = "Object not found" });
             }
 
             var offset = page * limit;
-            var likes = await _activityRepository.GetLikesAsync(objectId, limit, offset);
-            var totalCount = await _activityRepository.GetLikesCountAsync(objectId);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var likes = await _activityRepository.GetLikesAsync(fullObjectId, limit, offset);
+            var totalCount = await _activityRepository.GetLikesCountAsync(fullObjectId);
 
             if (page == 0 && limit == 20)
             {
@@ -248,17 +257,20 @@ public class ObjectController : ControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            // Construct the full object ID
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
+
             // Verify object exists
-            var obj = await _activityRepository.GetActivityByIdAsync(objectId);
+            var obj = await _activityRepository.GetActivityByIdAsync(fullObjectId);
             if (obj == null)
             {
                 return NotFound(new { error = "Object not found" });
             }
 
             var offset = page * limit;
-            var shares = await _activityRepository.GetSharesAsync(objectId, limit, offset);
-            var totalCount = await _activityRepository.GetSharesCountAsync(objectId);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var shares = await _activityRepository.GetSharesAsync(fullObjectId, limit, offset);
+            var totalCount = await _activityRepository.GetSharesCountAsync(fullObjectId);
 
             if (page == 0 && limit == 20)
             {

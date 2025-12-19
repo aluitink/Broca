@@ -32,4 +32,7 @@ app.MapControllers();
 app.Run();
 
 // Make Program accessible to tests
-public partial class Program { }
+namespace Broca.API
+{
+    public partial class Program { }
+}

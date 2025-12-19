@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Broca.ActivityPub.Core.Interfaces;
+using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
+using Microsoft.Extensions.Options;
 
 namespace Broca.ActivityPub.Server.Services;
 
@@ -12,17 +14,20 @@ public class OutboxProcessor
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
     private readonly ActivityDeliveryService _deliveryService;
+    private readonly ActivityPubServerOptions _options;
     private readonly ILogger<OutboxProcessor> _logger;
 
     public OutboxProcessor(
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
         ActivityDeliveryService deliveryService,
+        IOptions<ActivityPubServerOptions> options,
         ILogger<OutboxProcessor> logger)
     {
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
         _deliveryService = deliveryService;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -35,7 +40,18 @@ public class OutboxProcessor
         {
             // Generate activity ID if not present
             var activityObj = activity as IObject;
-            var activityId = activityObj?.Id ?? $"https://localhost/users/{username}/activities/{Guid.NewGuid()}";
+            if (string.IsNullOrEmpty(activityObj?.Id))
+            {
+                var baseUrl = (_options.BaseUrl ?? "http://localhost").TrimEnd('/');
+                var routePrefix = _options.NormalizedRoutePrefix;
+                var generatedActivityId = $"{baseUrl}{routePrefix}/activities/{Guid.NewGuid()}";
+                if (activityObj != null)
+                {
+                    activityObj.Id = generatedActivityId;
+                }
+            }
+            
+            var activityId = activityObj?.Id ?? throw new InvalidOperationException("Activity ID could not be determined");
 
             // Extract activity type
             var activityType = activity.Type?.FirstOrDefault();
@@ -69,28 +85,23 @@ public class OutboxProcessor
     {
         // For activities that target a specific actor (Follow, Like, Announce, etc.),
         // deliver directly to that actor's inbox
-        if (activity is Activity typedActivity)
+        if (activity is Follow or Like or Announce or Accept or Reject or Undo)
         {
-            switch (activityType)
+            var typedActivity = (Activity)activity;
+            // Extract target actor ID from the activity's object
+            var targetActorId = ExtractTargetActorId(typedActivity);
+            if (!string.IsNullOrEmpty(targetActorId))
             {
-                case "Follow":
-                case "Like":
-                case "Announce":
-                case "Accept":
-                case "Reject":
-                case "Undo":
-                    // Extract target actor ID from the activity's object
-                    var targetActorId = ExtractTargetActorId(typedActivity);
-                    if (!string.IsNullOrEmpty(targetActorId))
-                    {
-                        await _deliveryService.QueueActivityToTargetAsync(username, activityId, activity, targetActorId, cancellationToken);
-                        return;
-                    }
-                    break;
+                await _deliveryService.QueueActivityToTargetAsync(username, activityId, activity, targetActorId, cancellationToken);
+                return;
             }
+        }
+
+        if (activity is Activity typedActivity2)
+        {
 
             // For Create, Update, Delete, etc., check if there are explicit recipients
-            var recipients = ExtractRecipients(typedActivity);
+            var recipients = ExtractRecipients(typedActivity2);
             if (recipients.Any())
             {
                 // Deliver to explicit recipients (To, Cc, Bcc, Bto, Audience)
@@ -160,19 +171,22 @@ public class OutboxProcessor
 
     private async Task ProcessActivitySideEffectsAsync(string username, string activityType, IObject? activity, CancellationToken cancellationToken)
     {
-        switch (activityType)
+        switch (activity)
         {
-            case "Follow":
-                await HandleOutgoingFollowAsync(username, activity, cancellationToken);
+            case Create createActivity:
+                await HandleOutgoingCreateAsync(username, createActivity, cancellationToken);
                 break;
-            case "Undo":
-                await HandleOutgoingUndoAsync(username, activity, cancellationToken);
+            case Follow followActivity:
+                await HandleOutgoingFollowAsync(username, followActivity, cancellationToken);
                 break;
-            case "Add":
-                await HandleOutgoingAddAsync(username, activity, cancellationToken);
+            case Undo undoActivity:
+                await HandleOutgoingUndoAsync(username, undoActivity, cancellationToken);
                 break;
-            case "Remove":
-                await HandleOutgoingRemoveAsync(username, activity, cancellationToken);
+            case Add addActivity:
+                await HandleOutgoingAddAsync(username, addActivity, cancellationToken);
+                break;
+            case Remove removeActivity:
+                await HandleOutgoingRemoveAsync(username, removeActivity, cancellationToken);
                 break;
             default:
                 // No side effects for other activity types
@@ -180,9 +194,9 @@ public class OutboxProcessor
         }
     }
 
-    private async Task HandleOutgoingFollowAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task HandleOutgoingFollowAsync(string username, Follow followActivity, CancellationToken cancellationToken)
     {
-        if (activity is Activity followActivity && followActivity.Object != null)
+        if (followActivity.Object != null)
         {
             var followTarget = followActivity.Object.FirstOrDefault();
             var followingActorId = followTarget switch
@@ -200,9 +214,82 @@ public class OutboxProcessor
         }
     }
 
-    private async Task HandleOutgoingUndoAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task HandleOutgoingCreateAsync(string username, Create createActivity, CancellationToken cancellationToken)
     {
-        if (activity is not Activity undoActivity || undoActivity.Object == null)
+        if (createActivity.Object == null)
+        {
+            return;
+        }
+
+        var createdObject = createActivity.Object.FirstOrDefault();
+        if (createdObject == null)
+        {
+            return;
+        }
+
+        // Check if the created object is a Collection
+        if (createdObject is Collection or OrderedCollection)
+        {
+            await HandleOutgoingCreateCollectionAsync(username, (IObject)createdObject, cancellationToken);
+        }
+    }
+
+    private async Task HandleOutgoingCreateCollectionAsync(string username, IObject collectionObject, CancellationToken cancellationToken)
+    {
+        // Extract collection definition from extension data
+        CustomCollectionDefinition? definition = null;
+        
+        if (collectionObject.ExtensionData != null)
+        {
+            // Look for collectionDefinition in extension data
+            if (collectionObject.ExtensionData.TryGetValue("collectionDefinition", out var defElement) ||
+                collectionObject.ExtensionData.TryGetValue("broca:collectionDefinition", out defElement))
+            {
+                try
+                {
+                    definition = JsonSerializer.Deserialize<CustomCollectionDefinition>(defElement.GetRawText());
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to deserialize collection definition from extension data");
+                    return;
+                }
+            }
+        }
+
+        // If no extension data found, construct from standard Collection properties
+        if (definition == null)
+        {
+            var collectionId = collectionObject.Name?.FirstOrDefault() ?? Guid.NewGuid().ToString();
+            definition = new CustomCollectionDefinition
+            {
+                Id = collectionId,
+                Name = collectionObject.Name?.FirstOrDefault() ?? collectionId,
+                Description = collectionObject.Summary?.FirstOrDefault()?.ToString(),
+                Type = CollectionType.Manual,
+                Visibility = CollectionVisibility.Public,
+                Created = DateTimeOffset.UtcNow,
+                Updated = DateTimeOffset.UtcNow
+            };
+        }
+
+        // Save the collection definition
+        try
+        {
+            await _actorRepository.SaveCollectionDefinitionAsync(username, definition, cancellationToken);
+            _logger.LogInformation("Created collection {CollectionId} for user {Username} from outbox Create activity", 
+                definition.Id, username);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save collection {CollectionId} for user {Username}", 
+                definition.Id, username);
+        }
+    }
+
+    private async Task HandleOutgoingUndoAsync(string username, Undo undoActivity, CancellationToken cancellationToken)
+    {
+        if (undoActivity.Object == null)
         {
             return;
         }
@@ -210,11 +297,9 @@ public class OutboxProcessor
         var undoObject = undoActivity.Object.FirstOrDefault();
         
         // Handle Undo Follow
-        if (undoObject is Activity nestedActivity && 
-            nestedActivity.Type?.Contains("Follow") == true &&
-            nestedActivity.Object != null)
+        if (undoObject is Follow followActivity && followActivity.Object != null)
         {
-            var followTarget = nestedActivity.Object.FirstOrDefault();
+            var followTarget = followActivity.Object.FirstOrDefault();
             var followingActorId = followTarget switch
             {
                 Link link => link.Href?.ToString(),
@@ -230,9 +315,9 @@ public class OutboxProcessor
         }
     }
 
-    private async Task HandleOutgoingAddAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task HandleOutgoingAddAsync(string username, Add addActivity, CancellationToken cancellationToken)
     {
-        if (activity is not Activity addActivity || addActivity.Object == null || addActivity.Target == null)
+        if (addActivity.Object == null || addActivity.Target == null)
         {
             _logger.LogWarning("Add activity missing object or target");
             return;
@@ -278,7 +363,9 @@ public class OutboxProcessor
             objectId = obj.Id;
             if (string.IsNullOrEmpty(objectId))
             {
-                objectId = $"https://localhost/users/{username}/objects/{Guid.NewGuid()}";
+                var baseUrl = (_options.BaseUrl ?? "http://localhost").TrimEnd('/');
+                var routePrefix = _options.NormalizedRoutePrefix;
+                objectId = $"{baseUrl}{routePrefix}/users/{username}/objects/{Guid.NewGuid()}";
                 obj.Id = objectId;
             }
 
@@ -312,9 +399,9 @@ public class OutboxProcessor
             objectId, collectionId, username);
     }
 
-    private async Task HandleOutgoingRemoveAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task HandleOutgoingRemoveAsync(string username, Remove removeActivity, CancellationToken cancellationToken)
     {
-        if (activity is not Activity removeActivity || removeActivity.Object == null || removeActivity.Target == null)
+        if (removeActivity.Object == null || removeActivity.Target == null)
         {
             _logger.LogWarning("Remove activity missing object or target");
             return;
