@@ -1,0 +1,46 @@
+/* Fluent Note Renderer Styles */
+.fluent-note-card {
+    margin-bottom: 12px;
+}
+
+.note-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.note-title {
+    margin-bottom: 8px;
+}
+
+.note-content {
+    margin: 12px 0;
+    line-height: 1.6;
+}
+
+.note-content p {
+    margin: 8px 0;
+}
+
+.note-attachments {
+    margin: 12px 0;
+    gap: 8px;
+}
+
+.attachment-item {
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.note-footer {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.note-actions {
+    display: flex;
+    gap: 4px;
+}

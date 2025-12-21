@@ -53,18 +53,12 @@ else
                 Create a post
             </h3>
             <PostComposer 
+                ComposerTemplate="FluentPostComposerRenderer.Template"
                 Placeholder="What's on your mind?"
                 ShowVisibilitySelector="true"
                 ShowAttachmentButton="true"
-                Rows="3"
-                OnPostCreated="@HandlePostCreated">
+                Rows="3">
             </PostComposer>
-            @if (!string.IsNullOrEmpty(_postMessage))
-            {
-                <FluentMessageBar Intent="@_postMessageIntent" Class="post-message">
-                    @_postMessage
-                </FluentMessageBar>
-            }
         </FluentCard>
 
         @if (_inboxUrl != null)
@@ -89,8 +83,6 @@ else
 
 @code {
     private Uri? _inboxUrl;
-    private string? _postMessage;
-    private MessageIntent _postMessageIntent = MessageIntent.Success;
 
     protected override void OnInitialized()
     {
@@ -118,22 +110,6 @@ else
             return person.PreferredUsername;
         
         return "User";
-    }
-
-    private Task HandlePostCreated(Activity activity)
-    {
-        _postMessage = "Post created successfully!";
-        _postMessageIntent = MessageIntent.Success;
-        StateHasChanged();
-        
-        // Clear message after 3 seconds
-        Task.Delay(3000).ContinueWith(_ =>
-        {
-            _postMessage = null;
-            InvokeAsync(StateHasChanged);
-        });
-        
-        return Task.CompletedTask;
     }
 
     public void Dispose()
@@ -184,7 +160,16 @@ else
     }
 
     .feature h3 {
-     composer-card {
+        margin: 0.5rem 0 0.25rem 0;
+    }
+
+    .feature p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+        font-size: 0.875rem;
+    }
+
+    .composer-card {
         padding: 1.5rem;
     }
 
@@ -193,19 +178,6 @@ else
         align-items: center;
         gap: 0.5rem;
         margin: 0 0 1rem 0;
-    }
-
-    .post-message {
-        margin-top: 1rem;
-    }
-
-    .   margin: 0.5rem 0 0.25rem 0;
-    }
-
-    .feature p {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
-        font-size: 0.875rem;
     }
 
     .home-authenticated {

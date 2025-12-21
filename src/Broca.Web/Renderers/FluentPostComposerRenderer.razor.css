@@ -1,0 +1,71 @@
+.fluent-post-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.reply-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--neutral-foreground-hint);
+    padding: 0.5rem;
+    background: var(--neutral-layer-2);
+    border-radius: var(--control-corner-radius);
+}
+
+.cw-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.composer-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.5rem;
+}
+
+.composer-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.composer-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-left: auto;
+}
+
+.character-count {
+    font-size: 0.875rem;
+    color: var(--neutral-foreground-hint);
+    font-variant-numeric: tabular-nums;
+}
+
+.character-count.warning {
+    color: var(--accent-fill-hover);
+    font-weight: 600;
+}
+
+.character-count.over-limit {
+    color: var(--error-foreground);
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .composer-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .composer-actions {
+        margin-left: 0;
+        justify-content: flex-end;
+    }
+}

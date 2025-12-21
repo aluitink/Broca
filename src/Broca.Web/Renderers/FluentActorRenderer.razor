@@ -1,0 +1,214 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@inherits ComponentBase
+
+<FluentCard Class="@($"fluent-actor-profile {CssClass}")">
+    @if (Actor != null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Start">
+                @if (!string.IsNullOrEmpty(GetIconUrl()))
+                {
+                    <div class="profile-avatar">
+                        <FluentPersona Name="@GetName()" 
+                                       Image="@GetIconUrl()" 
+                                       ImageSize="75px"
+                                       Status="@PresenceStatus.Available" />
+                    </div>
+                }
+                else
+                {
+                    <div class="profile-avatar-placeholder">
+                        <FluentIcon Value="@(new Icons.Regular.Size48.Person())" Color="Color.Accent" />
+                    </div>
+                }
+                
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                    <FluentLabel Typo="Typography.Header" Weight="FontWeight.Bold">
+                        @GetName()
+                    </FluentLabel>
+                    
+                    @if (!string.IsNullOrEmpty(GetPreferredUsername()))
+                    {
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                            @@@GetPreferredUsername()
+                        </FluentLabel>
+                    }
+                </FluentStack>
+
+                @if (ShowFollowButton && OnFollow.HasDelegate)
+                {
+                    <FluentButton Appearance="Appearance.Accent" 
+                                  Style="margin-left: auto;"
+                                  OnClick="@(() => OnFollow.InvokeAsync(Actor))">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.PersonAdd())" Slot="start" />
+                        Follow
+                    </FluentButton>
+                }
+            </FluentStack>
+
+            @if (!string.IsNullOrEmpty(GetSummary()))
+            {
+                <div class="profile-summary">
+                    <FluentLabel Typo="Typography.Body">
+                        @((MarkupString)GetSummary())
+                    </FluentLabel>
+                </div>
+            }
+
+            @if (ShowDetails)
+            {
+                <FluentDivider />
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                    @{
+                        var publishedDate = GetPublished();
+                    }
+                    @if (publishedDate.HasValue)
+                    {
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.CalendarLtr())" />
+                            Joined @publishedDate.Value.ToString("MMMM yyyy")
+                        </FluentLabel>
+                    }
+
+                    @if (!string.IsNullOrEmpty(Actor.Id))
+                    {
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Link())" />
+                            <a href="@Actor.Id" target="_blank" style="color: var(--accent-fill-rest);">
+                                @TruncateUrl(Actor.Id)
+                            </a>
+                        </FluentLabel>
+                    }
+
+                    @if (ShowStats)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="16">
+                            <FluentLabel Typo="Typography.Body">
+                                <strong>@GetFollowingCount()</strong> Following
+                            </FluentLabel>
+                            <FluentLabel Typo="Typography.Body">
+                                <strong>@GetFollowersCount()</strong> Followers
+                            </FluentLabel>
+                        </FluentStack>
+                    }
+                </FluentStack>
+            }
+
+            @if (AdditionalContent != null)
+            {
+                <FluentDivider />
+                @AdditionalContent(Actor)
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Actor object to render.
+    /// </summary>
+    [Parameter]
+    public KristofferStrube.ActivityStreams.Object? Actor { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show detailed information.
+    /// </summary>
+    [Parameter]
+    public bool ShowDetails { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show statistics.
+    /// </summary>
+    [Parameter]
+    public bool ShowStats { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the follow button.
+    /// </summary>
+    [Parameter]
+    public bool ShowFollowButton { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? AdditionalContent { get; set; }
+
+    /// <summary>
+    /// Event callback for follow action.
+    /// </summary>
+    [Parameter]
+    public EventCallback<KristofferStrube.ActivityStreams.Object> OnFollow { get; set; }
+
+    private string GetName()
+    {
+        if (Actor is Person person && person.Name?.Any() == true)
+            return person.Name.First();
+        
+        return Actor?.Name?.FirstOrDefault() ?? "Unknown";
+    }
+
+    private string GetPreferredUsername()
+    {
+        if (Actor is Person person)
+            return person.PreferredUsername ?? string.Empty;
+        
+        return string.Empty;
+    }
+
+    private string GetSummary()
+    {
+        if (Actor is Person person)
+            return person.Summary?.FirstOrDefault() ?? string.Empty;
+        
+        return Actor?.Summary?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetIconUrl()
+    {
+        if (Actor is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                return url.Href?.ToString() ?? string.Empty;
+            }
+        }
+        return string.Empty;
+    }
+
+    private DateTime? GetPublished()
+    {
+        return Actor?.Published;
+    }
+
+    private string GetFollowingCount()
+    {
+        // This would need to be fetched from the API
+        // For now, return a placeholder
+        return "—";
+    }
+
+    private string GetFollowersCount()
+    {
+        // This would need to be fetched from the API
+        // For now, return a placeholder
+        return "—";
+    }
+
+    private string TruncateUrl(string url)
+    {
+        if (url.Length <= 40)
+            return url;
+        return url.Substring(0, 37) + "...";
+    }
+}

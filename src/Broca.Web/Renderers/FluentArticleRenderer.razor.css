@@ -1,0 +1,65 @@
+/* Fluent Article Renderer Styles */
+.fluent-article {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.article-featured-image {
+    margin-bottom: 16px;
+}
+
+.article-header {
+    margin-bottom: 24px;
+}
+
+.article-title {
+    margin-bottom: 12px;
+    line-height: 1.3;
+}
+
+.article-meta {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    color: var(--neutral-foreground-rest);
+}
+
+.article-summary {
+    margin: 16px 0;
+    padding: 16px;
+}
+
+.article-content {
+    margin: 24px 0;
+    line-height: 1.8;
+    font-size: 1.05rem;
+}
+
+.article-content h1,
+.article-content h2,
+.article-content h3,
+.article-content h4,
+.article-content h5,
+.article-content h6 {
+    margin-top: 24px;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.article-content p {
+    margin: 16px 0;
+}
+
+.article-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 16px 0;
+}
+
+.article-tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}

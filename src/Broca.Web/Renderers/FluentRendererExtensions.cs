@@ -15,10 +15,126 @@ public static class FluentRendererExtensions
     /// <param name="registry">The renderer registry.</param>
     public static void RegisterFluentRenderers(this IObjectRendererRegistry registry)
     {
-        // For now, we'll use the default renderers from the Components library
-        // TODO: Implement custom Fluent UI renderers that work with the component architecture
-        
-        // The ObjectDisplay component will use any custom renderers registered here
-        // or fall back to the default rendering logic
+        // Register custom Fluent UI renderers for ActivityStreams types
+        registry.RegisterRenderer(typeof(Note), new FluentNoteRendererProxy());
+        registry.RegisterRenderer(typeof(Article), new FluentArticleRendererProxy());
+        registry.RegisterRenderer(typeof(Person), new FluentActorRendererProxy());
+        registry.RegisterRenderer(typeof(Actor), new FluentActorRendererProxy());
+        registry.RegisterRenderer(typeof(Activity), new FluentActivityRendererProxy());
+        registry.RegisterRenderer(typeof(Image), new FluentImageRendererProxy());
+        registry.RegisterRenderer(typeof(Video), new FluentVideoRendererProxy());
+        registry.RegisterRenderer(typeof(Document), new FluentDocumentRendererProxy());
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Note objects using FluentNoteRenderer.
+/// </summary>
+internal class FluentNoteRendererProxy : ObjectRendererBase<Note>
+{
+    protected override RenderFragment Render(Note obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentNoteRenderer>(0);
+            builder.AddAttribute(1, "Note", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Article objects using FluentArticleRenderer.
+/// </summary>
+internal class FluentArticleRendererProxy : ObjectRendererBase<Article>
+{
+    protected override RenderFragment Render(Article obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentArticleRenderer>(0);
+            builder.AddAttribute(1, "Article", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Actor/Person objects using FluentActorRenderer.
+/// </summary>
+internal class FluentActorRendererProxy : ObjectRendererBase<KristofferStrube.ActivityStreams.Object>
+{
+    protected override RenderFragment Render(KristofferStrube.ActivityStreams.Object obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentActorRenderer>(0);
+            builder.AddAttribute(1, "Actor", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Activity objects using FluentActivityRenderer.
+/// </summary>
+internal class FluentActivityRendererProxy : ObjectRendererBase<Activity>
+{
+    protected override RenderFragment Render(Activity obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentActivityRenderer>(0);
+            builder.AddAttribute(1, "Activity", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Image objects using FluentImageRenderer.
+/// </summary>
+internal class FluentImageRendererProxy : ObjectRendererBase<Image>
+{
+    protected override RenderFragment Render(Image obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentImageRenderer>(0);
+            builder.AddAttribute(1, "Image", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Video objects using FluentVideoRenderer.
+/// </summary>
+internal class FluentVideoRendererProxy : ObjectRendererBase<Video>
+{
+    protected override RenderFragment Render(Video obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentVideoRenderer>(0);
+            builder.AddAttribute(1, "Video", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Document objects using FluentDocumentRenderer.
+/// </summary>
+internal class FluentDocumentRendererProxy : ObjectRendererBase<Document>
+{
+    protected override RenderFragment Render(Document obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentDocumentRenderer>(0);
+            builder.AddAttribute(1, "Document", obj);
+            builder.CloseComponent();
+        };
     }
 }

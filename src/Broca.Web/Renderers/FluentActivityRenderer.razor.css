@@ -1,0 +1,12 @@
+/* Fluent Activity Renderer Styles */
+.fluent-activity {
+    margin-bottom: 12px;
+}
+
+.activity-objects {
+    margin: 12px 0;
+}
+
+.activity-object {
+    padding: 8px 0;
+}

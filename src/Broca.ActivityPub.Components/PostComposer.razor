@@ -450,11 +450,47 @@
             set => _composer.visibility = value;
         }
 
+        public string? ContentWarning
+        {
+            get => _composer.contentWarning;
+            set => _composer.contentWarning = value;
+        }
+
+        public bool HasContentWarning
+        {
+            get => _composer.hasContentWarning;
+            set => _composer.hasContentWarning = value;
+        }
+
+        public string? Error => _composer.error;
+        public string? SuccessMessage => _composer.successMessage;
         public bool IsPosting => _composer.isPosting;
         public bool CanPost => _composer.CanPost;
         public int RemainingCharacters => _composer.GetRemainingCharacters();
+        public int MaxLength => _composer.MaxLength;
+        public int Rows => _composer.Rows;
+        public string Placeholder => _composer.Placeholder;
+        public string PostButtonText => _composer.PostButtonText;
+        public string? InReplyToId => _composer.InReplyToId;
+        
+        // Feature flags
+        public bool ShowVisibilitySelector => _composer.ShowVisibilitySelector;
+        public bool ShowCharacterCount => _composer.ShowCharacterCount;
+        public bool ShowAttachmentButton => _composer.ShowAttachmentButton;
+        public bool ShowEmojiButton => _composer.ShowEmojiButton;
+        public bool ShowPollButton => _composer.ShowPollButton;
+        public bool ShowContentWarning => _composer.ShowContentWarning;
+        public bool ShowCancelButton => _composer.ShowCancelButton;
+        
+        // Event callbacks
+        public EventCallback OnCancel => _composer.OnCancel;
+        public EventCallback OnAttachmentClick => _composer.OnAttachmentClick;
+        public EventCallback OnEmojiClick => _composer.OnEmojiClick;
+        public EventCallback OnPollClick => _composer.OnPollClick;
 
+        // Actions
         public Task Post() => _composer.HandlePost();
         public Task Cancel() => _composer.HandleCancel();
+        public void ToggleContentWarning() => _composer.ToggleContentWarning();
     }
 }

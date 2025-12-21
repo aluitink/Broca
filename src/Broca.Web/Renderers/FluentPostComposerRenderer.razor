@@ -1,0 +1,164 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@using static Broca.ActivityPub.Components.PostComposer
+
+@* 
+    FluentPostComposerRenderer - A Fluent UI renderer for the PostComposer component.
+    Usage: <PostComposer ComposerTemplate="FluentPostComposerRenderer.Template" ... />
+*@
+
+<div class="fluent-post-composer">
+    @if (!string.IsNullOrEmpty(Context.InReplyToId))
+    {
+        <div class="reply-indicator">
+            <FluentIcon Value="@(new Icons.Regular.Size20.ArrowReply())" Color="Color.Accent" />
+            <span>Replying to...</span>
+        </div>
+    }
+
+    @if (Context.HasContentWarning)
+    {
+        <div class="cw-section">
+            <FluentTextField 
+                Placeholder="Content warning"
+                Value="@Context.ContentWarning"
+                ValueChanged="@((string value) => { Context.ContentWarning = value; StateHasChanged(); })"
+                MaxLength="100"
+                Disabled="Context.IsPosting"
+                Style="width: 100%; margin-bottom: 0.5rem;" />
+        </div>
+    }
+
+    <FluentTextArea 
+        Placeholder="@Context.Placeholder"
+        Value="@Context.Content"
+        ValueChanged="@((string value) => { Context.Content = value; StateHasChanged(); })"
+        Rows="@Context.Rows"
+        MaxLength="@Context.MaxLength"
+        Disabled="Context.IsPosting"
+        Resize="TextAreaResize.Vertical"
+        Style="width: 100%;" />
+
+    <div class="composer-toolbar">
+        <div class="composer-tools">
+            @if (Context.ShowVisibilitySelector)
+            {
+                <FluentSelect 
+                    TOption="string"
+                    Items="@(new[] { "public", "unlisted", "followers", "direct" })"
+                    Value="@Context.Visibility"
+                    ValueChanged="@((string value) => { Context.Visibility = value; StateHasChanged(); })"
+                    Disabled="Context.IsPosting"
+                    OptionText="@(v => v switch {
+                        "public" => "🌐 Public",
+                        "unlisted" => "🔓 Unlisted",
+                        "followers" => "👥 Followers",
+                        "direct" => "✉️ Direct",
+                        _ => v
+                    })"
+                    Style="min-width: 140px;" />
+            }
+
+            @if (Context.ShowAttachmentButton)
+            {
+                <FluentButton 
+                    Appearance="Appearance.Stealth"
+                    IconStart="@(new Icons.Regular.Size20.Attach())"
+                    Disabled="Context.IsPosting"
+                    Title="Add attachment"
+                    OnClick="@(async () => await Context.OnAttachmentClick.InvokeAsync())" />
+            }
+
+            @if (Context.ShowEmojiButton)
+            {
+                <FluentButton 
+                    Appearance="Appearance.Stealth"
+                    IconStart="@(new Icons.Regular.Size20.Emoji())"
+                    Disabled="Context.IsPosting"
+                    Title="Insert emoji"
+                    OnClick="@(async () => await Context.OnEmojiClick.InvokeAsync())" />
+            }
+
+            @if (Context.ShowPollButton)
+            {
+                <FluentButton 
+                    Appearance="Appearance.Stealth"
+                    IconStart="@(new Icons.Regular.Size20.Poll())"
+                    Disabled="Context.IsPosting"
+                    Title="Create poll"
+                    OnClick="@(async () => await Context.OnPollClick.InvokeAsync())" />
+            }
+
+            @if (Context.ShowContentWarning)
+            {
+                <FluentButton 
+                    Appearance="@(Context.HasContentWarning ? Appearance.Accent : Appearance.Stealth)"
+                    Disabled="Context.IsPosting"
+                    Title="Add content warning"
+                    OnClick="@(() => { Context.ToggleContentWarning(); StateHasChanged(); })">
+                    <span>CW</span>
+                </FluentButton>
+            }
+        </div>
+
+        <div class="composer-actions">
+            @if (Context.ShowCharacterCount)
+            {
+                var remaining = Context.RemainingCharacters;
+                var counterClass = remaining < 0 ? "over-limit" : remaining < 50 ? "warning" : "";
+                
+                <span class="character-count @counterClass">
+                    @remaining / @Context.MaxLength
+                </span>
+            }
+
+            @if (Context.ShowCancelButton && Context.OnCancel.HasDelegate)
+            {
+                <FluentButton 
+                    Appearance="Appearance.Outline"
+                    Disabled="Context.IsPosting"
+                    OnClick="@(async () => await Context.Cancel())">
+                    Cancel
+                </FluentButton>
+            }
+
+            <FluentButton 
+                Appearance="Appearance.Accent"
+                Disabled="@(!Context.CanPost)"
+                Loading="Context.IsPosting"
+                OnClick="@(async () => await Context.Post())">
+                @(Context.IsPosting ? "Posting..." : Context.PostButtonText)
+            </FluentButton>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Context.Error))
+    {
+        <FluentMessageBar Intent="MessageIntent.Error" Style="margin-top: 0.75rem;">
+            @Context.Error
+        </FluentMessageBar>
+    }
+
+    @if (!string.IsNullOrEmpty(Context.SuccessMessage))
+    {
+        <FluentMessageBar Intent="MessageIntent.Success" Style="margin-top: 0.75rem;">
+            @Context.SuccessMessage
+        </FluentMessageBar>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public ComposerContext Context { get; set; } = null!;
+
+    public static RenderFragment<ComposerContext> Template => context => builder =>
+    {
+        builder.OpenComponent<FluentPostComposerRenderer>(0);
+        builder.AddAttribute(1, nameof(Context), context);
+        builder.CloseComponent();
+    };
+}
+
+
+

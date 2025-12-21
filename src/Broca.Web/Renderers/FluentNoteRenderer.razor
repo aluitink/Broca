@@ -1,0 +1,198 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components.Services
+@inherits ComponentBase
+
+<FluentCard Class="@($"fluent-note-card {CssClass}")">
+    @if (Note != null)
+    {
+        @if (ShowActor && Note.AttributedTo?.Any() == true)
+        {
+            <div class="note-header">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Color="Color.Accent" />
+                <FluentLabel Typo="Typography.Body">@GetActorDisplay()</FluentLabel>
+            </div>
+        }
+
+        @if (Note.Name?.Any() == true)
+        {
+            <FluentLabel Typo="Typography.Header" Weight="FontWeight.Bold" class="note-title">
+                @Note.Name.First()
+            </FluentLabel>
+        }
+
+        @if (Note.Content?.Any() == true)
+        {
+            <div class="note-content">
+                @((MarkupString)(Note.Content.First() ?? string.Empty))
+            </div>
+        }
+
+        @if (Note.Attachment?.Any() == true)
+        {
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" class="note-attachments">
+                @foreach (var attachment in Note.Attachment)
+                {
+                    <div class="attachment-item">
+                        @RenderAttachment(attachment)
+                    </div>
+                }
+            </FluentStack>
+        }
+
+        <div class="note-footer">
+            @if (Note.Published.HasValue)
+            {
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" />
+                    <time datetime="@Note.Published.Value.ToString("o")">
+                        @FormatDateTime(Note.Published.Value)
+                    </time>
+                </FluentLabel>
+            }
+
+            @if (ShowActions)
+            {
+                <FluentStack Orientation="Orientation.Horizontal" class="note-actions">
+                    <FluentButton Appearance="Appearance.Lightweight" 
+                                  IconStart="@(new Icons.Regular.Size16.ArrowReply())"
+                                  OnClick="@(() => OnReply.InvokeAsync(Note))">
+                        Reply
+                    </FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" 
+                                  IconStart="@(new Icons.Regular.Size16.ArrowRepeatAll())"
+                                  OnClick="@(() => OnBoost.InvokeAsync(Note))">
+                        Boost
+                    </FluentButton>
+                    <FluentButton Appearance="Appearance.Lightweight" 
+                                  IconStart="@(new Icons.Regular.Size16.Heart())"
+                                  OnClick="@(() => OnLike.InvokeAsync(Note))">
+                        Like
+                    </FluentButton>
+                </FluentStack>
+            }
+        </div>
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Note)
+        }
+    }
+</FluentCard>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Note object to render.
+    /// </summary>
+    [Parameter]
+    public Note? Note { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the actor attribution.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show action buttons.
+    /// </summary>
+    [Parameter]
+    public bool ShowActions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Note>? AdditionalContent { get; set; }
+
+    /// <summary>
+    /// Event callback for reply action.
+    /// </summary>
+    [Parameter]
+    public EventCallback<Note> OnReply { get; set; }
+
+    /// <summary>
+    /// Event callback for boost action.
+    /// </summary>
+    [Parameter]
+    public EventCallback<Note> OnBoost { get; set; }
+
+    /// <summary>
+    /// Event callback for like action.
+    /// </summary>
+    [Parameter]
+    public EventCallback<Note> OnLike { get; set; }
+
+    private string GetActorDisplay()
+    {
+        var actorId = Note?.AttributedTo?.FirstOrDefault();
+        if (actorId is Actor actor && actor.Name?.Any() == true)
+            return actor.Name.First();
+        return actorId?.ToString() ?? "Unknown";
+    }
+
+    private RenderFragment RenderAttachment(IObjectOrLink attachment)
+    {
+        return builder =>
+        {
+            if (attachment is Image img)
+            {
+                builder.OpenElement(0, "img");
+                builder.AddAttribute(1, "src", GetImageUrl(img));
+                builder.AddAttribute(2, "alt", GetImageAlt(img));
+                builder.AddAttribute(3, "loading", "lazy");
+                builder.AddAttribute(4, "style", "max-width: 100%; border-radius: 4px;");
+                builder.CloseElement();
+            }
+            else if (attachment is Document doc)
+            {
+                builder.OpenComponent<FluentButton>(0);
+                builder.AddAttribute(1, "Appearance", Appearance.Lightweight);
+                builder.AddAttribute(2, "IconStart", new Icons.Regular.Size16.Document());
+                builder.AddContent(3, GetDocumentName(doc));
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    private string GetImageUrl(Image img)
+    {
+        var url = img.Url?.FirstOrDefault();
+        if (url is Link link && link.Href != null)
+            return link.Href.ToString();
+        return url?.ToString() ?? string.Empty;
+    }
+
+    private string GetImageAlt(Image img)
+    {
+        return img.Name?.FirstOrDefault() ?? "Image attachment";
+    }
+
+    private string GetDocumentName(Document doc)
+    {
+        return doc.Name?.FirstOrDefault() ?? "Document";
+    }
+
+    private string FormatDateTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+        
+        if (timeSpan.TotalMinutes < 1)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays}d ago";
+        
+        return dateTime.ToString("MMM d, yyyy");
+    }
+}

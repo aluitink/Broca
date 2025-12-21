@@ -1,0 +1,221 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@inherits ComponentBase
+
+<FluentCard Class="@($"fluent-activity {CssClass}")">
+    @if (Activity != null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                @if (!string.IsNullOrEmpty(GetActorId()))
+                {
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Color="Color.Accent" />
+                        <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                            @GetActorName()
+                        </FluentLabel>
+                    </FluentStack>
+                }
+
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                    <FluentBadge Appearance="Appearance.Accent">
+                        @GetActivityTypeIcon()
+                        @GetActivityType()
+                    </FluentBadge>
+
+                    @if (Activity.Published.HasValue)
+                    {
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" />
+                            <time datetime="@Activity.Published.Value.ToString("o")">
+                                @FormatDateTime(Activity.Published.Value)
+                            </time>
+                        </FluentLabel>
+                    }
+                </FluentStack>
+            </FluentStack>
+
+            @if (Activity.Summary?.Any() == true)
+            {
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                    @Activity.Summary.First()
+                </FluentLabel>
+            }
+
+            @if (ShowObject && Activity.Object?.Any() == true)
+            {
+                <FluentDivider />
+                <div class="activity-objects">
+                    @foreach (var obj in Activity.Object)
+                    {
+                        <div class="activity-object">
+                            @if (ObjectRenderer != null)
+                            {
+                                @ObjectRenderer(obj)
+                            }
+                            else
+                            {
+                                <ObjectDisplay Object="@obj" />
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (ShowRecipients && HasRecipients())
+            {
+                <FluentDivider />
+                <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="4">
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" />
+                        To:
+                    </FluentLabel>
+                    @RenderRecipients()
+                </FluentStack>
+            }
+
+            @if (AdditionalContent != null)
+            {
+                <FluentDivider />
+                @AdditionalContent(Activity)
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Activity to render.
+    /// </summary>
+    [Parameter]
+    public Activity? Activity { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the activity object(s).
+    /// </summary>
+    [Parameter]
+    public bool ShowObject { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the recipients.
+    /// </summary>
+    [Parameter]
+    public bool ShowRecipients { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom renderer for objects.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<object>? ObjectRenderer { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Activity>? AdditionalContent { get; set; }
+
+    private string GetActorId()
+    {
+        return Activity?.Actor?.FirstOrDefault()?.ToString() ?? string.Empty;
+    }
+
+    private string GetActorName()
+    {
+        var actor = Activity?.Actor?.FirstOrDefault();
+        if (actor is Actor actorObj && actorObj.Name?.Any() == true)
+            return actorObj.Name.First();
+        return GetActorId();
+    }
+
+    private string GetActivityType()
+    {
+        return Activity?.Type?.FirstOrDefault() ?? "Activity";
+    }
+
+    private string GetActivityTypeIcon()
+    {
+        var type = GetActivityType();
+        return type switch
+        {
+            "Create" => "✨",
+            "Update" => "✏️",
+            "Delete" => "🗑️",
+            "Follow" => "👤",
+            "Like" => "❤️",
+            "Announce" => "🔁",
+            "Accept" => "✅",
+            "Reject" => "❌",
+            _ => "📄"
+        };
+    }
+
+    private bool HasRecipients()
+    {
+        return Activity?.To?.Any() == true || 
+               Activity?.Cc?.Any() == true || 
+               Activity?.Bcc?.Any() == true;
+    }
+
+    private RenderFragment RenderRecipients()
+    {
+        return builder =>
+        {
+            int sequence = 0;
+            var recipients = new List<string>();
+
+            if (Activity?.To?.Any() == true)
+                recipients.AddRange(Activity.To.Select(r => r.ToString() ?? ""));
+            if (Activity?.Cc?.Any() == true)
+                recipients.AddRange(Activity.Cc.Select(r => r.ToString() ?? ""));
+
+            foreach (var recipient in recipients.Where(r => !string.IsNullOrEmpty(r)))
+            {
+                builder.OpenComponent<FluentBadge>(sequence++);
+                builder.AddAttribute(sequence++, "Appearance", Appearance.Lightweight);
+                builder.AddAttribute(sequence++, "ChildContent", (RenderFragment)(b =>
+                {
+                    b.AddContent(0, FormatRecipient(recipient));
+                }));
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    private string FormatRecipient(string recipient)
+    {
+        if (recipient.Contains("public", StringComparison.OrdinalIgnoreCase))
+            return "Public";
+        if (recipient.Contains("followers", StringComparison.OrdinalIgnoreCase))
+            return "Followers";
+        
+        var uri = new Uri(recipient, UriKind.RelativeOrAbsolute);
+        if (uri.IsAbsoluteUri)
+            return uri.Host;
+        
+        return recipient;
+    }
+
+    private string FormatDateTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+        
+        if (timeSpan.TotalMinutes < 1)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays}d ago";
+        
+        return dateTime.ToString("MMM d, yyyy");
+    }
+}
