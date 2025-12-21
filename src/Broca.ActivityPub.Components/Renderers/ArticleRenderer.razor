@@ -1,0 +1,163 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<article class="activitypub-article @CssClass">
+    @if (Article != null)
+    {
+        @if (Article.Name?.Any() == true)
+        {
+            <h2 class="article-title">@Article.Name.First()</h2>
+        }
+
+        @if (ShowAuthor && Article.AttributedTo?.Any() == true)
+        {
+            <div class="article-author">
+                <span class="author-label">By</span>
+                <span class="author-name">@GetAuthorDisplay()</span>
+            </div>
+        }
+
+        @if (Article.Published.HasValue)
+        {
+            <div class="article-metadata">
+                <time datetime="@Article.Published.Value.ToString("o")">
+                    @Article.Published.Value.ToString("MMMM d, yyyy")
+                </time>
+                @if (ShowReadTime && !string.IsNullOrEmpty(GetContent()))
+                {
+                    <span class="read-time">· @CalculateReadTime() min read</span>
+                }
+            </div>
+        }
+
+        @if (ShowFeaturedImage && !string.IsNullOrEmpty(GetFeaturedImageUrl()))
+        {
+            <div class="article-featured-image">
+                <img src="@GetFeaturedImageUrl()" alt="@(Article.Name?.FirstOrDefault() ?? "Article image")" loading="lazy" />
+            </div>
+        }
+
+        @if (Article.Summary?.Any() == true && ShowSummary)
+        {
+            <div class="article-summary">
+                @((MarkupString)(Article.Summary.First() ?? string.Empty))
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(GetContent()))
+        {
+            <div class="article-content">
+                @((MarkupString)GetContent())
+            </div>
+        }
+
+        @if (Article.Tag?.Any() == true && ShowTags)
+        {
+            <div class="article-tags">
+                @foreach (var tag in Article.Tag)
+                {
+                    <span class="article-tag">@tag.ToString()</span>
+                }
+            </div>
+        }
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Article)
+        }
+    }
+</article>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Article object to render.
+    /// </summary>
+    [Parameter]
+    public Article? Article { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the author.
+    /// </summary>
+    [Parameter]
+    public bool ShowAuthor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the summary.
+    /// </summary>
+    [Parameter]
+    public bool ShowSummary { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the featured image.
+    /// </summary>
+    [Parameter]
+    public bool ShowFeaturedImage { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show tags.
+    /// </summary>
+    [Parameter]
+    public bool ShowTags { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show estimated read time.
+    /// </summary>
+    [Parameter]
+    public bool ShowReadTime { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Article>? AdditionalContent { get; set; }
+
+    private string GetAuthorDisplay()
+    {
+        var authorId = Article?.AttributedTo?.FirstOrDefault();
+        return authorId?.ToString() ?? "Unknown Author";
+    }
+
+    private string GetContent()
+    {
+        return Article?.Content?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetFeaturedImageUrl()
+    {
+        if (Article?.Image?.Any() == true)
+        {
+            var image = Article.Image.First();
+            if (image is Image img && img.Url?.Any() == true)
+            {
+                var urlLink = img.Url.FirstOrDefault();
+                if (urlLink?.Href != null)
+                {
+                    return urlLink.Href.ToString();
+                }
+            }
+            else if (image is Link link && link.Href != null)
+            {
+                return link.Href.ToString();
+            }
+        }
+        return string.Empty;
+    }
+
+    private int CalculateReadTime()
+    {
+        var content = GetContent();
+        if (string.IsNullOrEmpty(content))
+            return 1;
+
+        // Average reading speed is ~200 words per minute
+        var wordCount = content.Split(new[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        var minutes = Math.Max(1, (int)Math.Ceiling(wordCount / 200.0));
+        return minutes;
+    }
+}

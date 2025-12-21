@@ -1,57 +1,187 @@
 ﻿@page "/"
+@using Microsoft.AspNetCore.Components.Web
+@using Broca.Sample.BlazorApp.Services
+@using Broca.ActivityPub.Components
+@using KristofferStrube.ActivityStreams
+@inject AuthenticationService AuthService
+@inject NavigationManager Navigation
+@implements IDisposable
 
-<PageTitle>Broca ActivityPub Browser</PageTitle>
+<PageTitle>Home - Broca ActivityPub Browser</PageTitle>
 
-<div class="container mt-5">
-    <div class="text-center">
-        <h1 class="display-4">Broca ActivityPub Browser</h1>
-        <p class="lead">A client-side ActivityPub browser and client</p>
-        
-        <div class="mt-5">
-            <a href="/browse" class="btn btn-primary btn-lg">
-                Start Browsing
-            </a>
-            <a href="/identity" class="btn btn-outline-secondary btn-lg ms-2">
-                Load Identity
-            </a>
+@if (!AuthService.IsAuthenticated)
+{
+    <div class="container mt-5">
+        <div class="text-center">
+            <h1 class="display-4">Broca ActivityPub Browser</h1>
+            <p class="lead">A client-side ActivityPub browser and client</p>
+            
+            <div class="mt-4">
+                <a href="/login" class="btn btn-primary btn-lg">
+                    <i class="bi bi-box-arrow-in-right"></i> Login
+                </a>
+                <a href="/browse" class="btn btn-outline-secondary btn-lg ms-2">
+                    <i class="bi bi-search"></i> Browse
+                </a>
+            </div>
         </div>
 
-        <div class="mt-5">
-            <h3>Features</h3>
-            <div class="row mt-4">
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <h5 class="card-title">🔍 Browse Users</h5>
-                            <p class="card-text">Look up ActivityPub users by their alias (user@domain.com) and view their profiles.</p>
-                        </div>
+        @if (_systemOutboxUrl != null)
+        {
+            <div class="mt-5">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0">Public Feed</h3>
+                    </div>
+                    <div class="card-body">
+                        <ActivityFeed 
+                            CollectionUrl="@_systemOutboxUrl" 
+                            Title="Latest Activity"
+                            PageSize="10"
+                            UseVirtualization="false"
+                            ShowObjects="true"
+                            ShowRecipients="false">
+                        </ActivityFeed>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <h5 class="card-title">📬 View Outbox</h5>
-                            <p class="card-text">Browse a user's public outbox to see their recent activities and posts.</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <h5 class="card-title">🔐 Identity Support</h5>
-                            <p class="card-text">Load your public/private key pair from a JSON file to authenticate requests.</p>
+            </div>
+        }
+        else
+        {
+            <div class="mt-5">
+                <div class="card">
+                    <div class="card-body">
+                        <h3>Features</h3>
+                        <div class="row mt-4">
+                            <div class="col-md-4">
+                                <div class="card h-100 border-0">
+                                    <div class="card-body text-center">
+                                        <div class="fs-1 mb-3">🔍</div>
+                                        <h5 class="card-title">Browse Users</h5>
+                                        <p class="card-text">Look up ActivityPub users by their alias and view their profiles.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card h-100 border-0">
+                                    <div class="card-body text-center">
+                                        <div class="fs-1 mb-3">📬</div>
+                                        <h5 class="card-title">View Feeds</h5>
+                                        <p class="card-text">Browse public outboxes to see recent activities and posts.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card h-100 border-0">
+                                    <div class="card-body text-center">
+                                        <div class="fs-1 mb-3">🔐</div>
+                                        <h5 class="card-title">Identity Support</h5>
+                                        <p class="card-text">Load your identity from a JSON file to authenticate.</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        }
 
-        <div class="mt-5">
-            <h4>About</h4>
-            <p class="text-muted">
-                This is a client-side only Blazor WebAssembly application that uses the Broca ActivityPub Client library 
-                to interact with ActivityPub servers. All requests are made directly from your browser.
-            </p>
+        <div class="mt-4">
+            <div class="card">
+                <div class="card-body">
+                    <h4>About</h4>
+                    <p class="text-muted mb-0">
+                        This is a client-side Blazor WebAssembly application that uses the Broca ActivityPub Client library 
+                        to interact with ActivityPub servers. All requests are made directly from your browser.
+                    </p>
+                </div>
+            </div>
         </div>
     </div>
-</div>
+}
+else
+{
+    <div class="container mt-4">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2>Welcome back, @GetDisplayName()</h2>
+                <p class="text-muted mb-0">Here's your latest activity</p>
+            </div>
+        </div>
+
+        @if (_inboxUrl != null)
+        {
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0">Your Inbox</h3>
+                    <a href="/inbox" class="btn btn-primary btn-sm">
+                        View Full Inbox
+                    </a>
+                </div>
+                <div class="card-body">
+                    <ActivityFeed 
+                        CollectionUrl="@_inboxUrl" 
+                        PageSize="10"
+                        UseVirtualization="false"
+                        ShowObjects="true"
+                        ShowRecipients="false"
+                        EnableAutoRefresh="true"
+                        AutoRefreshInterval="30">
+                    </ActivityFeed>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i> Unable to load inbox. Your actor profile may not have an inbox configured.
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private Uri? _inboxUrl;
+    private Uri? _systemOutboxUrl;
+
+    protected override void OnInitialized()
+    {
+        AuthService.AuthenticationStateChanged += OnAuthStateChanged;
+        UpdateUrls();
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        UpdateUrls();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateUrls()
+    {
+        if (AuthService.IsAuthenticated)
+        {
+            _inboxUrl = AuthService.GetInboxUrl();
+        }
+        else
+        {
+            _inboxUrl = null;
+            _systemOutboxUrl = AuthService.GetOutboxUrl();
+        }
+    }
+
+    private string GetDisplayName()
+    {
+        if (AuthService.CurrentActor?.Name?.FirstOrDefault() is string name && !string.IsNullOrWhiteSpace(name))
+            return name;
+        
+        if (AuthService.CurrentActor is Person person && !string.IsNullOrWhiteSpace(person.PreferredUsername))
+            return person.PreferredUsername;
+        
+        return AuthService.CurrentActorId ?? "User";
+    }
+
+    public void Dispose()
+    {
+        AuthService.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}

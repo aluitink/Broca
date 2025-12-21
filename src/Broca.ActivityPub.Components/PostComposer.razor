@@ -1,0 +1,460 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-post-composer @CssClass">
+    @if (ComposerTemplate != null)
+    {
+        @ComposerTemplate(new ComposerContext(this))
+    }
+    else
+    {
+        <div class="composer-default">
+            @if (InReplyToId != null)
+            {
+                <div class="reply-indicator">
+                    <span class="reply-icon">↩️</span>
+                    <span>Replying to...</span>
+                </div>
+            }
+
+            <div class="composer-input-section">
+                <textarea class="composer-textarea @(HasFocus ? "focused" : "")"
+                         @bind="content"
+                         @bind:event="oninput"
+                         @onfocus="HandleFocus"
+                         @onblur="HandleBlur"
+                         placeholder="@Placeholder"
+                         rows="@Rows"
+                         maxlength="@MaxLength"
+                         disabled="@isPosting"></textarea>
+
+                <div class="composer-footer">
+                    <div class="composer-tools">
+                        @if (ShowVisibilitySelector)
+                        {
+                            <select class="visibility-select" @bind="visibility" disabled="@isPosting">
+                                <option value="public">🌐 Public</option>
+                                <option value="unlisted">🔓 Unlisted</option>
+                                <option value="followers">👥 Followers</option>
+                                <option value="direct">✉️ Direct</option>
+                            </select>
+                        }
+
+                        @if (ShowAttachmentButton)
+                        {
+                            <button class="tool-button attachment-button" 
+                                    @onclick="HandleAttachmentClick"
+                                    disabled="@isPosting"
+                                    title="Add attachment">
+                                📎
+                            </button>
+                        }
+
+                        @if (ShowEmojiButton)
+                        {
+                            <button class="tool-button emoji-button" 
+                                    @onclick="HandleEmojiClick"
+                                    disabled="@isPosting"
+                                    title="Insert emoji">
+                                😊
+                            </button>
+                        }
+
+                        @if (ShowPollButton)
+                        {
+                            <button class="tool-button poll-button" 
+                                    @onclick="HandlePollClick"
+                                    disabled="@isPosting"
+                                    title="Create poll">
+                                📊
+                            </button>
+                        }
+
+                        @if (ShowContentWarning)
+                        {
+                            <button class="tool-button cw-button @(hasContentWarning ? "active" : "")" 
+                                    @onclick="ToggleContentWarning"
+                                    disabled="@isPosting"
+                                    title="Add content warning">
+                                CW
+                            </button>
+                        }
+                    </div>
+
+                    <div class="composer-actions">
+                        @if (ShowCharacterCount)
+                        {
+                            <span class="character-count @(GetCharacterCountClass())">
+                                @GetRemainingCharacters() / @MaxLength
+                            </span>
+                        }
+
+                        @if (ShowCancelButton && OnCancel.HasDelegate)
+                        {
+                            <button class="composer-button cancel-button" 
+                                    @onclick="HandleCancel"
+                                    disabled="@isPosting">
+                                Cancel
+                            </button>
+                        }
+
+                        <button class="composer-button post-button" 
+                                @onclick="HandlePost"
+                                disabled="@(!CanPost)">
+                            @if (isPosting)
+                            {
+                                <span>Posting...</span>
+                            }
+                            else
+                            {
+                                <span>@PostButtonText</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            @if (hasContentWarning)
+            {
+                <div class="content-warning-section">
+                    <input type="text" 
+                           class="cw-input" 
+                           @bind="contentWarning"
+                           placeholder="Content warning text"
+                           maxlength="100"
+                           disabled="@isPosting" />
+                </div>
+            }
+
+            @if (error != null)
+            {
+                <div class="composer-error">
+                    <span class="error-icon">⚠️</span>
+                    <span>@error</span>
+                </div>
+            }
+
+            @if (successMessage != null)
+            {
+                <div class="composer-success">
+                    <span class="success-icon">✅</span>
+                    <span>@successMessage</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string content = string.Empty;
+    private string visibility = "public";
+    private string? contentWarning;
+    private bool hasContentWarning;
+    private bool isPosting;
+    private bool hasFocus;
+    private string? error;
+    private string? successMessage;
+
+    /// <summary>
+    /// Gets or sets the initial content.
+    /// </summary>
+    [Parameter]
+    public string? InitialContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets the placeholder text.
+    /// </summary>
+    [Parameter]
+    public string Placeholder { get; set; } = "What's on your mind?";
+
+    /// <summary>
+    /// Gets or sets the post button text.
+    /// </summary>
+    [Parameter]
+    public string PostButtonText { get; set; } = "Post";
+
+    /// <summary>
+    /// Gets or sets the maximum content length.
+    /// </summary>
+    [Parameter]
+    public int MaxLength { get; set; } = 500;
+
+    /// <summary>
+    /// Gets or sets the number of rows for the textarea.
+    /// </summary>
+    [Parameter]
+    public int Rows { get; set; } = 4;
+
+    /// <summary>
+    /// Gets or sets the ID of the post being replied to.
+    /// </summary>
+    [Parameter]
+    public string? InReplyToId { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the visibility selector.
+    /// </summary>
+    [Parameter]
+    public bool ShowVisibilitySelector { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the character count.
+    /// </summary>
+    [Parameter]
+    public bool ShowCharacterCount { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the attachment button.
+    /// </summary>
+    [Parameter]
+    public bool ShowAttachmentButton { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the emoji button.
+    /// </summary>
+    [Parameter]
+    public bool ShowEmojiButton { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the poll button.
+    /// </summary>
+    [Parameter]
+    public bool ShowPollButton { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show content warning option.
+    /// </summary>
+    [Parameter]
+    public bool ShowContentWarning { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the cancel button.
+    /// </summary>
+    [Parameter]
+    public bool ShowCancelButton { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom composer template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<ComposerContext>? ComposerTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when a post is successfully created.
+    /// </summary>
+    [Parameter]
+    public EventCallback<Activity> OnPostCreated { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when cancel is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when attachment button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnAttachmentClick { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when emoji button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnEmojiClick { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when poll button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnPollClick { get; set; }
+
+    private bool HasFocus => hasFocus;
+
+    private bool CanPost => 
+        !isPosting && 
+        !string.IsNullOrWhiteSpace(content) && 
+        content.Length <= MaxLength &&
+        Client.ActorId != null;
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(InitialContent))
+        {
+            content = InitialContent;
+        }
+    }
+
+    private void HandleFocus()
+    {
+        hasFocus = true;
+    }
+
+    private void HandleBlur()
+    {
+        hasFocus = false;
+    }
+
+    private async Task HandlePost()
+    {
+        if (!CanPost) return;
+
+        isPosting = true;
+        error = null;
+        successMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var builder = Client.CreateActivityBuilder().CreateNote(content);
+
+            // Apply visibility
+            switch (visibility)
+            {
+                case "public":
+                    builder.ToPublic();
+                    break;
+                case "unlisted":
+                    builder.ToPublic(); // Unlisted is still public but not in public timelines
+                    break;
+                case "followers":
+                    builder.ToFollowers();
+                    break;
+                case "direct":
+                    // Direct messages need recipients
+                    break;
+            }
+
+            // Add content warning if specified
+            if (hasContentWarning && !string.IsNullOrWhiteSpace(contentWarning))
+            {
+                // TODO: Add content warning support to NoteBuilder
+                // builder.WithContentWarning(contentWarning);
+            }
+
+            // Add reply-to if this is a reply
+            if (!string.IsNullOrEmpty(InReplyToId))
+            {
+                builder.InReplyTo(InReplyToId);
+            }
+
+            var activity = builder.Build();
+            await Client.PostToOutboxAsync(activity);
+
+            successMessage = "Posted successfully!";
+            
+            // Clear the form
+            content = string.Empty;
+            contentWarning = null;
+            hasContentWarning = false;
+
+            if (OnPostCreated.HasDelegate)
+            {
+                await OnPostCreated.InvokeAsync(activity);
+            }
+
+            // Clear success message after a delay
+            await Task.Delay(3000);
+            successMessage = null;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to post: {ex.Message}";
+        }
+        finally
+        {
+            isPosting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleCancel()
+    {
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+
+    private async Task HandleAttachmentClick()
+    {
+        if (OnAttachmentClick.HasDelegate)
+        {
+            await OnAttachmentClick.InvokeAsync();
+        }
+    }
+
+    private async Task HandleEmojiClick()
+    {
+        if (OnEmojiClick.HasDelegate)
+        {
+            await OnEmojiClick.InvokeAsync();
+        }
+    }
+
+    private async Task HandlePollClick()
+    {
+        if (OnPollClick.HasDelegate)
+        {
+            await OnPollClick.InvokeAsync();
+        }
+    }
+
+    private void ToggleContentWarning()
+    {
+        hasContentWarning = !hasContentWarning;
+    }
+
+    private int GetRemainingCharacters()
+    {
+        return MaxLength - content.Length;
+    }
+
+    private string GetCharacterCountClass()
+    {
+        var remaining = GetRemainingCharacters();
+        if (remaining < 0) return "over-limit";
+        if (remaining < 50) return "warning";
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// Context provided to the composer template.
+    /// </summary>
+    public class ComposerContext
+    {
+        private readonly PostComposer _composer;
+
+        public ComposerContext(PostComposer composer)
+        {
+            _composer = composer;
+        }
+
+        public string Content
+        {
+            get => _composer.content;
+            set => _composer.content = value;
+        }
+
+        public string Visibility
+        {
+            get => _composer.visibility;
+            set => _composer.visibility = value;
+        }
+
+        public bool IsPosting => _composer.isPosting;
+        public bool CanPost => _composer.CanPost;
+        public int RemainingCharacters => _composer.GetRemainingCharacters();
+
+        public Task Post() => _composer.HandlePost();
+        public Task Cancel() => _composer.HandleCancel();
+    }
+}

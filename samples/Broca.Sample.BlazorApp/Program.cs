@@ -2,6 +2,7 @@ using Broca.ActivityPub.Client.WebCrypto.Extensions;
 using Broca.ActivityPub.Components.Extensions;
 using Broca.ActivityPub.Core.Models;
 using Broca.Sample.BlazorApp;
+using Broca.Sample.BlazorApp.Services;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
@@ -39,4 +40,13 @@ builder.Services.AddActivityPubComponents(options =>
 // Add identity service for managing user keys
 builder.Services.AddSingleton<IdentityService>();
 
-await builder.Build().RunAsync();
+// Add authentication service
+builder.Services.AddScoped<AuthenticationService>();
+
+var host = builder.Build();
+
+// Initialize authentication service
+var authService = host.Services.GetRequiredService<AuthenticationService>();
+await authService.InitializeAsync();
+
+await host.RunAsync();

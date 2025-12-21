@@ -1,247 +1,179 @@
 @page "/settings"
+@using Broca.Sample.BlazorApp.Services
 @using Broca.ActivityPub.Components
+@inject AuthenticationService AuthService
 
 <PageTitle>Settings - Broca Sample</PageTitle>
 
-<div class="settings-container">
+<div class="container mt-4">
     <h1>Settings</h1>
 
-    <div class="settings-card">
-        <h3>ActivityPub Authentication</h3>
-        
-        @if (provider?.IsAuthenticated == true)
-        {
-            <div class="alert alert-success">
-                <strong>✓ Authenticated</strong> - You are signed in as @provider.CurrentActorId
-            </div>
+    <div class="card mb-4">
+        <div class="card-header">
+            <h3 class="mb-0">Anonymous Browsing</h3>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                Configure a system user whose public outbox will be displayed on the home page when you're not logged in.
+            </p>
 
-            <button class="btn btn-outline" @onclick="SignOut">
-                Sign Out
-            </button>
-        }
-        else
-        {
-            <div class="alert alert-info">
-                <strong>Anonymous Mode</strong> - Sign in to access authenticated features
-            </div>
-
-            <div class="tabs">
-                <input type="radio" name="auth-tab" id="api-key-tab" checked @onchange="@(() => selectedTab = 0)" />
-                <label for="api-key-tab">API Key Authentication</label>
-                
-                <input type="radio" name="auth-tab" id="private-key-tab" @onchange="@(() => selectedTab = 1)" />
-                <label for="private-key-tab">Private Key Authentication</label>
-
-                <div class="tab-content" style="@(selectedTab == 0 ? "display: block;" : "display: none;")">
-                    <p class="description">
-                        Use an API key to securely authenticate with your ActivityPub server.
-                    </p>
-
-                    <div class="form-group">
-                        <label for="actorId">Actor ID</label>
-                        <input 
-                            id="actorId"
-                            type="text" 
-                            class="form-control" 
-                            @bind="actorId" 
-                            placeholder="https://mastodon.social/@@username"
-                            disabled="@isConfiguring" />
-                    </div>
-
-                    <div class="form-group">
-                        <label for="apiKey">API Key</label>
-                        <input 
-                            id="apiKey"
-                            type="password" 
-                            class="form-control" 
-                            @bind="apiKey" 
-                            placeholder="Enter your API key"
-                            disabled="@isConfiguring" />
-                    </div>
-
-                    @if (!string.IsNullOrEmpty(errorMessage))
-                    {
-                        <div class="alert alert-error">
-                            @errorMessage
-                        </div>
-                    }
-
-                    <button 
-                        class="btn btn-primary" 
-                        @onclick="SignInWithApiKey"
-                        disabled="@(isConfiguring || string.IsNullOrWhiteSpace(actorId) || string.IsNullOrWhiteSpace(apiKey))">
-                        @(isConfiguring ? "Signing in..." : "Sign In")
-                    </button>
-                </div>
-
-                <div class="tab-content" style="@(selectedTab == 1 ? "display: block;" : "display: none;")">
-                    <p class="description">
-                        Advanced: Directly provide your private key for authentication.
-                    </p>
-
-                    <div class="form-group">
-                        <label for="privateActorId">Actor ID</label>
-                        <input 
-                            id="privateActorId"
-                            type="text" 
-                            class="form-control" 
-                            @bind="privateActorId" 
-                            placeholder="https://mastodon.social/@@username"
-                            disabled="@isConfiguring" />
-                    </div>
-
-                    <div class="form-group">
-                        <label for="privateKeyPem">Private Key (PEM)</label>
-                        <textarea 
-                            id="privateKeyPem"
-                            class="form-control" 
-                            @bind="privateKeyPem" 
-                            placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-                            rows="5"
-                            disabled="@isConfiguring"></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="publicKeyId">Public Key ID</label>
-                        <input 
-                            id="publicKeyId"
-                            type="text" 
-                            class="form-control" 
-                            @bind="publicKeyId" 
-                            placeholder="https://mastodon.social/@@username#main-key"
-                            disabled="@isConfiguring" />
-                    </div>
-
-                    @if (!string.IsNullOrEmpty(privateKeyError))
-                    {
-                        <div class="alert alert-error">
-                            @privateKeyError
-                        </div>
-                    }
-
-                    <button 
-                        class="btn btn-primary" 
-                        @onclick="SignInWithPrivateKey"
-                        disabled="@(isConfiguring || string.IsNullOrWhiteSpace(privateActorId) || string.IsNullOrWhiteSpace(privateKeyPem) || string.IsNullOrWhiteSpace(publicKeyId))">
-                        @(isConfiguring ? "Signing in..." : "Sign In")
-                    </button>
+            <div class="mb-3">
+                <label for="systemUser" class="form-label">System User Actor ID</label>
+                <input 
+                    id="systemUser"
+                    type="text" 
+                    class="form-control" 
+                    @bind="_systemUserInput" 
+                    placeholder="https://mastodon.social/@@user"
+                    disabled="@_isSaving" />
+                <div class="form-text">
+                    Enter the full Actor ID URL for the user whose public feed you want to display.
                 </div>
             </div>
-        }
+
+            @if (!string.IsNullOrEmpty(_systemUserMessage))
+            {
+                <div class="alert @(_systemUserError ? "alert-danger" : "alert-success")">
+                    @_systemUserMessage
+                </div>
+            }
+
+            <div class="d-flex gap-2">
+                <button 
+                    class="btn btn-primary" 
+                    @onclick="SaveSystemUserAsync"
+                    disabled="@(_isSaving || string.IsNullOrWhiteSpace(_systemUserInput))">
+                    @(_isSaving ? "Saving..." : "Save")
+                </button>
+
+                @if (!string.IsNullOrEmpty(AuthService.SystemUserActorId))
+                {
+                    <button 
+                        class="btn btn-outline-danger" 
+                        @onclick="ClearSystemUserAsync"
+                        disabled="@_isSaving">
+                        Clear
+                    </button>
+                }
+            </div>
+
+            @if (!string.IsNullOrEmpty(AuthService.SystemUserActorId))
+            {
+                <div class="mt-3 p-3 bg-light rounded">
+                    <strong>Current System User:</strong><br/>
+                    <code>@AuthService.SystemUserActorId</code>
+                </div>
+            }
+        </div>
     </div>
 
-    <div class="settings-card">
-        <h3>About Authentication</h3>
-        <p class="info-text">
-            <strong>Anonymous Mode:</strong> Browse public ActivityPub content without signing in. 
-            Some features may be limited.
-        </p>
-        <p class="info-text">
-            <strong>API Key:</strong> Recommended for most users. The API key is used to fetch 
-            your credentials from the server securely.
-        </p>
-        <p class="info-text">
-            <strong>Private Key:</strong> For advanced users who want to manage their own keys. 
-            Your private key never leaves your browser.
-        </p>
+    <div class="card">
+        <div class="card-header">
+            <h3 class="mb-0">Authentication Status</h3>
+        </div>
+        <div class="card-body">
+            @if (AuthService.IsAuthenticated)
+            {
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle"></i> <strong>Authenticated</strong>
+                </div>
+
+                <div class="mb-3">
+                    <strong>Actor ID:</strong><br/>
+                    <code>@AuthService.CurrentActorId</code>
+                </div>
+
+                @if (AuthService.CurrentActor != null)
+                {
+                    <div class="mb-3">
+                        <strong>Name:</strong> @(AuthService.CurrentActor.Name?.FirstOrDefault() ?? "N/A")
+                    </div>
+                }
+
+                <button class="btn btn-outline-danger" @onclick="HandleLogoutAsync">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </button>
+            }
+            else
+            {
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> <strong>Anonymous Mode</strong> - You are browsing anonymously
+                </div>
+
+                <p>
+                    <a href="/login" class="btn btn-primary">
+                        <i class="bi bi-box-arrow-in-right"></i> Login
+                    </a>
+                </p>
+            }
+        </div>
     </div>
 </div>
 
 @code {
-    [CascadingParameter]
-    private ActivityPubClientProvider? provider { get; set; }
+    private string _systemUserInput = string.Empty;
+    private bool _isSaving;
+    private string? _systemUserMessage;
+    private bool _systemUserError;
 
-    private int selectedTab = 0;
-    private string actorId = string.Empty;
-    private string apiKey = string.Empty;
-    private string privateActorId = string.Empty;
-    private string privateKeyPem = string.Empty;
-    private string publicKeyId = string.Empty;
-    private string? errorMessage;
-    private string? privateKeyError;
-    private bool isConfiguring;
-
-    private async Task SignInWithApiKey()
+    protected override void OnInitialized()
     {
-        errorMessage = null;
-        isConfiguring = true;
+        _systemUserInput = AuthService.SystemUserActorId ?? string.Empty;
+    }
+
+    private async Task SaveSystemUserAsync()
+    {
+        _isSaving = true;
+        _systemUserMessage = null;
+        _systemUserError = false;
+        StateHasChanged();
 
         try
         {
-            if (!Uri.TryCreate(actorId, UriKind.Absolute, out _))
-            {
-                errorMessage = "Actor ID must be a valid URL";
-                return;
-            }
-
-            if (provider != null)
-            {
-                await provider.SetApiKeyAsync(actorId.Trim(), apiKey.Trim());
-            }
-
-            // Clear sensitive data
-            apiKey = string.Empty;
+            await AuthService.SetSystemUserAsync(_systemUserInput);
+            _systemUserMessage = "System user saved successfully!";
+            _systemUserError = false;
         }
         catch (Exception ex)
         {
-            errorMessage = $"Authentication failed: {ex.Message}";
+            _systemUserMessage = $"Error saving system user: {ex.Message}";
+            _systemUserError = true;
         }
         finally
         {
-            isConfiguring = false;
+            _isSaving = false;
+            StateHasChanged();
         }
     }
 
-    private async Task SignInWithPrivateKey()
+    private async Task ClearSystemUserAsync()
     {
-        privateKeyError = null;
-        isConfiguring = true;
+        _isSaving = true;
+        _systemUserMessage = null;
+        _systemUserError = false;
+        StateHasChanged();
 
         try
         {
-            if (!Uri.TryCreate(privateActorId, UriKind.Absolute, out _))
-            {
-                privateKeyError = "Actor ID must be a valid URL";
-                return;
-            }
-
-            if (!Uri.TryCreate(publicKeyId, UriKind.Absolute, out _))
-            {
-                privateKeyError = "Public Key ID must be a valid URL";
-                return;
-            }
-
-            if (provider != null)
-            {
-                await provider.SetPrivateKeyAsync(
-                    privateActorId.Trim(), 
-                    privateKeyPem.Trim(), 
-                    publicKeyId.Trim()
-                );
-            }
-
-            // Clear sensitive data
-            privateKeyPem = string.Empty;
+            await AuthService.SetSystemUserAsync(string.Empty);
+            _systemUserInput = string.Empty;
+            _systemUserMessage = "System user cleared.";
+            _systemUserError = false;
         }
         catch (Exception ex)
         {
-            privateKeyError = $"Authentication failed: {ex.Message}";
+            _systemUserMessage = $"Error clearing system user: {ex.Message}";
+            _systemUserError = true;
         }
         finally
         {
-            isConfiguring = false;
+            _isSaving = false;
+            StateHasChanged();
         }
     }
 
-    private void SignOut()
+    private async Task HandleLogoutAsync()
     {
-        provider?.ClearAuthentication();
-        actorId = string.Empty;
-        apiKey = string.Empty;
-        privateActorId = string.Empty;
-        privateKeyPem = string.Empty;
-        publicKeyId = string.Empty;
-        errorMessage = null;
-        privateKeyError = null;
+        await AuthService.LogoutAsync();
     }
 }

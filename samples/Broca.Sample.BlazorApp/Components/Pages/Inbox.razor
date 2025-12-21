@@ -1,0 +1,85 @@
+@page "/inbox"
+@using Microsoft.AspNetCore.Components.Web
+@using Broca.Sample.BlazorApp.Services
+@using Broca.ActivityPub.Components
+@using KristofferStrube.ActivityStreams
+@inject AuthenticationService AuthService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Inbox - Broca</PageTitle>
+
+<div class="container mt-4">
+    @if (!AuthService.IsAuthenticated)
+    {
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="mb-4">
+                    <i class="bi bi-lock" style="font-size: 3rem; color: var(--bs-secondary);"></i>
+                </div>
+                <h3>Authentication Required</h3>
+                <p class="text-muted">You need to be logged in to view your inbox.</p>
+                <a href="/login?returnUrl=/inbox" class="btn btn-primary mt-3">
+                    <i class="bi bi-box-arrow-in-right"></i> Login
+                </a>
+            </div>
+        </div>
+    }
+    else if (_inboxUrl == null)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Unable to load inbox. Your actor profile may not have an inbox configured.
+        </div>
+    }
+    else
+    {
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2 class="mb-0">Your Inbox</h2>
+                <p class="text-muted mb-0 small">Activities sent to you</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <ActivityFeed 
+                    CollectionUrl="@_inboxUrl" 
+                    Title=""
+                    PageSize="20"
+                    UseVirtualization="true"
+                    ShowObjects="true"
+                    ShowRecipients="false"
+                    EnableAutoRefresh="true"
+                    AutoRefreshInterval="30"
+                    ShowNewPostsNotification="true">
+                </ActivityFeed>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private Uri? _inboxUrl;
+
+    protected override void OnInitialized()
+    {
+        AuthService.AuthenticationStateChanged += OnAuthStateChanged;
+        UpdateInboxUrl();
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        UpdateInboxUrl();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateInboxUrl()
+    {
+        _inboxUrl = AuthService.GetInboxUrl();
+    }
+
+    public void Dispose()
+    {
+        AuthService.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}

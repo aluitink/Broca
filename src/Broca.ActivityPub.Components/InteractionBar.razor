@@ -1,0 +1,387 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-interaction-bar @CssClass">
+    @if (ShowReply)
+    {
+        <button class="interaction-button reply-button @(IsReplying ? "active" : "")" 
+                @onclick="HandleReplyClick"
+                disabled="@IsProcessing"
+                title="Reply">
+            <span class="icon">💬</span>
+            @if (ReplyCount > 0)
+            {
+                <span class="count">@FormatCount(ReplyCount)</span>
+            }
+        </button>
+    }
+
+    @if (ShowBoost)
+    {
+        <button class="interaction-button boost-button @(IsBoosted ? "active" : "")" 
+                @onclick="HandleBoostClick"
+                disabled="@(IsProcessing || !CanInteract)"
+                title="@(IsBoosted ? "Unboosted" : "Boost")">
+            <span class="icon">🔁</span>
+            @if (BoostCount > 0)
+            {
+                <span class="count">@FormatCount(BoostCount)</span>
+            }
+        </button>
+    }
+
+    @if (ShowLike)
+    {
+        <button class="interaction-button like-button @(IsLiked ? "active" : "")" 
+                @onclick="HandleLikeClick"
+                disabled="@(IsProcessing || !CanInteract)"
+                title="@(IsLiked ? "Unlike" : "Like")">
+            <span class="icon">@(IsLiked ? "❤️" : "🤍")</span>
+            @if (LikeCount > 0)
+            {
+                <span class="count">@FormatCount(LikeCount)</span>
+            }
+        </button>
+    }
+
+    @if (ShowBookmark)
+    {
+        <button class="interaction-button bookmark-button @(IsBookmarked ? "active" : "")" 
+                @onclick="HandleBookmarkClick"
+                disabled="@(IsProcessing || !CanInteract)"
+                title="@(IsBookmarked ? "Remove bookmark" : "Bookmark")">
+            <span class="icon">@(IsBookmarked ? "🔖" : "📑")</span>
+        </button>
+    }
+
+    @if (ShowShare)
+    {
+        <button class="interaction-button share-button" 
+                @onclick="HandleShareClick"
+                disabled="@IsProcessing"
+                title="Share">
+            <span class="icon">📤</span>
+        </button>
+    }
+
+    @if (ShowMore)
+    {
+        <button class="interaction-button more-button" 
+                @onclick="HandleMoreClick"
+                disabled="@IsProcessing"
+                title="More options">
+            <span class="icon">⋯</span>
+        </button>
+    }
+
+    @if (error != null)
+    {
+        <div class="interaction-error">@error</div>
+    }
+</div>
+
+@code {
+    private bool isProcessing;
+    private string? error;
+
+    /// <summary>
+    /// Gets or sets the object ID to interact with.
+    /// </summary>
+    [Parameter]
+    public string? ObjectId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the object to interact with.
+    /// </summary>
+    [Parameter]
+    public KristofferStrube.ActivityStreams.Object? Object { get; set; }
+
+    /// <summary>
+    /// Gets or sets the reply count.
+    /// </summary>
+    [Parameter]
+    public int ReplyCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the boost count.
+    /// </summary>
+    [Parameter]
+    public int BoostCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the like count.
+    /// </summary>
+    [Parameter]
+    public int LikeCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the object is liked by the current user.
+    /// </summary>
+    [Parameter]
+    public bool IsLiked { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the object is boosted by the current user.
+    /// </summary>
+    [Parameter]
+    public bool IsBoosted { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the object is bookmarked by the current user.
+    /// </summary>
+    [Parameter]
+    public bool IsBookmarked { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the user is replying.
+    /// </summary>
+    [Parameter]
+    public bool IsReplying { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the reply button.
+    /// </summary>
+    [Parameter]
+    public bool ShowReply { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the boost button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBoost { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the like button.
+    /// </summary>
+    [Parameter]
+    public bool ShowLike { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the bookmark button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBookmark { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show the share button.
+    /// </summary>
+    [Parameter]
+    public bool ShowShare { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the more options button.
+    /// </summary>
+    [Parameter]
+    public bool ShowMore { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when the reply button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnReplyClick { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when the boost button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> OnBoostClick { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when the like button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> OnLikeClick { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when the bookmark button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> OnBookmarkClick { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when the share button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnShareClick { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when the more button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnMoreClick { get; set; }
+
+    private bool IsProcessing => isProcessing;
+    
+    private bool CanInteract => Client.ActorId != null;
+
+    private async Task HandleReplyClick()
+    {
+        if (OnReplyClick.HasDelegate)
+        {
+            await OnReplyClick.InvokeAsync();
+        }
+    }
+
+    private async Task HandleLikeClick()
+    {
+        if (!CanInteract) return;
+
+        isProcessing = true;
+        error = null;
+        StateHasChanged();
+
+        try
+        {
+            var newLikedState = !IsLiked;
+            var targetObjectId = ObjectId ?? Object?.Id;
+
+            if (string.IsNullOrEmpty(targetObjectId))
+            {
+                error = "Object ID is required";
+                return;
+            }
+
+            if (newLikedState)
+            {
+                // Like the object
+                var likeActivity = Client.CreateActivityBuilder().Like(targetObjectId);
+                await Client.PostToOutboxAsync(likeActivity);
+            }
+            else
+            {
+                // Unlike - would need to track the original Like activity to Undo it
+                // For now, we'll just toggle the state
+                // TODO: Implement proper Undo Like when we track original activities
+            }
+
+            IsLiked = newLikedState;
+            LikeCount += newLikedState ? 1 : -1;
+
+            if (OnLikeClick.HasDelegate)
+            {
+                await OnLikeClick.InvokeAsync(newLikedState);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to like: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleBoostClick()
+    {
+        if (!CanInteract) return;
+
+        isProcessing = true;
+        error = null;
+        StateHasChanged();
+
+        try
+        {
+            var newBoostedState = !IsBoosted;
+            var targetObjectId = ObjectId ?? Object?.Id;
+
+            if (string.IsNullOrEmpty(targetObjectId))
+            {
+                error = "Object ID is required";
+                return;
+            }
+
+            if (newBoostedState)
+            {
+                // Boost the object
+                var announceActivity = Client.CreateActivityBuilder().Announce(targetObjectId);
+                await Client.PostToOutboxAsync(announceActivity);
+            }
+            else
+            {
+                // Unboost - would need to track the original Announce activity to Undo it
+                // For now, we'll just toggle the state
+                // TODO: Implement proper Undo Announce when we track original activities
+            }
+
+            IsBoosted = newBoostedState;
+            BoostCount += newBoostedState ? 1 : -1;
+
+            if (OnBoostClick.HasDelegate)
+            {
+                await OnBoostClick.InvokeAsync(newBoostedState);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to boost: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleBookmarkClick()
+    {
+        if (!CanInteract) return;
+
+        isProcessing = true;
+        error = null;
+        StateHasChanged();
+
+        try
+        {
+            var newBookmarkedState = !IsBookmarked;
+            IsBookmarked = newBookmarkedState;
+
+            if (OnBookmarkClick.HasDelegate)
+            {
+                await OnBookmarkClick.InvokeAsync(newBookmarkedState);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to bookmark: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleShareClick()
+    {
+        if (OnShareClick.HasDelegate)
+        {
+            await OnShareClick.InvokeAsync();
+        }
+    }
+
+    private async Task HandleMoreClick()
+    {
+        if (OnMoreClick.HasDelegate)
+        {
+            await OnMoreClick.InvokeAsync();
+        }
+    }
+
+    private string FormatCount(int count)
+    {
+        if (count < 1000)
+            return count.ToString();
+        if (count < 1000000)
+            return $"{count / 1000.0:F1}K";
+        return $"{count / 1000000.0:F1}M";
+    }
+}

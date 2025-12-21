@@ -1,0 +1,201 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-document @CssClass">
+    @if (Document != null)
+    {
+        <div class="document-card @(IsCompact ? "compact" : "")">
+            <div class="document-icon">
+                @GetDocumentIcon()
+            </div>
+
+            <div class="document-info">
+                @if (!string.IsNullOrEmpty(GetDocumentName()))
+                {
+                    <div class="document-name">@GetDocumentName()</div>
+                }
+
+                @if (ShowMetadata)
+                {
+                    <div class="document-metadata">
+                        @if (!string.IsNullOrEmpty(Document.MediaType))
+                        {
+                            <span class="metadata-item">@GetFileType()</span>
+                        }
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(GetDescription()))
+                {
+                    <div class="document-description">@GetDescription()</div>
+                }
+            </div>
+
+            <div class="document-actions">
+                @if (!string.IsNullOrEmpty(GetDocumentUrl()))
+                {
+                    <a href="@GetDocumentUrl()" 
+                       class="document-download-button"
+                       download="@GetDownloadFileName()"
+                       target="_blank"
+                       rel="noopener noreferrer">
+                        @DownloadButtonText
+                    </a>
+                }
+            </div>
+        </div>
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Document)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Document object to render.
+    /// </summary>
+    [Parameter]
+    public Document? Document { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show metadata.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to use compact display.
+    /// </summary>
+    [Parameter]
+    public bool IsCompact { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the download button text.
+    /// </summary>
+    [Parameter]
+    public string DownloadButtonText { get; set; } = "Download";
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Document>? AdditionalContent { get; set; }
+
+    private string GetDocumentUrl()
+    {
+        if (Document?.Url?.Any() == true)
+        {
+            var urlLink = Document.Url.FirstOrDefault();
+            if (urlLink?.Href != null)
+            {
+                return urlLink.Href.ToString();
+            }
+        }
+        return string.Empty;
+    }
+
+    private string GetDocumentName()
+    {
+        return Document?.Name?.FirstOrDefault() ?? "Document";
+    }
+
+    private string GetDescription()
+    {
+        return Document?.Summary?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetDownloadFileName()
+    {
+        var name = GetDocumentName();
+        var extension = GetFileExtension();
+        
+        if (!string.IsNullOrEmpty(extension) && !name.EndsWith(extension))
+        {
+            return $"{name}{extension}";
+        }
+        
+        return name;
+    }
+
+    private string GetFileType()
+    {
+        var mediaType = Document?.MediaType?.ToUpper();
+        
+        if (string.IsNullOrEmpty(mediaType))
+            return "FILE";
+        
+        if (mediaType.Contains("PDF"))
+            return "PDF";
+        if (mediaType.Contains("WORD") || mediaType.Contains("DOCX"))
+            return "DOC";
+        if (mediaType.Contains("EXCEL") || mediaType.Contains("XLSX"))
+            return "XLS";
+        if (mediaType.Contains("POWERPOINT") || mediaType.Contains("PPTX"))
+            return "PPT";
+        if (mediaType.Contains("TEXT"))
+            return "TXT";
+        if (mediaType.Contains("ZIP"))
+            return "ZIP";
+        
+        return mediaType.Split('/').LastOrDefault()?.ToUpper() ?? "FILE";
+    }
+
+    private string GetFileExtension()
+    {
+        var mediaType = Document?.MediaType;
+        
+        if (string.IsNullOrEmpty(mediaType))
+            return string.Empty;
+        
+        return mediaType switch
+        {
+            "application/pdf" => ".pdf",
+            "application/msword" => ".doc",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ".docx",
+            "application/vnd.ms-excel" => ".xls",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => ".xlsx",
+            "text/plain" => ".txt",
+            "application/zip" => ".zip",
+            _ => string.Empty
+        };
+    }
+
+    private string GetDocumentIcon()
+    {
+        var fileType = GetFileType();
+        
+        return fileType switch
+        {
+            "PDF" => "📄",
+            "DOC" => "📝",
+            "XLS" => "📊",
+            "PPT" => "📽️",
+            "TXT" => "📃",
+            "ZIP" => "🗜️",
+            _ => "📁"
+        };
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        double len = bytes;
+        int order = 0;
+        
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        
+        return $"{len:0.##} {sizes[order]}";
+    }
+}

@@ -1,0 +1,121 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-image @CssClass">
+    @if (Image != null)
+    {
+        @if (!string.IsNullOrEmpty(GetImageUrl()))
+        {
+            <figure class="image-figure">
+                <img src="@GetImageUrl()" 
+                     alt="@GetAltText()"
+                     loading="lazy"
+                     class="image-content @(FullWidth ? "full-width" : "")"
+                     @onclick="HandleClick" />
+                
+                @if (ShowCaption && !string.IsNullOrEmpty(GetCaption()))
+                {
+                    <figcaption class="image-caption">
+                        @GetCaption()
+                    </figcaption>
+                }
+
+                @if (ShowMetadata)
+                {
+                    <div class="image-metadata">
+                        @if (!string.IsNullOrEmpty(Image.MediaType))
+                        {
+                            <span class="metadata-item">@Image.MediaType</span>
+                        }
+                    </div>
+                }
+            </figure>
+        }
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Image)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Image object to render.
+    /// </summary>
+    [Parameter]
+    public Image? Image { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the caption.
+    /// </summary>
+    [Parameter]
+    public bool ShowCaption { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show metadata.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to display at full width.
+    /// </summary>
+    [Parameter]
+    public bool FullWidth { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Image>? AdditionalContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when the image is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnClick { get; set; }
+
+    private string GetImageUrl()
+    {
+        if (Image?.Url?.Any() == true)
+        {
+            var urlLink = Image.Url.FirstOrDefault();
+            if (urlLink?.Href != null)
+            {
+                return urlLink.Href.ToString();
+            }
+        }
+        return string.Empty;
+    }
+
+    private string GetAltText()
+    {
+        return Image?.Name?.FirstOrDefault() ?? "Image";
+    }
+
+    private string GetCaption()
+    {
+        if (Image?.Name?.Any() == true)
+            return Image.Name.First();
+        
+        if (Image?.Summary?.Any() == true)
+            return Image.Summary.First();
+        
+        return string.Empty;
+    }
+
+    private async Task HandleClick()
+    {
+        if (OnClick.HasDelegate)
+        {
+            await OnClick.InvokeAsync();
+        }
+    }
+}

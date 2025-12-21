@@ -1,0 +1,265 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-followers-list @CssClass">
+    @if (!string.IsNullOrEmpty(Title))
+    {
+        <div class="list-header">
+            <h3>@Title</h3>
+            @if (totalCount.HasValue)
+            {
+                <span class="list-count">@totalCount.Value followers</span>
+            }
+        </div>
+    }
+
+    @if (FollowersUrl != null)
+    {
+        <CollectionLoader TItem="KristofferStrube.ActivityStreams.Object" 
+                         CollectionUrl="@FollowersUrl" 
+                         PageSize="@PageSize"
+                         UseVirtualization="@UseVirtualization">
+            <ItemTemplate Context="follower">
+                @if (ActorTemplate != null)
+                {
+                    @ActorTemplate(follower)
+                }
+                else
+                {
+                    <div class="follower-item">
+                        <ActorRenderer Actor="@follower" ShowDetails="false" />
+                        
+                        @if (ShowFollowButton && Client.ActorId != null)
+                        {
+                            <div class="follower-actions">
+                                @if (IsFollowing(follower))
+                                {
+                                    <button class="follow-button following" 
+                                            @onclick="() => HandleUnfollowClick(follower)"
+                                            disabled="@IsProcessing(follower)">
+                                        Following
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="follow-button" 
+                                            @onclick="() => HandleFollowClick(follower)"
+                                            disabled="@IsProcessing(follower)">
+                                        Follow Back
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </ItemTemplate>
+            <LoadingTemplate>
+                @if (LoadingTemplate != null)
+                {
+                    @LoadingTemplate
+                }
+                else
+                {
+                    <div class="list-loading">Loading followers...</div>
+                }
+            </LoadingTemplate>
+            <EmptyTemplate>
+                @if (EmptyTemplate != null)
+                {
+                    @EmptyTemplate
+                }
+                else
+                {
+                    <div class="list-empty">
+                        <p>No followers yet</p>
+                    </div>
+                }
+            </EmptyTemplate>
+            <ErrorTemplate Context="error">
+                @if (ErrorTemplate != null)
+                {
+                    @ErrorTemplate(error)
+                }
+                else
+                {
+                    <div class="list-error">@error</div>
+                }
+            </ErrorTemplate>
+        </CollectionLoader>
+    }
+    else
+    {
+        <div class="list-error">
+            <p>No followers URL specified</p>
+        </div>
+    }
+</div>
+
+@code {
+    private int? totalCount = null;
+    private HashSet<string> followingIds = new();
+    private HashSet<string> processingIds = new();
+
+    /// <summary>
+    /// Gets or sets the followers collection URL.
+    /// </summary>
+    [Parameter]
+    public Uri? FollowersUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the actor whose followers to display.
+    /// </summary>
+    [Parameter]
+    public KristofferStrube.ActivityStreams.Object? Actor { get; set; }
+
+    /// <summary>
+    /// Gets or sets the title of the list.
+    /// </summary>
+    [Parameter]
+    public string? Title { get; set; } = "Followers";
+
+    /// <summary>
+    /// Gets or sets the page size.
+    /// </summary>
+    [Parameter]
+    public int PageSize { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets whether to use virtualization.
+    /// </summary>
+    [Parameter]
+    public bool UseVirtualization { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show follow buttons.
+    /// </summary>
+    [Parameter]
+    public bool ShowFollowButton { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom template for rendering actors.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? ActorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loading template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the empty state template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? EmptyTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when follow state changes.
+    /// </summary>
+    [Parameter]
+    public EventCallback<(KristofferStrube.ActivityStreams.Object Actor, bool IsFollowing)> OnFollowStateChanged { get; set; }
+
+    protected override Task OnParametersSetAsync()
+    {
+        if (Actor != null && FollowersUrl == null)
+        {
+            // Try to extract followers URL from Actor
+            if (Actor is Person person && person.Followers != null)
+            {
+                var followersLink = person.Followers as Link;
+                if (followersLink?.Href != null)
+                {
+                    FollowersUrl = followersLink.Href;
+                }
+            }
+        }
+
+        // TODO: Load the current user's following list to check who they follow
+        // This would require an API call to get the authenticated user's following collection
+
+        return Task.CompletedTask;
+    }
+
+    private bool IsFollowing(KristofferStrube.ActivityStreams.Object follower)
+    {
+        return follower.Id != null && followingIds.Contains(follower.Id);
+    }
+
+    private bool IsProcessing(KristofferStrube.ActivityStreams.Object follower)
+    {
+        return follower.Id != null && processingIds.Contains(follower.Id);
+    }
+
+    private async Task HandleFollowClick(KristofferStrube.ActivityStreams.Object follower)
+    {
+        if (follower.Id == null) return;
+
+        processingIds.Add(follower.Id);
+        StateHasChanged();
+
+        try
+        {
+            var followActivity = Client.CreateActivityBuilder().Follow(follower.Id);
+            await Client.PostToOutboxAsync(followActivity);
+
+            followingIds.Add(follower.Id);
+
+            if (OnFollowStateChanged.HasDelegate)
+            {
+                await OnFollowStateChanged.InvokeAsync((follower, true));
+            }
+        }
+        catch (Exception)
+        {
+            // TODO: Show error message
+        }
+        finally
+        {
+            processingIds.Remove(follower.Id);
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleUnfollowClick(KristofferStrube.ActivityStreams.Object follower)
+    {
+        if (follower.Id == null) return;
+
+        processingIds.Add(follower.Id);
+        StateHasChanged();
+
+        try
+        {
+            // TODO: Need to track the original Follow activity to Undo it
+            // For now, just remove from local state
+            followingIds.Remove(follower.Id);
+
+            if (OnFollowStateChanged.HasDelegate)
+            {
+                await OnFollowStateChanged.InvokeAsync((follower, false));
+            }
+        }
+        catch (Exception)
+        {
+            // TODO: Show error message
+        }
+        finally
+        {
+            processingIds.Remove(follower.Id);
+            StateHasChanged();
+        }
+    }
+}

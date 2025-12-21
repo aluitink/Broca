@@ -1,0 +1,161 @@
+@page "/login"
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using Broca.Sample.BlazorApp.Services
+@using System.ComponentModel.DataAnnotations
+@inject AuthenticationService AuthService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Login - Broca Sample</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">Login to Broca</h3>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Load your identity from a JSON file to authenticate.</p>
+
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            @_errorMessage
+                            <button type="button" class="btn-close" @onclick="() => _errorMessage = null"></button>
+                        </div>
+                    }
+
+                    @if (_isLoading)
+                    {
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Authenticating...</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="mb-4">
+                            <label for="identityFile" class="form-label">Identity File (JSON)</label>
+                            <InputFile id="identityFile" class="form-control" OnChange="@HandleFileSelected" accept=".json" />
+                            <div class="form-text">
+                                Select a JSON file containing your actor ID and private key.
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-primary" @onclick="HandleLoginAsync" disabled="@(_selectedFile == null || _isLoading)">
+                                Login
+                            </button>
+                            
+                            <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/")'>
+                                Cancel
+                            </button>
+                        </div>
+                    }
+
+                    <hr class="my-4" />
+
+                    <div class="alert alert-info">
+                        <h5 class="alert-heading">
+                            <i class="bi bi-info-circle"></i> About Identity Files
+                        </h5>
+                        <p class="mb-2">Your identity file should be a JSON file containing:</p>
+                        <ul class="mb-2">
+                            <li><code>ActorId</code>: Your ActivityPub actor URL</li>
+                            <li><code>PrivateKey</code>: Your RSA private key (PEM format)</li>
+                            <li><code>PublicKey</code>: Your RSA public key (PEM format)</li>
+                            <li><code>Username</code>: Your username</li>
+                            <li><code>Domain</code>: Your domain</li>
+                        </ul>
+                        <p class="mb-0 small">
+                            <strong>Security Note:</strong> Your private key is stored locally in your browser and never sent to any server.
+                        </p>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(AuthService.SystemUserActorId))
+                    {
+                        <div class="mt-3">
+                            <p class="text-muted small">
+                                <strong>System User:</strong> @AuthService.SystemUserActorId
+                            </p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IBrowserFile? _selectedFile;
+    private bool _isLoading;
+    private string? _errorMessage;
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // If already authenticated, redirect to home or return URL
+        if (AuthService.IsAuthenticated)
+        {
+            var redirectUrl = string.IsNullOrEmpty(ReturnUrl) ? "/" : ReturnUrl;
+            Navigation.NavigateTo(redirectUrl);
+        }
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+        _errorMessage = null;
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        if (_selectedFile == null)
+        {
+            _errorMessage = "Please select an identity file.";
+            return;
+        }
+
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            // Read the file content
+            using var stream = _selectedFile.OpenReadStream(maxAllowedSize: 1024 * 1024); // 1MB max
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+
+            // Attempt to login
+            var success = await AuthService.LoginAsync(content);
+
+            if (success)
+            {
+                // Navigate to return URL or home
+                var redirectUrl = string.IsNullOrEmpty(ReturnUrl) ? "/" : ReturnUrl;
+                Navigation.NavigateTo(redirectUrl);
+            }
+            else
+            {
+                _errorMessage = "Failed to authenticate. Please check your identity file and try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error loading identity: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

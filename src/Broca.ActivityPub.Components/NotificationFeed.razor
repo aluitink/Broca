@@ -1,0 +1,434 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-notification-feed @CssClass">
+    @if (!string.IsNullOrEmpty(Title))
+    {
+        <div class="notification-header">
+            <h3>@Title</h3>
+            @if (unreadCount > 0)
+            {
+                <span class="unread-badge">@unreadCount</span>
+            }
+        </div>
+    }
+
+    @if (ShowFilters)
+    {
+        <div class="notification-filters">
+            <button class="filter-button @(activeFilter == NotificationFilter.All ? "active" : "")" 
+                    @onclick='() => SetFilter(NotificationFilter.All)'>
+                All
+            </button>
+            <button class="filter-button @(activeFilter == NotificationFilter.Mentions ? "active" : "")" 
+                    @onclick='() => SetFilter(NotificationFilter.Mentions)'>
+                💬 Mentions
+            </button>
+            <button class="filter-button @(activeFilter == NotificationFilter.Likes ? "active" : "")" 
+                    @onclick='() => SetFilter(NotificationFilter.Likes)'>
+                ❤️ Likes
+            </button>
+            <button class="filter-button @(activeFilter == NotificationFilter.Boosts ? "active" : "")" 
+                    @onclick='() => SetFilter(NotificationFilter.Boosts)'>
+                🔁 Boosts
+            </button>
+            <button class="filter-button @(activeFilter == NotificationFilter.Follows ? "active" : "")" 
+                    @onclick='() => SetFilter(NotificationFilter.Follows)'>
+                👤 Follows
+            </button>
+        </div>
+    }
+
+    @if (isLoading && !notifications.Any())
+    {
+        @if (LoadingTemplate != null)
+        {
+            @LoadingTemplate
+        }
+        else
+        {
+            <div class="notification-loading">Loading notifications...</div>
+        }
+    }
+
+    @if (error != null)
+    {
+        @if (ErrorTemplate != null)
+        {
+            @ErrorTemplate(error)
+        }
+        else
+        {
+            <div class="notification-error">@error</div>
+        }
+    }
+
+    <div class="notification-list">
+        @foreach (var notification in GetFilteredNotifications())
+        {
+            <div class="notification-item @(notification.IsRead ? "" : "unread") @GetNotificationTypeClass(notification)">
+                @if (NotificationTemplate != null)
+                {
+                    @NotificationTemplate(notification)
+                }
+                else
+                {
+                    <div class="notification-content" @onclick="() => HandleNotificationClick(notification)">
+                        <div class="notification-icon">@GetNotificationIcon(notification)</div>
+                        <div class="notification-body">
+                            <div class="notification-text">
+                                <strong>@GetActorName(notification.Actor)</strong>
+                                <span>@GetNotificationText(notification)</span>
+                            </div>
+                            @if (notification.Object != null)
+                            {
+                                <div class="notification-preview">
+                                    @RenderNotificationPreview(notification)
+                                </div>
+                            }
+                            <div class="notification-time">
+                                @FormatTime(notification.Timestamp)
+                            </div>
+                        </div>
+                        @if (!notification.IsRead)
+                        {
+                            <div class="unread-indicator"></div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @if (!notifications.Any() && !isLoading)
+    {
+        @if (EmptyTemplate != null)
+        {
+            @EmptyTemplate
+        }
+        else
+        {
+            <div class="notification-empty">
+                <p>No notifications</p>
+            </div>
+        }
+    }
+
+    @if (ShowLoadMore && hasMore)
+    {
+        <div class="notification-load-more">
+            <button @onclick="LoadMoreAsync" disabled="@isLoading" class="load-more-button">
+                @if (isLoading)
+                {
+                    <span>Loading...</span>
+                }
+                else
+                {
+                    <span>Load more</span>
+                }
+            </button>
+        </div>
+    }
+
+    @if (ShowMarkAllRead && unreadCount > 0)
+    {
+        <div class="notification-actions">
+            <button @onclick="MarkAllAsReadAsync" disabled="@isProcessing" class="mark-read-button">
+                Mark all as read
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Notification> notifications = new();
+    private bool isLoading;
+    private bool isProcessing;
+    private bool hasMore = true;
+    private string? error;
+    private NotificationFilter activeFilter = NotificationFilter.All;
+    private int unreadCount = 0;
+    private int currentPage = 0;
+
+    /// <summary>
+    /// Gets or sets the title of the feed.
+    /// </summary>
+    [Parameter]
+    public string? Title { get; set; } = "Notifications";
+
+    /// <summary>
+    /// Gets or sets the page size for loading notifications.
+    /// </summary>
+    [Parameter]
+    public int PageSize { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets whether to show filters.
+    /// </summary>
+    [Parameter]
+    public bool ShowFilters { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show load more button.
+    /// </summary>
+    [Parameter]
+    public bool ShowLoadMore { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show mark all as read button.
+    /// </summary>
+    [Parameter]
+    public bool ShowMarkAllRead { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to enable auto-refresh.
+    /// </summary>
+    [Parameter]
+    public bool AutoRefresh { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the auto-refresh interval in seconds.
+    /// </summary>
+    [Parameter]
+    public int RefreshInterval { get; set; } = 30;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom notification rendering template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Notification>? NotificationTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loading template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the empty state template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? EmptyTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when a notification is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<Notification> OnNotificationClick { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNotificationsAsync();
+
+        if (AutoRefresh)
+        {
+            // TODO: Implement timer for auto-refresh
+        }
+    }
+
+    private async Task LoadNotificationsAsync()
+    {
+        if (isLoading) return;
+
+        isLoading = true;
+        error = null;
+        StateHasChanged();
+
+        try
+        {
+            // TODO: This would need a proper inbox or notifications API endpoint
+            // For now, this is a placeholder
+            // In a real implementation, you'd fetch from the user's inbox and parse notification types
+            await Task.Delay(500); // Simulate loading
+            hasMore = false;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load notifications: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        currentPage++;
+        await LoadNotificationsAsync();
+    }
+
+    private void SetFilter(NotificationFilter filter)
+    {
+        activeFilter = filter;
+        StateHasChanged();
+    }
+
+    private IEnumerable<Notification> GetFilteredNotifications()
+    {
+        return activeFilter switch
+        {
+            NotificationFilter.Mentions => notifications.Where(n => n.Type == NotificationType.Mention),
+            NotificationFilter.Likes => notifications.Where(n => n.Type == NotificationType.Like),
+            NotificationFilter.Boosts => notifications.Where(n => n.Type == NotificationType.Boost),
+            NotificationFilter.Follows => notifications.Where(n => n.Type == NotificationType.Follow),
+            _ => notifications
+        };
+    }
+
+    private string GetNotificationTypeClass(Notification notification)
+    {
+        return $"notification-type-{notification.Type.ToString().ToLower()}";
+    }
+
+    private string GetNotificationIcon(Notification notification)
+    {
+        return notification.Type switch
+        {
+            NotificationType.Like => "❤️",
+            NotificationType.Boost => "🔁",
+            NotificationType.Follow => "👤",
+            NotificationType.Mention => "💬",
+            NotificationType.Reply => "↩️",
+            _ => "📬"
+        };
+    }
+
+    private string GetActorName(KristofferStrube.ActivityStreams.Object? actor)
+    {
+        if (actor is Person person && person.Name?.Any() == true)
+            return person.Name.First();
+        return actor?.Name?.FirstOrDefault() ?? "Someone";
+    }
+
+    private string GetNotificationText(Notification notification)
+    {
+        return notification.Type switch
+        {
+            NotificationType.Like => "liked your post",
+            NotificationType.Boost => "boosted your post",
+            NotificationType.Follow => "started following you",
+            NotificationType.Mention => "mentioned you",
+            NotificationType.Reply => "replied to your post",
+            _ => "interacted with you"
+        };
+    }
+
+    private RenderFragment RenderNotificationPreview(Notification notification)
+    {
+        return builder =>
+        {
+            if (notification.Object is Note note && note.Content?.Any() == true)
+            {
+                var content = note.Content.First();
+                var preview = content.Length > 100 ? content.Substring(0, 100) + "..." : content;
+                builder.AddContent(0, preview);
+            }
+        };
+    }
+
+    private async Task HandleNotificationClick(Notification notification)
+    {
+        if (!notification.IsRead)
+        {
+            notification.IsRead = true;
+            unreadCount--;
+            StateHasChanged();
+        }
+
+        if (OnNotificationClick.HasDelegate)
+        {
+            await OnNotificationClick.InvokeAsync(notification);
+        }
+    }
+
+    private Task MarkAllAsReadAsync()
+    {
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            foreach (var notification in notifications.Where(n => !n.IsRead))
+            {
+                notification.IsRead = true;
+            }
+            unreadCount = 0;
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private string FormatTime(DateTimeOffset time)
+    {
+        var diff = DateTimeOffset.UtcNow - time;
+        
+        if (diff.TotalMinutes < 1)
+            return "just now";
+        if (diff.TotalMinutes < 60)
+            return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24)
+            return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7)
+            return $"{(int)diff.TotalDays}d ago";
+        
+        return time.ToString("MMM d");
+    }
+
+    /// <summary>
+    /// Refreshes the notification feed.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        notifications.Clear();
+        currentPage = 0;
+        await LoadNotificationsAsync();
+    }
+
+    public enum NotificationFilter
+    {
+        All,
+        Mentions,
+        Likes,
+        Boosts,
+        Follows
+    }
+
+    public enum NotificationType
+    {
+        Like,
+        Boost,
+        Follow,
+        Mention,
+        Reply
+    }
+
+    public class Notification
+    {
+        public string Id { get; set; } = string.Empty;
+        public NotificationType Type { get; set; }
+        public KristofferStrube.ActivityStreams.Object? Actor { get; set; }
+        public KristofferStrube.ActivityStreams.Object? Object { get; set; }
+        public DateTimeOffset Timestamp { get; set; }
+        public bool IsRead { get; set; }
+    }
+}

@@ -1,0 +1,172 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-video @CssClass">
+    @if (Video != null && !string.IsNullOrEmpty(GetVideoUrl()))
+    {
+        <figure class="video-figure">
+            <video class="video-player @(FullWidth ? "full-width" : "")"
+                   controls="@ShowControls"
+                   autoplay="@AutoPlay"
+                   loop="@Loop"
+                   muted="@Muted"
+                   preload="@PreloadMode"
+                   poster="@GetPosterUrl()">
+                <source src="@GetVideoUrl()" type="@GetMediaType()" />
+                Your browser does not support the video tag.
+            </video>
+
+            @if (ShowCaption && !string.IsNullOrEmpty(GetCaption()))
+            {
+                <figcaption class="video-caption">
+                    @GetCaption()
+                </figcaption>
+            }
+
+            @if (ShowMetadata)
+            {
+                <div class="video-metadata">
+                    @if (Video.Duration.HasValue)
+                    {
+                        <span class="metadata-item">⏱ @FormatDuration(Video.Duration.Value)</span>
+                    }
+                    @if (!string.IsNullOrEmpty(Video.MediaType))
+                    {
+                        <span class="metadata-item">@Video.MediaType</span>
+                    }
+                </div>
+            }
+        </figure>
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Video)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Video object to render.
+    /// </summary>
+    [Parameter]
+    public Video? Video { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show controls.
+    /// </summary>
+    [Parameter]
+    public bool ShowControls { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the caption.
+    /// </summary>
+    [Parameter]
+    public bool ShowCaption { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show metadata.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to auto-play.
+    /// </summary>
+    [Parameter]
+    public bool AutoPlay { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to loop.
+    /// </summary>
+    [Parameter]
+    public bool Loop { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to mute by default.
+    /// </summary>
+    [Parameter]
+    public bool Muted { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to display at full width.
+    /// </summary>
+    [Parameter]
+    public bool FullWidth { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the preload mode (none, metadata, auto).
+    /// </summary>
+    [Parameter]
+    public string PreloadMode { get; set; } = "metadata";
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Video>? AdditionalContent { get; set; }
+
+    private string GetVideoUrl()
+    {
+        if (Video?.Url?.Any() == true)
+        {
+            var urlLink = Video.Url.FirstOrDefault();
+            if (urlLink?.Href != null)
+            {
+                return urlLink.Href.ToString();
+            }
+        }
+        return string.Empty;
+    }
+
+    private string GetPosterUrl()
+    {
+        if (Video?.Image?.Any() == true)
+        {
+            var image = Video.Image.First();
+            if (image is Image img && img.Url?.Any() == true)
+            {
+                var urlLink = img.Url.FirstOrDefault();
+                if (urlLink?.Href != null)
+                {
+                    return urlLink.Href.ToString();
+                }
+            }
+            else if (image is Link link && link.Href != null)
+            {
+                return link.Href.ToString();
+            }
+        }
+        return string.Empty;
+    }
+
+    private string GetMediaType()
+    {
+        return Video?.MediaType ?? "video/mp4";
+    }
+
+    private string GetCaption()
+    {
+        if (Video?.Name?.Any() == true)
+            return Video.Name.First();
+        
+        if (Video?.Summary?.Any() == true)
+            return Video.Summary.First();
+        
+        return string.Empty;
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+            return $"{(int)duration.TotalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+        
+        return $"{duration.Minutes}:{duration.Seconds:D2}";
+    }
+}

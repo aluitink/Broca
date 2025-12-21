@@ -1,4 +1,5 @@
 @using KristofferStrube.ActivityStreams
+@using Microsoft.AspNetCore.Components.Rendering
 @inherits ComponentBase
 
 <div class="activitypub-note @CssClass">
@@ -103,10 +104,226 @@
     {
         return builder =>
         {
-            builder.OpenElement(0, "div");
-            builder.AddAttribute(1, "class", "attachment");
-            builder.AddContent(2, attachment.GetType().Name);
+            var sequence = 0;
+            
+            // Handle Image attachments
+            if (attachment is Image image)
+            {
+                RenderImage(builder, ref sequence, image);
+                return;
+            }
+
+            // Handle Video attachments
+            if (attachment is Video video)
+            {
+                RenderVideo(builder, ref sequence, video);
+                return;
+            }
+
+            // Handle Audio attachments
+            if (attachment is Audio audio)
+            {
+                RenderAudio(builder, ref sequence, audio);
+                return;
+            }
+
+            // Handle Document attachments
+            if (attachment is Document document)
+            {
+                RenderDocument(builder, ref sequence, document);
+                return;
+            }
+
+            // Handle Link attachments
+            if (attachment is Link link)
+            {
+                RenderLink(builder, ref sequence, link);
+                return;
+            }
+
+            // Fallback for unknown types
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "attachment-unknown");
+            builder.AddContent(sequence++, $"[{attachment.GetType().Name}]");
             builder.CloseElement();
         };
+    }
+
+    private void RenderImage(RenderTreeBuilder builder, ref int sequence, Image image)
+    {
+        var imageUrl = ExtractUrl(image);
+        var imageName = image.Name?.FirstOrDefault() ?? "Image";
+        
+        if (!string.IsNullOrEmpty(imageUrl))
+        {
+            builder.OpenElement(sequence++, "figure");
+            builder.AddAttribute(sequence++, "class", "attachment-image");
+            
+            builder.OpenElement(sequence++, "img");
+            builder.AddAttribute(sequence++, "src", imageUrl);
+            builder.AddAttribute(sequence++, "alt", imageName);
+            builder.AddAttribute(sequence++, "loading", "lazy");
+            builder.CloseElement();
+            
+            if (!string.IsNullOrEmpty(imageName) && imageName != "Image")
+            {
+                builder.OpenElement(sequence++, "figcaption");
+                builder.AddContent(sequence++, imageName);
+                builder.CloseElement();
+            }
+            
+            builder.CloseElement(); // figure
+        }
+    }
+
+    private void RenderVideo(RenderTreeBuilder builder, ref int sequence, Video video)
+    {
+        var videoUrl = ExtractUrl(video);
+        var videoName = video.Name?.FirstOrDefault() ?? "Video";
+        
+        if (!string.IsNullOrEmpty(videoUrl))
+        {
+            builder.OpenElement(sequence++, "figure");
+            builder.AddAttribute(sequence++, "class", "attachment-video");
+            
+            builder.OpenElement(sequence++, "video");
+            builder.AddAttribute(sequence++, "controls", true);
+            builder.AddAttribute(sequence++, "preload", "metadata");
+            
+            builder.OpenElement(sequence++, "source");
+            builder.AddAttribute(sequence++, "src", videoUrl);
+            if (video.MediaType != null)
+            {
+                builder.AddAttribute(sequence++, "type", video.MediaType);
+            }
+            builder.CloseElement(); // source
+            
+            builder.AddContent(sequence++, "Your browser does not support the video tag.");
+            builder.CloseElement(); // video
+            
+            if (!string.IsNullOrEmpty(videoName) && videoName != "Video")
+            {
+                builder.OpenElement(sequence++, "figcaption");
+                builder.AddContent(sequence++, videoName);
+                builder.CloseElement();
+            }
+            
+            builder.CloseElement(); // figure
+        }
+    }
+
+    private void RenderAudio(RenderTreeBuilder builder, ref int sequence, Audio audio)
+    {
+        var audioUrl = ExtractUrl(audio);
+        var audioName = audio.Name?.FirstOrDefault() ?? "Audio";
+        
+        if (!string.IsNullOrEmpty(audioUrl))
+        {
+            builder.OpenElement(sequence++, "figure");
+            builder.AddAttribute(sequence++, "class", "attachment-audio");
+            
+            builder.OpenElement(sequence++, "audio");
+            builder.AddAttribute(sequence++, "controls", true);
+            builder.AddAttribute(sequence++, "preload", "metadata");
+            
+            builder.OpenElement(sequence++, "source");
+            builder.AddAttribute(sequence++, "src", audioUrl);
+            if (audio.MediaType != null)
+            {
+                builder.AddAttribute(sequence++, "type", audio.MediaType);
+            }
+            builder.CloseElement(); // source
+            
+            builder.AddContent(sequence++, "Your browser does not support the audio tag.");
+            builder.CloseElement(); // audio
+            
+            if (!string.IsNullOrEmpty(audioName) && audioName != "Audio")
+            {
+                builder.OpenElement(sequence++, "figcaption");
+                builder.AddContent(sequence++, audioName);
+                builder.CloseElement();
+            }
+            
+            builder.CloseElement(); // figure
+        }
+    }
+
+    private void RenderDocument(RenderTreeBuilder builder, ref int sequence, Document document)
+    {
+        var docUrl = ExtractUrl(document);
+        var docName = document.Name?.FirstOrDefault() ?? "Document";
+        
+        if (!string.IsNullOrEmpty(docUrl))
+        {
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "attachment-document");
+            
+            builder.OpenElement(sequence++, "a");
+            builder.AddAttribute(sequence++, "href", docUrl);
+            builder.AddAttribute(sequence++, "target", "_blank");
+            builder.AddAttribute(sequence++, "rel", "noopener noreferrer");
+            builder.AddAttribute(sequence++, "class", "document-link");
+            
+            builder.OpenElement(sequence++, "span");
+            builder.AddAttribute(sequence++, "class", "document-icon");
+            builder.AddContent(sequence++, "📄");
+            builder.CloseElement();
+            
+            builder.AddContent(sequence++, " ");
+            builder.AddContent(sequence++, docName);
+            
+            if (!string.IsNullOrEmpty(document.MediaType))
+            {
+                builder.OpenElement(sequence++, "span");
+                builder.AddAttribute(sequence++, "class", "document-type");
+                builder.AddContent(sequence++, $" ({document.MediaType})");
+                builder.CloseElement();
+            }
+            
+            builder.CloseElement(); // a
+            builder.CloseElement(); // div
+        }
+    }
+
+    private void RenderLink(RenderTreeBuilder builder, ref int sequence, Link link)
+    {
+        var linkUrl = link.Href?.ToString() ?? string.Empty;
+        var linkName = link.Name?.FirstOrDefault() ?? linkUrl;
+        
+        if (!string.IsNullOrEmpty(linkUrl))
+        {
+            builder.OpenElement(sequence++, "a");
+            builder.AddAttribute(sequence++, "href", linkUrl);
+            builder.AddAttribute(sequence++, "target", "_blank");
+            builder.AddAttribute(sequence++, "rel", "noopener noreferrer");
+            builder.AddAttribute(sequence++, "class", "attachment-link");
+            builder.AddContent(sequence++, linkName);
+            builder.CloseElement();
+        }
+    }
+
+    private string ExtractUrl(KristofferStrube.ActivityStreams.Object obj)
+    {
+        // Try to get URL from Url property
+        if (obj.Url?.Any() == true)
+        {
+            var firstUrl = obj.Url.First();
+            if (firstUrl is Link link && link.Href != null)
+            {
+                return link.Href.ToString();
+            }
+        }
+
+        // For Image/Video/Audio, also check direct Url property on those types
+        if (obj is Image image && image.Url?.Any() == true)
+        {
+            var urlLink = image.Url.FirstOrDefault();
+            if (urlLink?.Href != null)
+            {
+                return urlLink.Href.ToString();
+            }
+        }
+
+        return string.Empty;
     }
 }

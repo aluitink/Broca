@@ -1,5 +1,3 @@
-@using KristofferStrube.ActivityStreams
-@using Broca.ActivityPub.Core.Interfaces
 @inject IActivityPubClient Client
 
 <div class="activitypub-actor-profile @CssClass">
@@ -33,7 +31,72 @@
         }
         else
         {
-            <ActorRenderer Actor="@actor" ShowDetails="@ShowDetails" />
+            <div class="profile-content">
+                <ActorRenderer Actor="@actor" ShowDetails="@ShowDetails" />
+                
+                @if (ShowFollowButton && CanShowFollowButton())
+                {
+                    <div class="profile-actions">
+                        @if (isFollowing)
+                        {
+                            <button class="follow-button following" 
+                                    @onclick="HandleUnfollowClick"
+                                    disabled="@isFollowProcessing">
+                                @if (isFollowProcessing)
+                                {
+                                    <span>Processing...</span>
+                                }
+                                else
+                                {
+                                    <span>✓ Following</span>
+                                }
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="follow-button" 
+                                    @onclick="HandleFollowClick"
+                                    disabled="@isFollowProcessing">
+                                @if (isFollowProcessing)
+                                {
+                                    <span>Processing...</span>
+                                }
+                                else
+                                {
+                                    <span>+ Follow</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                }
+
+                @if (ShowStatistics)
+                {
+                    <div class="profile-statistics">
+                        @if (followersCount.HasValue)
+                        {
+                            <div class="stat-item">
+                                <span class="stat-label">Followers</span>
+                                <span class="stat-value">@FormatCount(followersCount.Value)</span>
+                            </div>
+                        }
+                        @if (followingCount.HasValue)
+                        {
+                            <div class="stat-item">
+                                <span class="stat-label">Following</span>
+                                <span class="stat-value">@FormatCount(followingCount.Value)</span>
+                            </div>
+                        }
+                        @if (postsCount.HasValue)
+                        {
+                            <div class="stat-item">
+                                <span class="stat-label">Posts</span>
+                                <span class="stat-value">@FormatCount(postsCount.Value)</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
         }
 
         @if (ShowOutbox && !string.IsNullOrEmpty(GetOutboxUrl()))
@@ -51,6 +114,11 @@
 @code {
     private KristofferStrube.ActivityStreams.Object? actor;
     private bool isLoading;
+    private bool isFollowing;
+    private bool isFollowProcessing;
+    private int? followersCount;
+    private int? followingCount = null;
+    private int? postsCount = null;
     private string? error;
 
     /// <summary>
@@ -73,7 +141,19 @@
 
     /// <summary>
     /// Gets or sets whether to show detailed information.
+    /// </summary>follow button.
     /// </summary>
+    [Parameter]
+    public bool ShowFollowButton { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show statistics.
+    /// </summary>
+    [Parameter]
+    public bool ShowStatistics { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the 
     [Parameter]
     public bool ShowDetails { get; set; } = true;
 
@@ -96,6 +176,12 @@
     public string? CssClass { get; set; }
 
     /// <summary>
+    /// <summary>
+    /// Gets or sets a callback for when follow state changes.
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> OnFollowStateChanged { get; set; }
+
     /// Gets or sets a custom profile rendering template.
     /// </summary>
     [Parameter]
@@ -130,27 +216,106 @@
     private async Task LoadActorAsync()
     {
         isLoading = true;
-        error = null;
+
+        // Load statistics if available
+        if (actor != null)
+        {
+            await LoadStatisticsAsync();
+        }
+    }
+
+    private Task LoadStatisticsAsync()
+    {
+        try
+        {
+            // TODO: Load actual statistics from collections
+            // For now, these would need to be fetched from the followers/following/outbox collections
+            // followersCount = await GetCollectionCount(GetFollowersUrl());
+            // followingCount = await GetCollectionCount(GetFollowingUrl());
+            // postsCount = await GetCollectionCount(GetOutboxUrl());
+        }
+        catch
+        {
+            // Silently fail - statistics are optional
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private bool CanShowFollowButton()
+    {
+        // Don't show follow button if viewing own profile or not authenticated
+        return Client.ActorId != null && actor?.Id != Client.ActorId;
+    }
+
+    private async Task HandleFollowClick()
+    {
+        if (actor?.Id == null || !CanShowFollowButton()) return;
+
+        isFollowProcessing = true;
         StateHasChanged();
 
         try
         {
-            if (ActorUri != null)
+            var followActivity = Client.CreateActivityBuilder().Follow(actor.Id);
+            await Client.PostToOutboxAsync(followActivity);
+            
+            isFollowing = true;
+            
+            if (followersCount.HasValue)
             {
-                actor = await Client.GetActorAsync(ActorUri);
+                followersCount++;
             }
-            else if (!string.IsNullOrEmpty(ActorHandle))
+
+            if (OnFollowStateChanged.HasDelegate)
             {
-                actor = await Client.GetActorByAliasAsync(ActorHandle);
+                await OnFollowStateChanged.InvokeAsync(true);
             }
         }
         catch (Exception ex)
         {
-            error = $"Failed to load actor: {ex.Message}";
+            error = $"Failed to follow: {ex.Message}";
         }
         finally
         {
-            isLoading = false;
+            isFollowProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleUnfollowClick()
+    {
+        if (actor?.Id == null || !CanShowFollowButton()) return;
+
+        isFollowProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            // TODO: Need to track original Follow activity to properly Undo it
+            var followActivity = Client.CreateActivityBuilder().Follow(actor.Id);
+            var undoActivity = Client.CreateActivityBuilder().Undo(followActivity);
+            await Client.PostToOutboxAsync(undoActivity);
+            
+            isFollowing = false;
+            
+            if (followersCount.HasValue && followersCount.Value > 0)
+            {
+                followersCount--;
+            }
+
+            if (OnFollowStateChanged.HasDelegate)
+            {
+                await OnFollowStateChanged.InvokeAsync(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to unfollow: {ex.Message}";
+        }
+        finally
+        {
+            isFollowProcessing = false;
             StateHasChanged();
         }
     }
@@ -162,6 +327,15 @@
             return person.Outbox.ToString() ?? string.Empty;
         }
         return string.Empty;
+    }
+
+    private string FormatCount(int count)
+    {
+        if (count < 1000)
+            return count.ToString();
+        if (count < 1000000)
+            return $"{count / 1000.0:F1}K";
+        return $"{count / 1000000.0:F1}M";
     }
 }
 

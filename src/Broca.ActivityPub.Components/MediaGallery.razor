@@ -1,0 +1,407 @@
+@using KristofferStrube.ActivityStreams
+
+<div class="activitypub-media-gallery @CssClass @(IsLightboxOpen ? "lightbox-active" : "")">
+    @if (DisplayMode == GalleryDisplayMode.Grid)
+    {
+        <div class="media-grid @GetGridClass()">
+            @for (int i = 0; i < mediaItems.Count; i++)
+            {
+                var index = i; // Capture for closure
+                var item = mediaItems[i];
+                <div class="media-grid-item" @onclick="() => OpenLightbox(index)">
+                    @RenderThumbnail(item, index)
+                </div>
+            }
+        </div>
+    }
+    else if (DisplayMode == GalleryDisplayMode.Carousel)
+    {
+        <div class="media-carousel">
+            <div class="carousel-viewport">
+                <div class="carousel-track" style="transform: translateX(-@(currentIndex * 100)%)">
+                    @for (int i = 0; i < mediaItems.Count; i++)
+                    {
+                        var item = mediaItems[i];
+                        <div class="carousel-slide">
+                            @RenderMedia(item, false)
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @if (ShowNavigationButtons && mediaItems.Count > 1)
+            {
+                <button class="carousel-button prev-button" 
+                        @onclick="NavigatePrevious"
+                        disabled="@(!CanNavigatePrevious)"
+                        title="Previous">
+                    ‹
+                </button>
+                <button class="carousel-button next-button" 
+                        @onclick="NavigateNext"
+                        disabled="@(!CanNavigateNext)"
+                        title="Next">
+                    ›
+                </button>
+            }
+
+            @if (ShowDots && mediaItems.Count > 1)
+            {
+                <div class="carousel-dots">
+                    @for (int i = 0; i < mediaItems.Count; i++)
+                    {
+                        var index = i;
+                        <button class="carousel-dot @(currentIndex == i ? "active" : "")"
+                                @onclick="() => NavigateTo(index)"
+                                title="@($"Go to image {i + 1}")">
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (IsLightboxOpen)
+    {
+        <div class="media-lightbox" @onclick="CloseLightbox">
+            <div class="lightbox-overlay"></div>
+            
+            <div class="lightbox-content" @onclick:stopPropagation="true">
+                <button class="lightbox-close" @onclick="CloseLightbox" title="Close">×</button>
+
+                <div class="lightbox-media">
+                    @if (currentIndex >= 0 && currentIndex < mediaItems.Count)
+                    {
+                        @RenderMedia(mediaItems[currentIndex], true)
+                    }
+                </div>
+
+                @if (mediaItems.Count > 1)
+                {
+                    <button class="lightbox-nav-button prev-button" 
+                            @onclick="NavigatePreviousLightbox"
+                            @onclick:stopPropagation="true"
+                            disabled="@(!CanNavigatePrevious)"
+                            title="Previous">
+                        ‹
+                    </button>
+                    <button class="lightbox-nav-button next-button" 
+                            @onclick="NavigateNextLightbox"
+                            @onclick:stopPropagation="true"
+                            disabled="@(!CanNavigateNext)"
+                            title="Next">
+                        ›
+                    </button>
+                }
+
+                @if (ShowImageInfo && currentIndex >= 0 && currentIndex < mediaItems.Count)
+                {
+                    var currentItem = mediaItems[currentIndex];
+                    <div class="lightbox-info">
+                        <div class="info-counter">@(currentIndex + 1) / @mediaItems.Count</div>
+                        @if (!string.IsNullOrEmpty(currentItem.Caption))
+                        {
+                            <div class="info-caption">@currentItem.Caption</div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<MediaItem> mediaItems = new();
+    private int currentIndex = 0;
+    private bool isLightboxOpen;
+
+    /// <summary>
+    /// Gets or sets the media items to display.
+    /// </summary>
+    [Parameter]
+    public List<MediaItem>? Items { get; set; }
+
+    /// <summary>
+    /// Gets or sets the images from ActivityStreams Image objects.
+    /// </summary>
+    [Parameter]
+    public IEnumerable<Image>? Images { get; set; }
+
+    /// <summary>
+    /// Gets or sets the display mode (Grid or Carousel).
+    /// </summary>
+    [Parameter]
+    public GalleryDisplayMode DisplayMode { get; set; } = GalleryDisplayMode.Grid;
+
+    /// <summary>
+    /// Gets or sets the number of columns for grid display.
+    /// </summary>
+    [Parameter]
+    public int GridColumns { get; set; } = 3;
+
+    /// <summary>
+    /// Gets or sets the aspect ratio for thumbnails (e.g., "16/9", "1/1", "4/3").
+    /// </summary>
+    [Parameter]
+    public string AspectRatio { get; set; } = "1/1";
+
+    /// <summary>
+    /// Gets or sets whether to show navigation buttons.
+    /// </summary>
+    [Parameter]
+    public bool ShowNavigationButtons { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show dots for carousel.
+    /// </summary>
+    [Parameter]
+    public bool ShowDots { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show image info in lightbox.
+    /// </summary>
+    [Parameter]
+    public bool ShowImageInfo { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether lightbox is enabled.
+    /// </summary>
+    [Parameter]
+    public bool EnableLightbox { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to loop navigation.
+    /// </summary>
+    [Parameter]
+    public bool Loop { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when an item is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<int> OnItemClick { get; set; }
+
+    private bool IsLightboxOpen => isLightboxOpen;
+    private bool CanNavigatePrevious => currentIndex > 0 || (Loop && mediaItems.Count > 1);
+    private bool CanNavigateNext => currentIndex < mediaItems.Count - 1 || (Loop && mediaItems.Count > 1);
+
+    protected override void OnParametersSet()
+    {
+        mediaItems.Clear();
+
+        if (Items != null)
+        {
+            mediaItems.AddRange(Items);
+        }
+        else if (Images != null)
+        {
+            foreach (var image in Images)
+            {
+                var url = ExtractImageUrl(image);
+                if (!string.IsNullOrEmpty(url))
+                {
+                    mediaItems.Add(new MediaItem
+                    {
+                        Url = url,
+                        ThumbnailUrl = url, // Could be optimized with actual thumbnails
+                        Caption = image.Name?.FirstOrDefault(),
+                        MediaType = MediaType.Image
+                    });
+                }
+            }
+        }
+    }
+
+    private string ExtractImageUrl(Image image)
+    {
+        if (image.Url?.Any() == true)
+        {
+            var urlLink = image.Url.FirstOrDefault();
+            if (urlLink?.Href != null)
+            {
+                return urlLink.Href.ToString();
+            }
+        }
+        return string.Empty;
+    }
+
+    private string GetGridClass()
+    {
+        return $"grid-cols-{GridColumns}";
+    }
+
+    private RenderFragment RenderThumbnail(MediaItem item, int index)
+    {
+        return builder =>
+        {
+            var sequence = 0;
+            
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "thumbnail-wrapper");
+            builder.AddAttribute(sequence++, "style", $"aspect-ratio: {AspectRatio}");
+
+            if (item.MediaType == MediaType.Image)
+            {
+                builder.OpenElement(sequence++, "img");
+                builder.AddAttribute(sequence++, "src", item.ThumbnailUrl ?? item.Url);
+                builder.AddAttribute(sequence++, "alt", item.Caption ?? $"Image {index + 1}");
+                builder.AddAttribute(sequence++, "loading", "lazy");
+                builder.AddAttribute(sequence++, "class", "thumbnail-image");
+                builder.CloseElement();
+            }
+            else if (item.MediaType == MediaType.Video)
+            {
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "thumbnail-video");
+                
+                if (!string.IsNullOrEmpty(item.ThumbnailUrl))
+                {
+                    builder.OpenElement(sequence++, "img");
+                    builder.AddAttribute(sequence++, "src", item.ThumbnailUrl);
+                    builder.AddAttribute(sequence++, "alt", item.Caption ?? $"Video {index + 1}");
+                    builder.AddAttribute(sequence++, "loading", "lazy");
+                    builder.CloseElement();
+                }
+                
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "play-overlay");
+                builder.AddContent(sequence++, "▶");
+                builder.CloseElement();
+                
+                builder.CloseElement();
+            }
+
+            builder.CloseElement(); // thumbnail-wrapper
+        };
+    }
+
+    private RenderFragment RenderMedia(MediaItem item, bool isLightbox)
+    {
+        return builder =>
+        {
+            var sequence = 0;
+
+            if (item.MediaType == MediaType.Image)
+            {
+                builder.OpenElement(sequence++, "img");
+                builder.AddAttribute(sequence++, "src", item.Url);
+                builder.AddAttribute(sequence++, "alt", item.Caption ?? "Image");
+                builder.AddAttribute(sequence++, "class", isLightbox ? "lightbox-image" : "carousel-image");
+                builder.CloseElement();
+            }
+            else if (item.MediaType == MediaType.Video)
+            {
+                builder.OpenElement(sequence++, "video");
+                builder.AddAttribute(sequence++, "controls", true);
+                builder.AddAttribute(sequence++, "class", isLightbox ? "lightbox-video" : "carousel-video");
+                
+                builder.OpenElement(sequence++, "source");
+                builder.AddAttribute(sequence++, "src", item.Url);
+                builder.CloseElement();
+                
+                builder.AddContent(sequence++, "Your browser does not support the video tag.");
+                builder.CloseElement();
+            }
+        };
+    }
+
+    private void OpenLightbox(int index)
+    {
+        if (!EnableLightbox) return;
+
+        currentIndex = index;
+        isLightboxOpen = true;
+        StateHasChanged();
+
+        if (OnItemClick.HasDelegate)
+        {
+            OnItemClick.InvokeAsync(index);
+        }
+    }
+
+    private void CloseLightbox()
+    {
+        isLightboxOpen = false;
+        StateHasChanged();
+    }
+
+    private void NavigatePrevious()
+    {
+        if (currentIndex > 0)
+        {
+            currentIndex--;
+        }
+        else if (Loop)
+        {
+            currentIndex = mediaItems.Count - 1;
+        }
+        StateHasChanged();
+    }
+
+    private void NavigateNext()
+    {
+        if (currentIndex < mediaItems.Count - 1)
+        {
+            currentIndex++;
+        }
+        else if (Loop)
+        {
+            currentIndex = 0;
+        }
+        StateHasChanged();
+    }
+
+    private void NavigatePreviousLightbox()
+    {
+        NavigatePrevious();
+    }
+
+    private void NavigateNextLightbox()
+    {
+        NavigateNext();
+    }
+
+    private void NavigateTo(int index)
+    {
+        if (index >= 0 && index < mediaItems.Count)
+        {
+            currentIndex = index;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Display mode for the gallery.
+    /// </summary>
+    public enum GalleryDisplayMode
+    {
+        Grid,
+        Carousel
+    }
+
+    /// <summary>
+    /// Media type.
+    /// </summary>
+    public enum MediaType
+    {
+        Image,
+        Video
+    }
+
+    /// <summary>
+    /// Represents a media item in the gallery.
+    /// </summary>
+    public class MediaItem
+    {
+        public string Url { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public string? Caption { get; set; }
+        public MediaType MediaType { get; set; } = MediaType.Image;
+    }
+}

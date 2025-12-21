@@ -1,12 +1,26 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Core.Interfaces
 @inject IActivityPubClient Client
+@implements IDisposable
 
 <div class="activitypub-activity-feed @CssClass">
     @if (!string.IsNullOrEmpty(Title))
     {
         <div class="feed-header">
             <h3>@Title</h3>
+            @if (EnableAutoRefresh && isAutoRefreshActive)
+            {
+                <span class="refresh-indicator" title="Auto-refreshing every @AutoRefreshInterval seconds">🔄</span>
+            }
+        </div>
+    }
+
+    @if (newActivitiesCount > 0 && ShowNewPostsNotification)
+    {
+        <div class="new-posts-notification">
+            <button @onclick="LoadNewActivitiesAsync" class="load-new-button">
+                @newActivitiesCount new @(newActivitiesCount == 1 ? "post" : "posts") available
+            </button>
         </div>
     }
 
@@ -78,6 +92,10 @@
 </div>
 
 @code {
+    private System.Threading.Timer? refreshTimer;
+    private int newActivitiesCount = 0;
+    private bool isAutoRefreshActive = false;
+
     /// <summary>
     /// Gets or sets the URL of the activity collection (e.g., outbox, inbox).
     /// </summary>
@@ -122,7 +140,31 @@
 
     /// <summary>
     /// Gets or sets whether to show recipients.
+    /// </summary>whether to enable auto-refresh.
     /// </summary>
+    [Parameter]
+    public bool EnableAutoRefresh { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the auto-refresh interval in seconds.
+    /// </summary>
+    [Parameter]
+    public int AutoRefreshInterval { get; set; } = 30;
+
+    /// <summary>
+    /// Gets or sets whether to show new posts notification.
+    /// </summary>
+    [Parameter]
+    public bool ShowNewPostsNotification { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to auto-scroll to new posts.
+    /// </summary>
+    [Parameter]
+    public bool AutoScrollToNew { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets 
     [Parameter]
     public bool ShowRecipients { get; set; } = false;
 
@@ -133,6 +175,136 @@
     public string? CssClass { get; set; }
 
     /// <summary>
+    /// Gets or sets a callback for when new activities are detected.
+    /// </summary>
+    [Parameter]
+    public EventCallback<int> OnNewActivitiesDetected { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (EnableAutoRefresh)
+        {
+            StartAutoRefresh();
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (EnableAutoRefresh && !isAutoRefreshActive)
+        {
+            StartAutoRefresh();
+        }
+        else if (!EnableAutoRefresh && isAutoRefreshActive)
+        {
+            StopAutoRefresh();
+        }
+    }
+
+    private void StartAutoRefresh()
+    {
+        if (isAutoRefreshActive) return;
+
+        isAutoRefreshActive = true;
+        refreshTimer = new System.Threading.Timer(
+            async _ => await CheckForNewActivitiesAsync(),
+            null,
+            TimeSpan.FromSeconds(AutoRefreshInterval),
+            TimeSpan.FromSeconds(AutoRefreshInterval)
+        );
+    }
+
+    private void StopAutoRefresh()
+    {
+        isAutoRefreshActive = false;
+        refreshTimer?.Dispose();
+        refreshTimer = null;
+    }
+
+    private async Task CheckForNewActivitiesAsync()
+    {
+        try
+        {
+            // TODO: Implement actual checking logic
+            // This would query the collection to check for new items
+            // For now, this is a placeholder
+            // In a real implementation:
+            // 1. Get the latest item ID from the current feed
+            // 2. Query the collection with since parameter
+            // 3. Count new items
+            
+            // Simulate checking
+            await Task.Delay(100);
+            
+            // Example: Set count if new items detected
+            // newActivitiesCount = countOfNewItems;
+            
+            if (newActivitiesCount > 0)
+            {
+                await InvokeAsync(StateHasChanged);
+                
+                if (OnNewActivitiesDetected.HasDelegate)
+                {
+                    await OnNewActivitiesDetected.InvokeAsync(newActivitiesCount);
+                }
+
+                if (AutoScrollToNew)
+                {
+                    await LoadNewActivitiesAsync();
+                }
+            }
+        }
+        catch
+        {
+            // Silently fail - don't interrupt the feed
+        }
+    }
+
+    private Task LoadNewActivitiesAsync()
+    {
+        newActivitiesCount = 0;
+        // TODO: Trigger reload of the collection
+        // This would require exposing a Refresh method on CollectionLoader
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Manually refreshes the feed.
+    /// </summary>
+    public Task RefreshAsync()
+    {
+        newActivitiesCount = 0;
+        // TODO: Trigger collection loader refresh
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Starts auto-refresh if not already running.
+    /// </summary>
+    public void EnableRefresh()
+    {
+        if (!isAutoRefreshActive)
+        {
+            StartAutoRefresh();
+        }
+    }
+
+    /// <summary>
+    /// Stops auto-refresh.
+    /// </summary>
+    public void DisableRefresh()
+    {
+        if (isAutoRefreshActive)
+        {
+            StopAutoRefresh();
+        }
+    }
+
+    public void Dispose()
+    {
+        StopAutoRefresh();
+    }    /// <summary>
     /// Gets or sets a custom activity rendering template.
     /// </summary>
     [Parameter]

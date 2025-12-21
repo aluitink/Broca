@@ -108,9 +108,42 @@
 
     private string GetIconUrl()
     {
-        // The Icon property might be a complex object
-        // This is a simplified implementation
-        return string.Empty; // TODO: Implement proper icon URL extraction
+        if (Actor == null) return string.Empty;
+
+        // Handle Person type with Icon property
+        if (Actor is Person person && person.Icon?.Any() == true)
+        {
+            return ExtractImageUrl(person.Icon.First());
+        }
+
+        // Handle generic Actor type
+        if (Actor.Icon?.Any() == true)
+        {
+            return ExtractImageUrl(Actor.Icon.First());
+        }
+
+        return string.Empty;
+    }
+
+    private string ExtractImageUrl(IImageOrLink imageOrLink)
+    {
+        // If it's a Link, get the Href
+        if (imageOrLink is Link link && link.Href != null)
+        {
+            return link.Href.ToString();
+        }
+
+        // If it's an Image, get the Url
+        if (imageOrLink is Image image && image.Url?.Any() == true)
+        {
+            var urlLink = image.Url.FirstOrDefault();
+            if (urlLink?.Href != null)
+            {
+                return urlLink.Href.ToString();
+            }
+        }
+
+        return string.Empty;
     }
 
     private DateTimeOffset? GetPublished()
