@@ -38,6 +38,18 @@
             <a href="https://learn.microsoft.com/en-us/aspnet/core/blazor" target="_blank">About Blazor</a>
         </FluentFooter>
     </FluentLayout>
+    
+    @if (AuthState.IsAuthenticated)
+    {
+        <div class="floating-add-content">
+            <AddContentButton 
+                Placeholder="What would you like to share?"
+                ButtonText="Create Post"
+                ButtonAppearance="Appearance.Accent"
+                OnPostCreated="@HandlePostCreated">
+            </AddContentButton>
+        </div>
+    }
 </ActivityPubClientProvider>
 
 @code {
@@ -65,6 +77,12 @@
             return $"@{person.PreferredUsername}";
         
         return "User";
+    }
+
+    private void HandlePostCreated()
+    {
+        // Post created successfully - the page will refresh if needed
+        InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
@@ -95,5 +113,12 @@
 
     .header-user-text {
         font-size: 0.875rem;
+    }
+
+    .floating-add-content {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 1000;
     }
 </style>

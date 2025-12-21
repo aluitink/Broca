@@ -47,20 +47,6 @@ else
             <p>Here's your latest activity</p>
         </FluentCard>
 
-        <FluentCard Class="composer-card">
-            <h3>
-                <FluentIcon Value="@(new Icons.Regular.Size20.Compose())" Color="Color.Accent" />
-                Create a post
-            </h3>
-            <PostComposer 
-                ComposerTemplate="FluentPostComposerRenderer.Template"
-                Placeholder="What's on your mind?"
-                ShowVisibilitySelector="true"
-                ShowAttachmentButton="true"
-                Rows="3">
-            </PostComposer>
-        </FluentCard>
-
         @if (_inboxUrl != null)
         {
             <ActivityFeed 

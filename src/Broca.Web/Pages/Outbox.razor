@@ -27,25 +27,12 @@ else
             <p>Activities you have sent</p>
         </FluentCard>
 
-        <FluentCard Class="composer-card">
-            <h3>
-                <FluentIcon Value="@(new Icons.Regular.Size20.Compose())" Color="Color.Accent" />
-                Create a new post
-            </h3>
-            <PostComposer 
-                Placeholder="What would you like to share?"
-                ShowVisibilitySelector="true"
-                ShowAttachmentButton="true"
-                Rows="4"
-                OnPostCreated="@HandlePostCreated">
-            </PostComposer>
-            @if (!string.IsNullOrEmpty(_postMessage))
-            {
-                <FluentMessageBar Intent="@_postMessageIntent" Class="post-message">
-                    @_postMessage
-                </FluentMessageBar>
-            }
-        </FluentCard>
+        @if (!string.IsNullOrEmpty(_postMessage))
+        {
+            <FluentMessageBar Intent="@_postMessageIntent" Class="post-message">
+                @_postMessage
+            </FluentMessageBar>
+        }
 
         @if (_outboxUrl != null)
         {
