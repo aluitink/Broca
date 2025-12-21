@@ -2,7 +2,11 @@
 @using KristofferStrube.ActivityStreams
 
 <div class="activitypub-add-content-wrapper @CssClass">
-    @if (showDialog)
+    @if (ButtonTemplate != null)
+    {
+        @ButtonTemplate(this)
+    }
+    else if (showDialog)
     {
         <div class="add-content-overlay" @onclick="CloseDialog"></div>
         <div class="add-content-dialog">
@@ -135,14 +139,15 @@
         </div>
     }
 
-    @if (!HideButton)
-    {
-        <button class="add-content-fab" 
-                @onclick="OpenDialog" 
-                title="@ButtonTitle"
-                style="@GetButtonStyle()">
-            <span class="fab-icon">@ButtonIcon</span>
-        </button>
+        @if (!HideButton)
+        {
+            <button class="add-content-fab" 
+                    @onclick="OpenDialog" 
+                    title="@ButtonTitle"
+                    style="@GetButtonStyle()">
+                <span class="fab-icon">@ButtonIcon</span>
+            </button>
+        }
     }
 </div>
 
@@ -155,6 +160,22 @@
     private List<string> tags = new();
     private string newMention = string.Empty;
     private string newTag = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the custom button template for rendering the add content button.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<AddContentButton>? ButtonTemplate { get; set; }
+
+    // Public accessors for renderer
+    public bool ShowDialog => showDialog;
+    public bool ShowAttachmentPicker => showAttachmentPicker;
+    public ElementReference FileInput => fileInput;
+    public List<AttachmentInfo> Attachments => attachments;
+    public List<string> Mentions => mentions;
+    public List<string> Tags => tags;
+    public string NewMention { get => newMention; set => newMention = value; }
+    public string NewTag { get => newTag; set => newTag = value; }
 
     /// <summary>
     /// Gets or sets the button icon.
@@ -236,13 +257,13 @@
         }
     }
 
-    private void OpenDialog()
+    public void OpenDialog()
     {
         showDialog = true;
         StateHasChanged();
     }
 
-    private void CloseDialog()
+    public void CloseDialog()
     {
         showDialog = false;
         showAttachmentPicker = false;
@@ -250,7 +271,7 @@
         StateHasChanged();
     }
 
-    private async Task HandlePostCreated(Activity activity)
+    public async Task HandlePostCreated(Activity activity)
     {
         if (OnPostCreated.HasDelegate)
         {
@@ -259,13 +280,13 @@
         CloseDialog();
     }
 
-    private void HandleAttachmentClick()
+    public void HandleAttachmentClick()
     {
         showAttachmentPicker = !showAttachmentPicker;
         StateHasChanged();
     }
 
-    private void HandleFileSelected(ChangeEventArgs e)
+    public void HandleFileSelected(ChangeEventArgs e)
     {
         // TODO: Implement actual file upload logic
         // This is a placeholder - you'll need to implement file upload to your storage
@@ -275,13 +296,13 @@
         StateHasChanged();
     }
 
-    private void RemoveAttachment(AttachmentInfo attachment)
+    public void RemoveAttachment(AttachmentInfo attachment)
     {
         attachments.Remove(attachment);
         StateHasChanged();
     }
 
-    private void ShowMentions()
+    public void ShowMentions()
     {
         if (mentions.Count == 0)
         {
@@ -291,7 +312,7 @@
         StateHasChanged();
     }
 
-    private void AddMention()
+    public void AddMention()
     {
         if (!string.IsNullOrWhiteSpace(newMention))
         {
@@ -305,13 +326,13 @@
         }
     }
 
-    private void RemoveMention(string mention)
+    public void RemoveMention(string mention)
     {
         mentions.Remove(mention);
         StateHasChanged();
     }
 
-    private void HandleMentionKeyPress(KeyboardEventArgs e)
+    public void HandleMentionKeyPress(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
         {
@@ -319,7 +340,7 @@
         }
     }
 
-    private void ShowTags()
+    public void ShowTags()
     {
         if (tags.Count == 0)
         {
@@ -329,7 +350,7 @@
         StateHasChanged();
     }
 
-    private void AddTag()
+    public void AddTag()
     {
         if (!string.IsNullOrWhiteSpace(newTag))
         {
@@ -343,13 +364,13 @@
         }
     }
 
-    private void RemoveTag(string tag)
+    public void RemoveTag(string tag)
     {
         tags.Remove(tag);
         StateHasChanged();
     }
 
-    private void HandleTagKeyPress(KeyboardEventArgs e)
+    public void HandleTagKeyPress(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
         {

@@ -380,6 +380,32 @@ public class ActivityPubClient : IActivityPubClient
                     }
                 }
             }
+            else if (items.ValueKind == JsonValueKind.Object)
+            {
+                // Handle malformed response where orderedItems/items is a single object instead of array
+                _logger.LogWarning("Collection returned a single object instead of an array. This is non-standard but will be handled.");
+                
+                if (limit.HasValue && itemCount >= limit.Value)
+                {
+                    yield break;
+                }
+
+                T? deserializedItem = default;
+                try
+                {
+                    deserializedItem = JsonSerializer.Deserialize<T>(items.GetRawText(), _jsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to deserialize collection item");
+                }
+
+                if (deserializedItem != null)
+                {
+                    yield return deserializedItem;
+                    itemCount++;
+                }
+            }
 
             // Check for next page
             if (page.TryGetProperty("next", out var next) && next.ValueKind == JsonValueKind.String)

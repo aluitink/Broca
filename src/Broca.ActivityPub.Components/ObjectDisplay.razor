@@ -2,46 +2,66 @@
 @using Broca.ActivityPub.Components.Services
 @inject IObjectRendererRegistry RendererRegistry
 
-<div class="activitypub-object-display @CssClass">
-    @if (Object != null)
+@if (Object != null)
+{
+    @if (CustomRenderer != null)
     {
-        @if (CustomRenderer != null)
-        {
+        <div class="activitypub-object-display @CssClass">
             @CustomRenderer(Object)
-        }
-        else
+        </div>
+    }
+    else
+    {
+        var renderer = RendererRegistry.GetRenderer(Object.GetType());
+        if (renderer != null)
         {
-            try
-            {
-                @RendererRegistry.GetRenderFragment(Object)
-            }
-            catch (Exception ex)
-            {
-                @if (ErrorTemplate != null)
+            <div class="activitypub-object-display @CssClass">
+                @try
                 {
-                    @ErrorTemplate(ex.Message)
+                    @RendererRegistry.GetRenderFragment(Object)
                 }
-                else
+                catch (Exception ex)
                 {
-                    <div class="object-display-error">
-                        <span class="error-icon">⚠️</span>
-                        <span>Failed to render object: @ex.Message</span>
-                    </div>
+                    @if (ErrorTemplate != null)
+                    {
+                        @ErrorTemplate(ex.Message)
+                    }
+                    else
+                    {
+                        <div class="object-display-error">
+                            <span class="error-icon">⚠️</span>
+                            <span>Failed to render object: @ex.Message</span>
+                        </div>
+                    }
                 }
-            }
+            </div>
         }
+        else if (ShowMissingRenderer)
+        {
+            <div class="activitypub-object-display @CssClass">
+                <div class="object-display-no-renderer">
+                    <span class="warning-icon">⚠️</span>
+                    <span>No renderer for @Object.GetType().Name</span>
+                </div>
+            </div>
+        }
+        @* Skip rendering if no renderer available and ShowMissingRenderer is false *@
     }
-    else if (RenderEmpty != null)
-    {
+}
+else if (RenderEmpty != null)
+{
+    <div class="activitypub-object-display @CssClass">
         @RenderEmpty
-    }
-    else if (ShowEmptyState)
-    {
+    </div>
+}
+else if (ShowEmptyState)
+{
+    <div class="activitypub-object-display @CssClass">
         <div class="object-display-empty">
             <p>No content to display</p>
         </div>
-    }
-</div>
+    </div>
+}
 
 @code {
     /// <summary>
@@ -67,6 +87,13 @@
     /// </summary>
     [Parameter]
     public bool ShowEmptyState { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show a message when no renderer is available.
+    /// When false, items without renderers are skipped entirely.
+    /// </summary>
+    [Parameter]
+    public bool ShowMissingRenderer { get; set; } = false;
 
     /// <summary>
     /// Gets or sets additional CSS classes for the container.

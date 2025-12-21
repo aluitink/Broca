@@ -33,6 +33,14 @@
             </div>
         }
 
+        @if (ShowRecipients && HasRecipients())
+        {
+            <div class="activity-recipients">
+                <span class="recipients-label">To:</span>
+                @RenderRecipients()
+            </div>
+        }
+
         @if (ShowObject && Activity.Object?.Any() == true)
         {
             <div class="activity-objects">
@@ -45,18 +53,10 @@
                         }
                         else
                         {
-                            <ObjectDisplay Object="@obj" />
+                            <ObjectDisplay Object="@obj" ShowMissingRenderer="true" />
                         }
                     </div>
                 }
-            </div>
-        }
-
-        @if (ShowRecipients && HasRecipients())
-        {
-            <div class="activity-recipients">
-                <span class="recipients-label">To:</span>
-                @RenderRecipients()
             </div>
         }
 
@@ -106,7 +106,22 @@
 
     private string GetActorId()
     {
-        return Activity?.Actor?.FirstOrDefault()?.ToString() ?? string.Empty;
+        var actor = Activity?.Actor?.FirstOrDefault();
+        if (actor == null) return string.Empty;
+        
+        // If it's an IObject with an Id
+        if (actor is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
+            return actorObj.Id;
+        
+        // If it's a Link with Href
+        if (actor is Link link && link.Href != null)
+            return link.Href.ToString();
+        
+        // Try to get Name if available
+        if (actor is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
+            return obj.Name.First();
+        
+        return string.Empty;
     }
 
     private bool HasRecipients()
@@ -126,10 +141,14 @@
             {
                 foreach (var recipient in Activity.To)
                 {
-                    builder.OpenElement(sequence++, "span");
-                    builder.AddAttribute(sequence++, "class", "recipient");
-                    builder.AddContent(sequence++, recipient.ToString());
-                    builder.CloseElement();
+                    var display = GetRecipientDisplay(recipient);
+                    if (!string.IsNullOrEmpty(display))
+                    {
+                        builder.OpenElement(sequence++, "span");
+                        builder.AddAttribute(sequence++, "class", "recipient");
+                        builder.AddContent(sequence++, display);
+                        builder.CloseElement();
+                    }
                 }
             }
 
@@ -137,13 +156,42 @@
             {
                 foreach (var recipient in Activity.Cc)
                 {
-                    builder.OpenElement(sequence++, "span");
-                    builder.AddAttribute(sequence++, "class", "recipient cc");
-                    builder.AddContent(sequence++, recipient.ToString());
-                    builder.CloseElement();
+                    var display = GetRecipientDisplay(recipient);
+                    if (!string.IsNullOrEmpty(display))
+                    {
+                        builder.OpenElement(sequence++, "span");
+                        builder.AddAttribute(sequence++, "class", "recipient cc");
+                        builder.AddContent(sequence++, display);
+                        builder.CloseElement();
+                    }
                 }
             }
         };
+    }
+    
+    private string GetRecipientDisplay(IObjectOrLink? recipient)
+    {
+        if (recipient == null) return string.Empty;
+        
+        // Check for public addressing
+        if (recipient is Link link)
+        {
+            var href = link.Href?.ToString() ?? string.Empty;
+            if (href.Contains("#Public") || href.EndsWith("/followers"))
+                return href.Contains("#Public") ? "Public" : "Followers";
+            return href;
+        }
+        
+        // If it's an Object, try to get Name or Id
+        if (recipient is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true)
+                return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id))
+                return obj.Id;
+        }
+        
+        return string.Empty;
     }
 
     private string FormatDateTime(DateTimeOffset dateTime)

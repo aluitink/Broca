@@ -7,54 +7,68 @@
 <FluentCard Class="@($"fluent-note-card {CssClass}")">
     @if (Note != null)
     {
-        @if (ShowActor && Note.AttributedTo?.Any() == true)
-        {
-            <div class="note-header">
-                <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Color="Color.Accent" />
-                <FluentLabel Typo="Typography.Body">@GetActorDisplay()</FluentLabel>
-            </div>
-        }
-
-        @if (Note.Name?.Any() == true)
-        {
-            <FluentLabel Typo="Typography.Header" Weight="FontWeight.Bold" class="note-title">
-                @Note.Name.First()
-            </FluentLabel>
-        }
-
-        @if (Note.Content?.Any() == true)
-        {
-            <div class="note-content">
-                @((MarkupString)(Note.Content.First() ?? string.Empty))
-            </div>
-        }
-
-        @if (Note.Attachment?.Any() == true)
-        {
-            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" class="note-attachments">
-                @foreach (var attachment in Note.Attachment)
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            @* Header with actor and timestamp *@
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="note-header">
+                @if (ShowActor && Note.AttributedTo?.Any() == true)
                 {
-                    <div class="attachment-item">
-                        @RenderAttachment(attachment)
-                    </div>
+                    <FluentPersona Name="@GetActorDisplay()"
+                                   Image="@GetActorImageUrl()"
+                                   ImageSize="32px"
+                                   TextPosition="@TextPosition.End">
+                        @if (!string.IsNullOrEmpty(GetActorUsername()))
+                        {
+                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                @@@GetActorUsername()
+                            </FluentLabel>
+                        }
+                    </FluentPersona>
+                }
+                
+                @if (Note.Published.HasValue)
+                {
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="note-timestamp">
+                        <time datetime="@Note.Published.Value.ToString("o")" title="@Note.Published.Value.ToString("f")">
+                            @FormatDateTime(Note.Published.Value)
+                        </time>
+                    </FluentLabel>
                 }
             </FluentStack>
-        }
 
-        <div class="note-footer">
-            @if (Note.Published.HasValue)
+            @* Title *@
+            @if (Note.Name?.Any() == true)
             {
-                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" />
-                    <time datetime="@Note.Published.Value.ToString("o")">
-                        @FormatDateTime(Note.Published.Value)
-                    </time>
+                <FluentLabel Typo="Typography.Subject" Weight="FontWeight.Bold" class="note-title">
+                    @Note.Name.First()
                 </FluentLabel>
             }
 
+            @* Content *@
+            @if (Note.Content?.Any() == true)
+            {
+                <div class="note-content">
+                    @((MarkupString)(Note.Content.First() ?? string.Empty))
+                </div>
+            }
+
+            @* Attachments *@
+            @if (Note.Attachment?.Any() == true)
+            {
+                <FluentStack Orientation="Orientation.Horizontal" Wrap="true" class="note-attachments">
+                    @foreach (var attachment in Note.Attachment)
+                    {
+                        <div class="attachment-item">
+                            @RenderAttachment(attachment)
+                        </div>
+                    }
+                </FluentStack>
+            }
+
+            @* Actions *@
             @if (ShowActions)
             {
-                <FluentStack Orientation="Orientation.Horizontal" class="note-actions">
+                <FluentDivider Style="margin: 0;" />
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" class="note-actions">
                     <FluentButton Appearance="Appearance.Lightweight" 
                                   IconStart="@(new Icons.Regular.Size16.ArrowReply())"
                                   OnClick="@(() => OnReply.InvokeAsync(Note))">
@@ -72,12 +86,12 @@
                     </FluentButton>
                 </FluentStack>
             }
-        </div>
 
-        @if (AdditionalContent != null)
-        {
-            @AdditionalContent(Note)
-        }
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Note)
+            }
+        </FluentStack>
     }
 </FluentCard>
 
@@ -132,10 +146,57 @@
 
     private string GetActorDisplay()
     {
-        var actorId = Note?.AttributedTo?.FirstOrDefault();
-        if (actorId is Actor actor && actor.Name?.Any() == true)
+        var actorLink = Note?.AttributedTo?.FirstOrDefault();
+        if (actorLink == null) return "Unknown";
+        
+        // Try to get Name from Actor
+        if (actorLink is Actor actor && actor.Name?.Any() == true)
             return actor.Name.First();
-        return actorId?.ToString() ?? "Unknown";
+        
+        // Try to get Name from any Object
+        if (actorLink is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true)
+                return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id))
+                return obj.Id;
+        }
+        
+        // Try to get Href from Link
+        if (actorLink is Link link && link.Href != null)
+            return link.Href.ToString();
+        
+        return "Unknown";
+    }
+
+    private string GetActorImageUrl()
+    {
+        var actorLink = Note?.AttributedTo?.FirstOrDefault();
+        if (actorLink == null) return string.Empty;
+        
+        if (actorLink is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                if (url is Link link && link.Href != null)
+                    return link.Href.ToString();
+            }
+        }
+        
+        return string.Empty;
+    }
+
+    private string GetActorUsername()
+    {
+        var actorLink = Note?.AttributedTo?.FirstOrDefault();
+        if (actorLink == null) return string.Empty;
+        
+        if (actorLink is Person person && !string.IsNullOrEmpty(person.PreferredUsername))
+            return person.PreferredUsername;
+        
+        return string.Empty;
     }
 
     private RenderFragment RenderAttachment(IObjectOrLink attachment)

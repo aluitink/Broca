@@ -1,46 +1,62 @@
 /* Fluent Note Renderer Styles */
 .fluent-note-card {
-    margin-bottom: 12px;
+    margin-bottom: 16px;
 }
 
 .note-header {
-    display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
+}
+
+.note-timestamp {
+    white-space: nowrap;
 }
 
 .note-title {
-    margin-bottom: 8px;
+    margin: 0;
 }
 
 .note-content {
-    margin: 12px 0;
     line-height: 1.6;
+    color: var(--neutral-foreground-rest);
 }
 
 .note-content p {
     margin: 8px 0;
 }
 
+.note-content p:first-child {
+    margin-top: 0;
+}
+
+.note-content p:last-child {
+    margin-bottom: 0;
+}
+
+.note-content a {
+    color: var(--accent-fill-rest);
+    text-decoration: none;
+}
+
+.note-content a:hover {
+    text-decoration: underline;
+}
+
 .note-attachments {
-    margin: 12px 0;
     gap: 8px;
 }
 
 .attachment-item {
-    border-radius: 4px;
+    border-radius: 8px;
     overflow: hidden;
+    max-width: 400px;
 }
 
-.note-footer {
-    margin-top: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+.attachment-item img {
+    width: 100%;
+    height: auto;
+    display: block;
 }
 
 .note-actions {
-    display: flex;
-    gap: 4px;
+    justify-content: flex-start;
 }

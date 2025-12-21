@@ -4,32 +4,36 @@
 @using Broca.ActivityPub.Components
 @inherits ComponentBase
 
-<FluentCard Class="@($"fluent-activity {CssClass}")">
+<FluentCard Class="@($"fluent-activity-card {CssClass}")">
     @if (Activity != null)
     {
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+            @* Header with actor persona, activity type, and timestamp *@
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="activity-header">
                 @if (!string.IsNullOrEmpty(GetActorId()))
                 {
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
-                        <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Color="Color.Accent" />
-                        <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
-                            @GetActorName()
-                        </FluentLabel>
-                    </FluentStack>
+                    <FluentPersona Name="@GetActorName()"
+                                   Image="@GetActorImageUrl()"
+                                   ImageSize="32px"
+                                   TextPosition="@TextPosition.End">
+                        @if (!string.IsNullOrEmpty(GetActorUsername()))
+                        {
+                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                @@@GetActorUsername()
+                            </FluentLabel>
+                        }
+                    </FluentPersona>
                 }
-
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
                     <FluentBadge Appearance="Appearance.Accent">
-                        @GetActivityTypeIcon()
-                        @GetActivityType()
+                        @GetActivityTypeIcon() @GetActivityType()
                     </FluentBadge>
 
                     @if (Activity.Published.HasValue)
                     {
-                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" />
-                            <time datetime="@Activity.Published.Value.ToString("o")">
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="activity-timestamp">
+                            <time datetime="@Activity.Published.Value.ToString("o")" title="@Activity.Published.Value.ToString("f")">
                                 @FormatDateTime(Activity.Published.Value)
                             </time>
                         </FluentLabel>
@@ -37,16 +41,30 @@
                 </FluentStack>
             </FluentStack>
 
+            @* Summary *@
             @if (Activity.Summary?.Any() == true)
             {
-                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral" Style="font-style: italic;">
                     @Activity.Summary.First()
                 </FluentLabel>
             }
 
+            @* Recipients *@
+            @if (ShowRecipients && HasRecipients())
+            {
+                <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="4">
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" />
+                        To:
+                    </FluentLabel>
+                    @RenderRecipients()
+                </FluentStack>
+            }
+
+            @* Activity Objects *@
             @if (ShowObject && Activity.Object?.Any() == true)
             {
-                <FluentDivider />
+                <FluentDivider Style="margin: 0;" />
                 <div class="activity-objects">
                     @foreach (var obj in Activity.Object)
                     {
@@ -64,21 +82,9 @@
                 </div>
             }
 
-            @if (ShowRecipients && HasRecipients())
-            {
-                <FluentDivider />
-                <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="4">
-                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" />
-                        To:
-                    </FluentLabel>
-                    @RenderRecipients()
-                </FluentStack>
-            }
-
             @if (AdditionalContent != null)
             {
-                <FluentDivider />
+                <FluentDivider Style="margin: 0;" />
                 @AdditionalContent(Activity)
             }
         </FluentStack>
@@ -124,15 +130,65 @@
 
     private string GetActorId()
     {
-        return Activity?.Actor?.FirstOrDefault()?.ToString() ?? string.Empty;
+        var actor = Activity?.Actor?.FirstOrDefault();
+        if (actor == null) return string.Empty;
+        
+        // If it's an IObject with an Id
+        if (actor is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
+            return actorObj.Id;
+        
+        // If it's a Link with Href
+        if (actor is Link link && link.Href != null)
+            return link.Href.ToString();
+        
+        return string.Empty;
     }
 
     private string GetActorName()
     {
         var actor = Activity?.Actor?.FirstOrDefault();
+        if (actor == null) return string.Empty;
+        
+        // Try to get Name property if it's an Actor/Person
         if (actor is Actor actorObj && actorObj.Name?.Any() == true)
             return actorObj.Name.First();
+        
+        // Try to get Name from any Object
+        if (actor is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
+            return obj.Name.First();
+        
+        // Fallback to ID
         return GetActorId();
+    }
+
+    private string GetActorImageUrl()
+    {
+        var actor = Activity?.Actor?.FirstOrDefault();
+        if (actor == null) return string.Empty;
+        
+        if (actor is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                if (url is Link link && link.Href != null)
+                    return link.Href.ToString();
+            }
+        }
+        
+        return string.Empty;
+    }
+
+    private string GetActorUsername()
+    {
+        var actor = Activity?.Actor?.FirstOrDefault();
+        if (actor == null) return string.Empty;
+        
+        if (actor is Person person && !string.IsNullOrEmpty(person.PreferredUsername))
+            return person.PreferredUsername;
+        
+        return string.Empty;
     }
 
     private string GetActivityType()
@@ -168,25 +224,69 @@
     {
         return builder =>
         {
-            int sequence = 0;
-            var recipients = new List<string>();
-
+            var sequence = 0;
+            
             if (Activity?.To?.Any() == true)
-                recipients.AddRange(Activity.To.Select(r => r.ToString() ?? ""));
-            if (Activity?.Cc?.Any() == true)
-                recipients.AddRange(Activity.Cc.Select(r => r.ToString() ?? ""));
-
-            foreach (var recipient in recipients.Where(r => !string.IsNullOrEmpty(r)))
             {
-                builder.OpenComponent<FluentBadge>(sequence++);
-                builder.AddAttribute(sequence++, "Appearance", Appearance.Lightweight);
-                builder.AddAttribute(sequence++, "ChildContent", (RenderFragment)(b =>
+                foreach (var recipient in Activity.To)
                 {
-                    b.AddContent(0, FormatRecipient(recipient));
-                }));
-                builder.CloseComponent();
+                    var recipientDisplay = GetRecipientDisplay(recipient);
+                    if (!string.IsNullOrEmpty(recipientDisplay))
+                    {
+                        builder.OpenComponent<FluentBadge>(sequence++);
+                        builder.AddAttribute(sequence++, "Appearance", Appearance.Lightweight);
+                        builder.AddAttribute(sequence++, "ChildContent", (RenderFragment)(b =>
+                        {
+                            b.AddContent(0, recipientDisplay);
+                        }));
+                        builder.CloseComponent();
+                    }
+                }
+            }
+
+            if (Activity?.Cc?.Any() == true)
+            {
+                foreach (var recipient in Activity.Cc)
+                {
+                    var recipientDisplay = GetRecipientDisplay(recipient);
+                    if (!string.IsNullOrEmpty(recipientDisplay))
+                    {
+                        builder.OpenComponent<FluentBadge>(sequence++);
+                        builder.AddAttribute(sequence++, "Appearance", Appearance.Lightweight);
+                        builder.AddAttribute(sequence++, "ChildContent", (RenderFragment)(b =>
+                        {
+                            b.AddContent(0, $"CC: {recipientDisplay}");
+                        }));
+                        builder.CloseComponent();
+                    }
+                }
             }
         };
+    }
+    
+    private string GetRecipientDisplay(IObjectOrLink? recipient)
+    {
+        if (recipient == null) return string.Empty;
+        
+        // Check for public addressing
+        if (recipient is Link link)
+        {
+            var href = link.Href?.ToString() ?? string.Empty;
+            if (href.Contains("#Public") || href.EndsWith("/followers"))
+                return href.Contains("#Public") ? "Public" : "Followers";
+            return href;
+        }
+        
+        // If it's an Object, try to get Name or Id
+        if (recipient is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true)
+                return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id))
+                return obj.Id;
+        }
+        
+        return string.Empty;
     }
 
     private string FormatRecipient(string recipient)

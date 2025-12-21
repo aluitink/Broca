@@ -148,8 +148,27 @@
 
     private string GetActorDisplay()
     {
-        var actorId = Note?.AttributedTo?.FirstOrDefault();
-        return actorId?.ToString() ?? "Unknown";
+        var actorLink = Note?.AttributedTo?.FirstOrDefault();
+        if (actorLink == null) return "Unknown";
+        
+        // Try to get Name from Actor
+        if (actorLink is Actor actor && actor.Name?.Any() == true)
+            return actor.Name.First();
+        
+        // Try to get Name from any Object
+        if (actorLink is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true)
+                return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id))
+                return obj.Id;
+        }
+        
+        // Try to get Href from Link
+        if (actorLink is Link link && link.Href != null)
+            return link.Href.ToString();
+        
+        return "Unknown";
     }
 
     private bool HasMediaAttachments()

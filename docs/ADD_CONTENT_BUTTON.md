@@ -98,6 +98,52 @@ The `AddContentButton` component provides a floating action button (FAB) for cre
     OnPostCreated="HandlePostCreated" />
 ```
 
+## Fluent UI Renderer
+
+### Using the Fluent UI Renderer
+
+The AddContentButton component supports a modern Fluent UI renderer that provides a polished floating action button (FAB) with Microsoft Fluent design. The button automatically floats over all content in the bottom right corner with a clean "+" icon.
+
+```razor
+@page "/home"
+@using Broca.ActivityPub.Components
+@using Broca.Web.Renderers
+
+<!-- Use the Fluent UI renderer for a modern look -->
+<AddContentButton 
+    ButtonTemplate="FluentAddContentButtonRenderer.Template"
+    OnPostCreated="HandlePostCreated" />
+
+@code {
+    private void HandlePostCreated(Activity activity)
+    {
+        Console.WriteLine($"Post created: {activity.Id}");
+    }
+}
+```
+
+#### Features of the Fluent Renderer
+
+- **Floating Action Button**: Modern circular FAB with "+" icon
+- **Automatic positioning**: Always floats in bottom right corner over content
+- **High z-index**: Appears above all other page elements
+- **Smooth animations**: Fade-in overlay and slide-up dialog
+- **Fluent UI components**: Uses FluentCard, FluentButton, FluentBadge, etc.
+- **Responsive design**: Adapts to mobile and desktop screens
+- **Consistent styling**: Matches Microsoft Fluent design system
+
+#### Customizing Position
+
+Even with the Fluent renderer, you can adjust the button position:
+
+```razor
+<AddContentButton 
+    ButtonTemplate="FluentAddContentButtonRenderer.Template"
+    BottomPosition="80"
+    RightPosition="40"
+    OnPostCreated="HandlePostCreated" />
+```
+
 ## Integration Patterns
 
 ### With Activity Feed

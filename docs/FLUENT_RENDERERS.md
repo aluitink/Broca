@@ -173,9 +173,37 @@ The renderer system uses a **proxy pattern** where each renderer implements `IOb
 - `CssClass` - Additional CSS classes
 - `AdditionalContent` - Custom content template
 
+### 8. FluentAddContentButtonRenderer
+
+**Purpose**: Renders a modern Floating Action Button (FAB) for creating new posts
+
+**Features**:
+- Circular FAB with "+" icon in Fluent design
+- Fixed positioning in bottom right corner
+- Floats above all content with high z-index
+- Smooth dialog animations (fade-in overlay, slide-up dialog)
+- Integrated with PostComposer using Fluent renderer
+- Fluent UI components for mentions, tags, and attachments
+- Responsive design for mobile and desktop
+
+**Parameters**:
+- `Context` - The AddContentButton component instance
+- Position customization via Context properties:
+  - `BottomPosition` - Distance from bottom (default: 24px)
+  - `RightPosition` - Distance from right (default: 24px)
+
+**Usage**:
+```razor
+<AddContentButton 
+    ButtonTemplate="FluentAddContentButtonRenderer.Template"
+    OnPostCreated="HandlePostCreated" />
+```
+
+**Styling**: FluentAddContentButtonRenderer.razor.css
+
 ## Type Mappings
 
-The following ActivityStreams types are mapped to renderers:
+The following ActivityStreams types and components are mapped to renderers:
 
 ```csharp
 Note → FluentNoteRenderer
@@ -186,6 +214,8 @@ Activity → FluentActivityRenderer
 Image → FluentImageRenderer
 Video → FluentVideoRenderer
 Document → FluentDocumentRenderer
+AddContentButton (component) → FluentAddContentButtonRenderer
+PostComposer (component) → FluentPostComposerRenderer
 ```
 
 ## Usage

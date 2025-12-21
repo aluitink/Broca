@@ -11,6 +11,21 @@
     <p>This page demonstrates the AddContentButton component - a floating action button for creating posts.</p>
     
     <div class="demo-section">
+        <h3>Renderer Options</h3>
+        <p>Choose between the default renderer and the modern Fluent UI renderer:</p>
+        <div class="renderer-selector">
+            <label>
+                <input type="radio" name="renderer" checked="@(!useFluentRenderer)" @onchange="@(() => ToggleRenderer(false))" />
+                <span>Default Renderer (✏️ icon)</span>
+            </label>
+            <label>
+                <input type="radio" name="renderer" checked="@useFluentRenderer" @onchange="@(() => ToggleRenderer(true))" />
+                <span>Fluent UI Renderer (+ icon, always floats)</span>
+            </label>
+        </div>
+    </div>
+
+    <div class="demo-section">
         <h3>Features</h3>
         <ul>
             <li>✅ Floating action button in bottom-right corner</li>
@@ -19,6 +34,12 @@
             <li>✅ @@mention functionality</li>
             <li>✅ Hashtag support</li>
             <li>✅ Privacy settings (public, unlisted, followers, direct)</li>
+            @if (useFluentRenderer)
+            {
+                <li>✨ Fluent UI design with smooth animations</li>
+                <li>✨ Modern circular FAB with + icon</li>
+                <li>✨ Fixed positioning over all content</li>
+            }
         </ul>
     </div>
 
@@ -84,6 +105,30 @@
         line-height: 1.8;
     }
 
+    .renderer-selector {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+
+    .renderer-selector label {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+
+    .renderer-selector label:hover {
+        background-color: #f0f0f0;
+    }
+
+    .renderer-selector input[type="radio"] {
+        margin-right: 0.5rem;
+    }
+
     .empty-state {
         text-align: center;
         padding: 3rem 1.5rem;
@@ -144,6 +189,13 @@
 
 @code {
     private List<PostInfo> recentPosts = new();
+    private bool useFluentRenderer = true; // Default to Fluent UI renderer
+
+    private void ToggleRenderer(bool useFluent)
+    {
+        useFluentRenderer = useFluent;
+        StateHasChanged();
+    }
 
     private async Task HandlePostCreated(Activity activity)
     {

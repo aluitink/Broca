@@ -1,6 +1,7 @@
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Client.Extensions;
 using Broca.ActivityPub.Components.Services;
+using KristofferStrube.ActivityStreams;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -72,9 +73,24 @@ public static class ServiceCollectionExtensions
 
     private static void RegisterDefaultRenderers(IServiceCollection services)
     {
-        // Default renderers will be registered here as we implement them
-        // services.AddObjectRenderer<Note, NoteRenderer>();
-        // services.AddObjectRenderer<Person, ProfileRenderer>();
+        // Register default renderers for common ActivityStreams types
+        // These are registered as a post-configuration step that populates the registry
+        services.AddOptions<ActivityPubComponentOptions>()
+            .PostConfigure<IServiceProvider>((options, sp) =>
+            {
+                var registry = sp.GetService<IObjectRendererRegistry>();
+                if (registry != null)
+                {
+                    registry.RegisterRenderer(typeof(Note), new DefaultNoteRendererProxy());
+                    registry.RegisterRenderer(typeof(Article), new DefaultArticleRendererProxy());
+                    registry.RegisterRenderer(typeof(Image), new DefaultImageRendererProxy());
+                    registry.RegisterRenderer(typeof(Video), new DefaultVideoRendererProxy());
+                    registry.RegisterRenderer(typeof(Document), new DefaultDocumentRendererProxy());
+                    registry.RegisterRenderer(typeof(Person), new DefaultActorRendererProxy());
+                    registry.RegisterRenderer(typeof(Actor), new DefaultActorRendererProxy());
+                    registry.RegisterRenderer(typeof(Activity), new DefaultActivityRendererProxy());
+                }
+            });
     }
 }
 

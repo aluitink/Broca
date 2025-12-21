@@ -7,90 +7,102 @@
     @if (Article != null)
     {
         <FluentCard>
-            @if (ShowFeaturedImage && !string.IsNullOrEmpty(GetFeaturedImageUrl()))
-            {
-                <div class="article-featured-image">
-                    <img src="@GetFeaturedImageUrl()" 
-                         alt="@(Article.Name?.FirstOrDefault() ?? "Article image")" 
-                         loading="lazy"
-                         style="width: 100%; max-height: 400px; object-fit: cover; border-radius: 4px;" />
-                </div>
-            }
-
-            <div class="article-header">
-                @if (Article.Name?.Any() == true)
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                @if (ShowFeaturedImage && !string.IsNullOrEmpty(GetFeaturedImageUrl()))
                 {
-                    <FluentLabel Typo="Typography.PageTitle" Weight="FontWeight.Bold" class="article-title">
-                        @Article.Name.First()
-                    </FluentLabel>
+                    <div class="article-featured-image">
+                        <img src="@GetFeaturedImageUrl()" 
+                             alt="@(Article.Name?.FirstOrDefault() ?? "Article image")" 
+                             loading="lazy"
+                             style="width: 100%; max-height: 400px; object-fit: cover; border-radius: 8px;" />
+                    </div>
                 }
 
-                <FluentStack Orientation="Orientation.Horizontal" class="article-meta">
-                    @if (ShowAuthor && Article.AttributedTo?.Any() == true)
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" class="article-header">
+                    @if (Article.Name?.Any() == true)
                     {
-                        <FluentLabel Typo="Typography.Body">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Color="Color.Accent" />
-                            <strong>@GetAuthorDisplay()</strong>
+                        <FluentLabel Typo="Typography.PageTitle" Weight="FontWeight.Bold" class="article-title">
+                            @Article.Name.First()
                         </FluentLabel>
                     }
 
-                    @if (Article.Published.HasValue)
-                    {
-                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Calendar())" />
-                            <time datetime="@Article.Published.Value.ToString("o")">
-                                @Article.Published.Value.ToString("MMMM d, yyyy")
-                            </time>
-                        </FluentLabel>
-                    }
+                    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="article-meta">
+                        @if (ShowAuthor && Article.AttributedTo?.Any() == true)
+                        {
+                            <FluentPersona Name="@GetAuthorDisplay()"
+                                           Image="@GetAuthorImageUrl()"
+                                           ImageSize="28px"
+                                           TextPosition="@TextPosition.End">
+                                @if (Article.Published.HasValue)
+                                {
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                        <time datetime="@Article.Published.Value.ToString("o")">
+                                            @Article.Published.Value.ToString("MMMM d, yyyy")
+                                        </time>
+                                    </FluentLabel>
+                                }
+                            </FluentPersona>
+                        }
+                        else if (Article.Published.HasValue)
+                        {
+                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Calendar())" />
+                                <time datetime="@Article.Published.Value.ToString("o")">
+                                    @Article.Published.Value.ToString("MMMM d, yyyy")
+                                </time>
+                            </FluentLabel>
+                        }
 
-                    @if (ShowReadTime && !string.IsNullOrEmpty(GetContent()))
-                    {
-                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" />
-                            @CalculateReadTime() min read
-                        </FluentLabel>
-                    }
+                        @if (ShowReadTime && !string.IsNullOrEmpty(GetContent()))
+                        {
+                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" />
+                                @CalculateReadTime() min read
+                            </FluentLabel>
+                        }
+                    </FluentStack>
                 </FluentStack>
-            </div>
 
-            @if (Article.Summary?.Any() == true && ShowSummary)
-            {
-                <FluentCard Class="article-summary" Style="background: var(--neutral-layer-2);">
-                    <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
-                        @((MarkupString)(Article.Summary.First() ?? string.Empty))
-                    </FluentLabel>
-                </FluentCard>
-            }
+                @if (Article.Summary?.Any() == true && ShowSummary)
+                {
+                    <FluentCard Class="article-summary" Style="background: var(--neutral-layer-2); padding: 16px;">
+                        <FluentLabel Typo="Typography.Body" Style="font-style: italic;">
+                            @((MarkupString)(Article.Summary.First() ?? string.Empty))
+                        </FluentLabel>
+                    </FluentCard>
+                }
 
-            <FluentDivider />
+                <FluentDivider Style="margin: 0;" />
 
-            @if (!string.IsNullOrEmpty(GetContent()))
-            {
-                <div class="article-content">
-                    @((MarkupString)GetContent())
-                </div>
-            }
+                @if (!string.IsNullOrEmpty(GetContent()))
+                {
+                    <div class="article-content">
+                        @((MarkupString)GetContent())
+                    </div>
+                }
 
-            @if (Article.Tag?.Any() == true && ShowTags)
-            {
-                <FluentDivider />
-                <FluentStack Orientation="Orientation.Horizontal" Wrap="true" class="article-tags">
-                    @foreach (var tag in Article.Tag)
-                    {
-                        <FluentBadge Appearance="Appearance.Lightweight" BackgroundColor="var(--accent-fill-rest)">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Tag())" Slot="start" />
-                            @tag.ToString()
-                        </FluentBadge>
-                    }
-                </FluentStack>
-            }
+                @if (Article.Tag?.Any() == true && ShowTags)
+                {
+                    <FluentDivider Style="margin: 0;" />
+                    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="4" class="article-tags">
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Tag())" />
+                        </FluentLabel>
+                        @foreach (var tag in Article.Tag)
+                        {
+                            <FluentBadge Appearance="Appearance.Lightweight">
+                                @tag.ToString()
+                            </FluentBadge>
+                        }
+                    </FluentStack>
+                }
 
-            @if (AdditionalContent != null)
-            {
-                <FluentDivider />
-                @AdditionalContent(Article)
-            }
+                @if (AdditionalContent != null)
+                {
+                    <FluentDivider Style="margin: 0;" />
+                    @AdditionalContent(Article)
+                }
+            </FluentStack>
         </FluentCard>
     }
 </article>
@@ -150,6 +162,22 @@
         if (authorId is Actor actor && actor.Name?.Any() == true)
             return actor.Name.First();
         return authorId?.ToString() ?? "Unknown Author";
+    }
+
+    private string GetAuthorImageUrl()
+    {
+        var authorId = Article?.AttributedTo?.FirstOrDefault();
+        if (authorId is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                if (url is Link link && link.Href != null)
+                    return link.Href.ToString();
+            }
+        }
+        return string.Empty;
     }
 
     private string GetContent()

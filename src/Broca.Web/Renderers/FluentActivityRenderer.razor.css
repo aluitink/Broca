@@ -1,12 +1,24 @@
 /* Fluent Activity Renderer Styles */
-.fluent-activity {
-    margin-bottom: 12px;
+.fluent-activity-card {
+    margin-bottom: 16px;
+}
+
+.activity-header {
+    align-items: center;
+}
+
+.activity-timestamp {
+    white-space: nowrap;
 }
 
 .activity-objects {
-    margin: 12px 0;
+    margin: 0;
 }
 
 .activity-object {
-    padding: 8px 0;
+    padding: 0;
+}
+
+.activity-object:not(:last-child) {
+    margin-bottom: 12px;
 }
