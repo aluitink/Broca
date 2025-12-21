@@ -47,6 +47,26 @@ else
             <p>Here's your latest activity</p>
         </FluentCard>
 
+        <FluentCard Class="composer-card">
+            <h3>
+                <FluentIcon Value="@(new Icons.Regular.Size20.Compose())" Color="Color.Accent" />
+                Create a post
+            </h3>
+            <PostComposer 
+                Placeholder="What's on your mind?"
+                ShowVisibilitySelector="true"
+                ShowAttachmentButton="true"
+                Rows="3"
+                OnPostCreated="@HandlePostCreated">
+            </PostComposer>
+            @if (!string.IsNullOrEmpty(_postMessage))
+            {
+                <FluentMessageBar Intent="@_postMessageIntent" Class="post-message">
+                    @_postMessage
+                </FluentMessageBar>
+            }
+        </FluentCard>
+
         @if (_inboxUrl != null)
         {
             <ActivityFeed 
@@ -69,6 +89,8 @@ else
 
 @code {
     private Uri? _inboxUrl;
+    private string? _postMessage;
+    private MessageIntent _postMessageIntent = MessageIntent.Success;
 
     protected override void OnInitialized()
     {
@@ -96,6 +118,22 @@ else
             return person.PreferredUsername;
         
         return "User";
+    }
+
+    private Task HandlePostCreated(Activity activity)
+    {
+        _postMessage = "Post created successfully!";
+        _postMessageIntent = MessageIntent.Success;
+        StateHasChanged();
+        
+        // Clear message after 3 seconds
+        Task.Delay(3000).ContinueWith(_ =>
+        {
+            _postMessage = null;
+            InvokeAsync(StateHasChanged);
+        });
+        
+        return Task.CompletedTask;
     }
 
     public void Dispose()
@@ -146,7 +184,22 @@ else
     }
 
     .feature h3 {
-        margin: 0.5rem 0 0.25rem 0;
+     composer-card {
+        padding: 1.5rem;
+    }
+
+    .composer-card h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 1rem 0;
+    }
+
+    .post-message {
+        margin-top: 1rem;
+    }
+
+    .   margin: 0.5rem 0 0.25rem 0;
     }
 
     .feature p {

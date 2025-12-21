@@ -1,0 +1,402 @@
+@using Broca.ActivityPub.Core.Interfaces
+@using KristofferStrube.ActivityStreams
+
+<div class="activitypub-add-content-wrapper @CssClass">
+    @if (showDialog)
+    {
+        <div class="add-content-overlay" @onclick="CloseDialog"></div>
+        <div class="add-content-dialog">
+            <div class="dialog-header">
+                <h2>Create Post</h2>
+                <button class="dialog-close-button" @onclick="CloseDialog" title="Close">✕</button>
+            </div>
+            <div class="dialog-body">
+                <PostComposer
+                    ShowCancelButton="true"
+                    OnCancel="CloseDialog"
+                    OnPostCreated="HandlePostCreated"
+                    OnAttachmentClick="HandleAttachmentClick"
+                    ShowVisibilitySelector="true"
+                    ShowAttachmentButton="true"
+                    ShowEmojiButton="true"
+                    ShowContentWarning="true"
+                    ShowPollButton="false"
+                    Placeholder="@Placeholder"
+                    MaxLength="@MaxLength"
+                    Rows="@DialogRows" />
+                
+                @if (attachments.Count > 0)
+                {
+                    <div class="attachment-preview-section">
+                        <h3>Attachments</h3>
+                        <div class="attachment-list">
+                            @foreach (var attachment in attachments)
+                            {
+                                <div class="attachment-preview-item">
+                                    @if (attachment.Type == "image")
+                                    {
+                                        <img src="@attachment.PreviewUrl" alt="@attachment.Name" class="attachment-thumbnail" />
+                                    }
+                                    else if (attachment.Type == "video")
+                                    {
+                                        <div class="attachment-video-preview">
+                                            <span class="attachment-icon">🎥</span>
+                                            <span class="attachment-name">@attachment.Name</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="attachment-file-preview">
+                                            <span class="attachment-icon">📄</span>
+                                            <span class="attachment-name">@attachment.Name</span>
+                                        </div>
+                                    }
+                                    <button class="attachment-remove-button" @onclick="() => RemoveAttachment(attachment)" title="Remove">✕</button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (mentions.Count > 0)
+                {
+                    <div class="mentions-section">
+                        <h3>Mentions</h3>
+                        <div class="mentions-list">
+                            @foreach (var mention in mentions)
+                            {
+                                <div class="mention-item">
+                                    <span class="mention-handle">@@@mention</span>
+                                    <button class="mention-remove-button" @onclick="() => RemoveMention(mention)" title="Remove">✕</button>
+                                </div>
+                            }
+                        </div>
+                        <div class="mention-input">
+                            <input type="text" 
+                                   @bind="newMention" 
+                                   @bind:event="oninput"
+                                   @onkeypress="HandleMentionKeyPress"
+                                   placeholder="Add mention (e.g., user@domain.com)" 
+                                   class="mention-text-input" />
+                            <button class="mention-add-button" @onclick="AddMention" disabled="@string.IsNullOrWhiteSpace(newMention)">Add</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="mentions-section-collapsed">
+                        <button class="show-mentions-button" @onclick="ShowMentions">+ Add Mentions</button>
+                    </div>
+                }
+
+                @if (tags.Count > 0)
+                {
+                    <div class="tags-section">
+                        <h3>Tags</h3>
+                        <div class="tags-list">
+                            @foreach (var tag in tags)
+                            {
+                                <div class="tag-item">
+                                    <span class="tag-text">#@tag</span>
+                                    <button class="tag-remove-button" @onclick="() => RemoveTag(tag)" title="Remove">✕</button>
+                                </div>
+                            }
+                        </div>
+                        <div class="tag-input">
+                            <input type="text" 
+                                   @bind="newTag" 
+                                   @bind:event="oninput"
+                                   @onkeypress="HandleTagKeyPress"
+                                   placeholder="Add tag (without #)" 
+                                   class="tag-text-input" />
+                            <button class="tag-add-button" @onclick="AddTag" disabled="@string.IsNullOrWhiteSpace(newTag)">Add</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="tags-section-collapsed">
+                        <button class="show-tags-button" @onclick="ShowTags">+ Add Tags</button>
+                    </div>
+                }
+
+                @if (showAttachmentPicker)
+                {
+                    <div class="attachment-picker">
+                        <input type="file" 
+                               @ref="fileInput" 
+                               @onchange="HandleFileSelected" 
+                               multiple 
+                               accept="@AcceptedFileTypes"
+                               class="file-input" />
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (!HideButton)
+    {
+        <button class="add-content-fab" 
+                @onclick="OpenDialog" 
+                title="@ButtonTitle"
+                style="@GetButtonStyle()">
+            <span class="fab-icon">@ButtonIcon</span>
+        </button>
+    }
+</div>
+
+@code {
+    private bool showDialog = false;
+    private bool showAttachmentPicker = false;
+    private ElementReference fileInput;
+    private List<AttachmentInfo> attachments = new();
+    private List<string> mentions = new();
+    private List<string> tags = new();
+    private string newMention = string.Empty;
+    private string newTag = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the button icon.
+    /// </summary>
+    [Parameter]
+    public string ButtonIcon { get; set; } = "✏️";
+
+    /// <summary>
+    /// Gets or sets the button title (tooltip).
+    /// </summary>
+    [Parameter]
+    public string ButtonTitle { get; set; } = "Create new post";
+
+    /// <summary>
+    /// Gets or sets the placeholder text for the composer.
+    /// </summary>
+    [Parameter]
+    public string Placeholder { get; set; } = "What's on your mind?";
+
+    /// <summary>
+    /// Gets or sets the maximum content length.
+    /// </summary>
+    [Parameter]
+    public int MaxLength { get; set; } = 500;
+
+    /// <summary>
+    /// Gets or sets the number of rows for the dialog textarea.
+    /// </summary>
+    [Parameter]
+    public int DialogRows { get; set; } = 6;
+
+    /// <summary>
+    /// Gets or sets whether to hide the floating button.
+    /// </summary>
+    [Parameter]
+    public bool HideButton { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show the dialog on initialization.
+    /// </summary>
+    [Parameter]
+    public bool ShowDialogOnInit { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the position from the bottom (in pixels).
+    /// </summary>
+    [Parameter]
+    public int BottomPosition { get; set; } = 24;
+
+    /// <summary>
+    /// Gets or sets the position from the right (in pixels).
+    /// </summary>
+    [Parameter]
+    public int RightPosition { get; set; } = 24;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets the accepted file types for attachments.
+    /// </summary>
+    [Parameter]
+    public string AcceptedFileTypes { get; set; } = "image/*,video/*";
+
+    /// <summary>
+    /// Gets or sets a callback for when a post is successfully created.
+    /// </summary>
+    [Parameter]
+    public EventCallback<Activity> OnPostCreated { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (ShowDialogOnInit)
+        {
+            showDialog = true;
+        }
+    }
+
+    private void OpenDialog()
+    {
+        showDialog = true;
+        StateHasChanged();
+    }
+
+    private void CloseDialog()
+    {
+        showDialog = false;
+        showAttachmentPicker = false;
+        ClearForm();
+        StateHasChanged();
+    }
+
+    private async Task HandlePostCreated(Activity activity)
+    {
+        if (OnPostCreated.HasDelegate)
+        {
+            await OnPostCreated.InvokeAsync(activity);
+        }
+        CloseDialog();
+    }
+
+    private void HandleAttachmentClick()
+    {
+        showAttachmentPicker = !showAttachmentPicker;
+        StateHasChanged();
+    }
+
+    private void HandleFileSelected(ChangeEventArgs e)
+    {
+        // TODO: Implement actual file upload logic
+        // This is a placeholder - you'll need to implement file upload to your storage
+        // and create AttachmentInfo objects with the uploaded URLs
+        
+        showAttachmentPicker = false;
+        StateHasChanged();
+    }
+
+    private void RemoveAttachment(AttachmentInfo attachment)
+    {
+        attachments.Remove(attachment);
+        StateHasChanged();
+    }
+
+    private void ShowMentions()
+    {
+        if (mentions.Count == 0)
+        {
+            mentions.Add(""); // Trigger the expanded view
+            mentions.Clear();
+        }
+        StateHasChanged();
+    }
+
+    private void AddMention()
+    {
+        if (!string.IsNullOrWhiteSpace(newMention))
+        {
+            var mention = newMention.TrimStart('@').Trim();
+            if (!mentions.Contains(mention))
+            {
+                mentions.Add(mention);
+            }
+            newMention = string.Empty;
+            StateHasChanged();
+        }
+    }
+
+    private void RemoveMention(string mention)
+    {
+        mentions.Remove(mention);
+        StateHasChanged();
+    }
+
+    private void HandleMentionKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddMention();
+        }
+    }
+
+    private void ShowTags()
+    {
+        if (tags.Count == 0)
+        {
+            tags.Add(""); // Trigger the expanded view
+            tags.Clear();
+        }
+        StateHasChanged();
+    }
+
+    private void AddTag()
+    {
+        if (!string.IsNullOrWhiteSpace(newTag))
+        {
+            var tag = newTag.TrimStart('#').Trim();
+            if (!tags.Contains(tag))
+            {
+                tags.Add(tag);
+            }
+            newTag = string.Empty;
+            StateHasChanged();
+        }
+    }
+
+    private void RemoveTag(string tag)
+    {
+        tags.Remove(tag);
+        StateHasChanged();
+    }
+
+    private void HandleTagKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddTag();
+        }
+    }
+
+    private void ClearForm()
+    {
+        attachments.Clear();
+        mentions.Clear();
+        tags.Clear();
+        newMention = string.Empty;
+        newTag = string.Empty;
+    }
+
+    private string GetButtonStyle()
+    {
+        return $"bottom: {BottomPosition}px; right: {RightPosition}px;";
+    }
+
+    /// <summary>
+    /// Opens the dialog programmatically.
+    /// </summary>
+    public void Open()
+    {
+        OpenDialog();
+    }
+
+    /// <summary>
+    /// Closes the dialog programmatically.
+    /// </summary>
+    public void Close()
+    {
+        CloseDialog();
+    }
+
+    /// <summary>
+    /// Information about an attachment.
+    /// </summary>
+    public class AttachmentInfo
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty; // image, video, file
+        public string Url { get; set; } = string.Empty;
+        public string? PreviewUrl { get; set; }
+        public long Size { get; set; }
+    }
+}

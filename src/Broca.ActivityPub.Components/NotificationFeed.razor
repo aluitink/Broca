@@ -200,6 +200,18 @@
     public string? CssClass { get; set; }
 
     /// <summary>
+    /// Gets or sets the inbox URL to fetch notifications from.
+    /// </summary>
+    [Parameter]
+    public Uri? InboxUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to automatically mark notifications as read when clicked.
+    /// </summary>
+    [Parameter]
+    public bool AutoMarkAsRead { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets a custom notification rendering template.
     /// </summary>
     [Parameter]
@@ -249,11 +261,39 @@
 
         try
         {
-            // TODO: This would need a proper inbox or notifications API endpoint
-            // For now, this is a placeholder
-            // In a real implementation, you'd fetch from the user's inbox and parse notification types
-            await Task.Delay(500); // Simulate loading
-            hasMore = false;
+            if (InboxUrl == null)
+            {
+                error = "Inbox URL is required";
+                return;
+            }
+
+            var fetchedCount = 0;
+            var skip = currentPage * PageSize;
+
+            await foreach (var activity in Client.GetCollectionAsync<Activity>(InboxUrl, PageSize + skip))
+            {
+                if (fetchedCount < skip)
+                {
+                    fetchedCount++;
+                    continue;
+                }
+
+                if (fetchedCount >= skip + PageSize)
+                    break;
+
+                var notification = ParseActivityToNotification(activity);
+                if (notification != null)
+                {
+                    notifications.Add(notification);
+                    if (!notification.IsRead)
+                        unreadCount++;
+                }
+
+                fetchedCount++;
+            }
+
+            // If we got fewer than requested, there are no more
+            hasMore = fetchedCount >= skip + PageSize;
         }
         catch (Exception ex)
         {
@@ -264,6 +304,53 @@
             isLoading = false;
             StateHasChanged();
         }
+    }
+
+    private Notification? ParseActivityToNotification(Activity activity)
+    {
+        if (activity?.Type == null || !activity.Type.Any())
+            return null;
+
+        var type = activity.Type.First();
+        NotificationType? notificationType = type switch
+        {
+            "Like" => NotificationType.Like,
+            "Announce" => NotificationType.Boost,
+            "Follow" => NotificationType.Follow,
+            "Create" => DetermineCreateType(activity),
+            _ => null
+        };
+
+        if (notificationType == null)
+            return null;
+
+        return new Notification
+        {
+            Id = activity.Id ?? Guid.NewGuid().ToString(),
+            Type = notificationType.Value,
+            Actor = activity.Actor?.FirstOrDefault() as KristofferStrube.ActivityStreams.Object,
+            Object = activity.Object?.FirstOrDefault() as KristofferStrube.ActivityStreams.Object,
+            Timestamp = activity.Published ?? DateTimeOffset.UtcNow,
+            IsRead = false // TODO: Track read state
+        };
+    }
+
+    private NotificationType? DetermineCreateType(Activity activity)
+    {
+        // Check if this is a mention or reply
+        var obj = activity.Object?.FirstOrDefault() as KristofferStrube.ActivityStreams.Object;
+        if (obj != null)
+        {
+            // Check for reply
+            if (obj is Note note && note.InReplyTo?.Any() == true)
+                return NotificationType.Reply;
+
+            // Check for mentions (would need to check Tag array for Mention types)
+            if (obj.Tag?.Any() == true)
+                return NotificationType.Mention;
+        }
+
+        return null; // Don't show generic Create activities
     }
 
     private async Task LoadMoreAsync()
@@ -343,7 +430,7 @@
 
     private async Task HandleNotificationClick(Notification notification)
     {
-        if (!notification.IsRead)
+        if (AutoMarkAsRead && !notification.IsRead)
         {
             notification.IsRead = true;
             unreadCount--;

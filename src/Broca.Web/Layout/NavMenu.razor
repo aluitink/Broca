@@ -10,8 +10,15 @@
                 Home
             </FluentNavLink>
             
+            <FluentNavLink Href="explore" Icon="@(new Icons.Regular.Size20.Search())" IconColor="Color.Accent">
+                Explore
+            </FluentNavLink>
+            
             @if (AuthState.IsAuthenticated)
             {
+                <FluentNavLink Href="notifications" Icon="@(new Icons.Regular.Size20.Alert())" IconColor="Color.Accent">
+                    Notifications
+                </FluentNavLink>
                 <FluentNavLink Href="inbox" Icon="@(new Icons.Regular.Size20.Mail())" IconColor="Color.Accent">
                     Inbox
                 </FluentNavLink>
@@ -30,6 +37,10 @@
                 
                 <FluentDivider Style="margin: 0.5rem 0;" />
             }
+            
+            <FluentNavLink Href="diagnostics" Icon="@(new Icons.Regular.Size20.Wrench())" IconColor="Color.Accent">
+                Diagnostics
+            </FluentNavLink>
             
             @if (!AuthState.IsAuthenticated)
             {

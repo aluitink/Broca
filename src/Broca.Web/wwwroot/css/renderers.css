@@ -1,0 +1,251 @@
+/* Fluent UI Renderer Styles */
+
+/* Note Renderer */
+.note-card {
+    margin-bottom: 1rem;
+}
+
+.note-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--neutral-foreground-rest);
+}
+
+.note-author {
+    font-weight: 600;
+}
+
+.note-timestamp {
+    color: var(--neutral-foreground-hint);
+    font-size: 0.875rem;
+}
+
+.note-title {
+    margin-bottom: 0.5rem;
+}
+
+.note-content {
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.note-attachments {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.note-attachment-image {
+    width: 100%;
+    height: auto;
+    border-radius: var(--control-corner-radius);
+}
+
+.note-attachment-video {
+    width: 100%;
+    height: auto;
+    border-radius: var(--control-corner-radius);
+}
+
+.note-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--neutral-stroke-divider-rest);
+}
+
+/* Actor Renderer */
+.actor-card {
+    margin-bottom: 1rem;
+}
+
+.actor-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.actor-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.actor-username {
+    margin-top: -0.25rem;
+}
+
+.actor-summary {
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.actor-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    color: var(--neutral-foreground-hint);
+    font-size: 0.875rem;
+}
+
+.actor-metadata > span {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Activity Renderer */
+.activity-card {
+    margin-bottom: 1rem;
+}
+
+.activity-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.activity-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.activity-object {
+    margin-left: 2rem;
+    padding-left: 1rem;
+    border-left: 2px solid var(--neutral-stroke-divider-rest);
+}
+
+.activity-target {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background-color: var(--neutral-layer-2);
+    border-radius: var(--control-corner-radius);
+}
+
+/* Article Renderer */
+.article-card {
+    margin-bottom: 1rem;
+}
+
+.article-title {
+    margin-bottom: 0.75rem;
+}
+
+.article-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1rem;
+    color: var(--neutral-foreground-hint);
+    font-size: 0.875rem;
+}
+
+.article-meta > span {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.article-summary {
+    margin-bottom: 1rem;
+    font-style: italic;
+    color: var(--neutral-foreground-hint);
+}
+
+.article-content {
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+/* Image Renderer */
+.image-card {
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.image-content {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.image-caption {
+    padding: 0.75rem;
+    background-color: var(--neutral-layer-2);
+}
+
+/* Video Renderer */
+.video-card {
+    margin-bottom: 1rem;
+}
+
+.video-content {
+    width: 100%;
+    height: auto;
+    border-radius: var(--control-corner-radius);
+    margin-bottom: 0.75rem;
+}
+
+.video-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.video-duration {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--neutral-foreground-hint);
+    font-size: 0.875rem;
+}
+
+/* Document Renderer */
+.document-card {
+    margin-bottom: 1rem;
+}
+
+.document-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.document-icon {
+    font-size: 2rem;
+}
+
+.document-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.document-summary {
+    margin-bottom: 0.75rem;
+}
+
+/* General responsive adjustments */
+@media (max-width: 768px) {
+    .note-attachments {
+        grid-template-columns: 1fr;
+    }
+    
+    .activity-object {
+        margin-left: 1rem;
+        padding-left: 0.75rem;
+    }
+}

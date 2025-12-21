@@ -1,0 +1,175 @@
+@page "/compose"
+@using Broca.ActivityPub.Components
+@using KristofferStrube.ActivityStreams
+
+<PageTitle>Compose Post</PageTitle>
+
+<h1>Post Composer Demo</h1>
+
+<div class="demo-container">
+    <h2>AddContentButton Component</h2>
+    <p>This page demonstrates the AddContentButton component - a floating action button for creating posts.</p>
+    
+    <div class="demo-section">
+        <h3>Features</h3>
+        <ul>
+            <li>✅ Floating action button in bottom-right corner</li>
+            <li>✅ Modal dialog with post composer</li>
+            <li>✅ Media attachment support (with preview)</li>
+            <li>✅ @@mention functionality</li>
+            <li>✅ Hashtag support</li>
+            <li>✅ Privacy settings (public, unlisted, followers, direct)</li>
+        </ul>
+    </div>
+
+    @if (recentPosts.Count > 0)
+    {
+        <div class="demo-section">
+            <h3>Recent Posts</h3>
+            <div class="posts-list">
+                @foreach (var post in recentPosts)
+                {
+                    <div class="post-item">
+                        <div class="post-meta">
+                            <strong>Posted at:</strong> @post.PublishedTime.ToString("g")
+                        </div>
+                        <div class="post-type">
+                            <strong>Type:</strong> @post.ActivityType
+                        </div>
+                        <div class="post-preview">
+                            <pre>@post.Content</pre>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="demo-section empty-state">
+            <p>Click the floating button in the bottom-right corner to create your first post!</p>
+        </div>
+    }
+</div>
+
+<!-- AddContentButton Component -->
+<AddContentButton 
+    OnPostCreated="HandlePostCreated"
+    ButtonIcon="✏️"
+    ButtonTitle="Create new post"
+    Placeholder="What's happening?"
+    MaxLength="500" />
+
+<style>
+    .demo-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+    }
+
+    .demo-section {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .demo-section h3 {
+        margin-top: 0;
+        color: #333;
+    }
+
+    .demo-section ul {
+        line-height: 1.8;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1.5rem;
+        color: #666;
+        font-size: 1.1rem;
+    }
+
+    .posts-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .post-item {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        border-left: 4px solid #667eea;
+    }
+
+    .post-meta,
+    .post-type {
+        font-size: 0.875rem;
+        color: #666;
+        margin-bottom: 0.5rem;
+    }
+
+    .post-preview {
+        margin-top: 0.75rem;
+    }
+
+    .post-preview pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-family: inherit;
+    }
+
+    @@media (prefers-color-scheme: dark) {
+        .demo-section {
+            background: #2a2a2a;
+            color: #e0e0e0;
+        }
+
+        .demo-section h3 {
+            color: #e0e0e0;
+        }
+
+        .post-item {
+            background: #1e1e1e;
+        }
+
+        .empty-state {
+            color: #aaa;
+        }
+    }
+</style>
+
+@code {
+    private List<PostInfo> recentPosts = new();
+
+    private async Task HandlePostCreated(Activity activity)
+    {
+        // Add the new post to the recent posts list
+        var postInfo = new PostInfo
+        {
+            PublishedTime = activity.Published ?? DateTimeOffset.UtcNow,
+            ActivityType = activity.Type?.FirstOrDefault() ?? "Unknown",
+            Content = activity.Object?.FirstOrDefault()?.ToString() ?? "No content"
+        };
+
+        recentPosts.Insert(0, postInfo);
+
+        // Keep only the last 10 posts
+        if (recentPosts.Count > 10)
+        {
+            recentPosts = recentPosts.Take(10).ToList();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private class PostInfo
+    {
+        public DateTimeOffset PublishedTime { get; set; }
+        public string ActivityType { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
+    }
+}
