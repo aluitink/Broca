@@ -41,14 +41,12 @@
     
     @if (AuthState.IsAuthenticated)
     {
-        <div class="floating-add-content">
-            <AddContentButton 
-                Placeholder="What would you like to share?"
-                ButtonText="Create Post"
-                ButtonAppearance="Appearance.Accent"
-                OnPostCreated="@HandlePostCreated">
-            </AddContentButton>
-        </div>
+        <AddContentButton 
+            Placeholder="What would you like to share?"
+            ButtonTitle="Create new post"
+            ButtonIcon="✏️"
+            OnPostCreated="@HandlePostCreated">
+        </AddContentButton>
     }
 </ActivityPubClientProvider>
 
@@ -113,12 +111,5 @@
 
     .header-user-text {
         font-size: 0.875rem;
-    }
-
-    .floating-add-content {
-        position: fixed;
-        bottom: 2rem;
-        right: 2rem;
-        z-index: 1000;
     }
 </style>
