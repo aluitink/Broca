@@ -1,0 +1,57 @@
+@* Enhanced audio renderer with Fluent UI *@
+@using KristofferStrube.ActivityStreams
+@if (Audio?.Url?.FirstOrDefault()?.Href is Uri audioUri)
+{
+    var audioUrl = audioUri.ToString();
+    <FluentCard Class="audio-card">
+        <div class="audio-header">
+            <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" Color="Color.Accent" />
+            <div class="audio-info">
+                @if (!string.IsNullOrEmpty(Audio.Name?.FirstOrDefault()))
+                {
+                    <h4 class="audio-title">@Audio.Name.First()</h4>
+                }
+            </div>
+        </div>
+        <audio controls class="audio-player" preload="metadata">
+            <source src="@audioUrl" type="@GetMimeType()" />
+            Your browser does not support audio playback.
+        </audio>
+        @if (Audio.Duration is TimeSpan duration)
+        {
+            <div class="audio-meta">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" />
+                <span>@FormatDuration(duration)</span>
+            </div>
+        }
+    </FluentCard>
+}
+else
+{
+    <FluentMessageBar Intent="MessageIntent.Warning">Audio source not available</FluentMessageBar>
+}
+
+@code {
+    [Parameter, EditorRequired] public Audio? Audio { get; set; }
+
+    private string GetMimeType()
+    {
+        if (Audio?.MediaType != null) return Audio.MediaType;
+        var url = Audio?.Url?.FirstOrDefault()?.Href?.ToString().ToLowerInvariant() ?? "";
+        if (url.EndsWith(".mp3")) return "audio/mpeg";
+        if (url.EndsWith(".ogg")) return "audio/ogg";
+        if (url.EndsWith(".wav")) return "audio/wav";
+        return "audio/mpeg";
+    }
+
+    private string FormatDuration(TimeSpan duration) => duration.TotalHours >= 1 ? duration.ToString(@"h\:mm\:ss") : duration.ToString(@"m\:ss");
+}
+
+<style>
+    .audio-card { padding: 1rem; }
+    .audio-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+    .audio-info { flex: 1; }
+    .audio-title { margin: 0; font-size: 1rem; font-weight: 600; }
+    .audio-player { width: 100%; margin-bottom: 0.5rem; }
+    .audio-meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--neutral-foreground-hint); }
+</style>

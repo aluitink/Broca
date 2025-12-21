@@ -35,14 +35,35 @@
 
         @if (Note.Attachment?.Any() == true)
         {
-            <div class="note-attachments">
-                @foreach (var attachment in Note.Attachment)
-                {
-                    <div class="attachment-item">
-                        @RenderAttachment(attachment)
-                    </div>
-                }
-            </div>
+            @if (UseMediaGallery && HasMediaAttachments())
+            {
+                <MediaGallery Images="@GetImageAttachments()"
+                             DisplayMode="@MediaGalleryDisplayMode"
+                             GridColumns="@MediaGalleryColumns"
+                             CssClass="note-media-gallery" />
+            }
+            else
+            {
+                <div class="note-attachments">
+                    @foreach (var attachment in Note.Attachment)
+                    {
+                        <div class="attachment-item">
+                            @RenderAttachment(attachment)
+                        </div>
+                    }
+                </div>
+            }
+        }
+
+        @if (ShowInteractions && Note.Id != null)
+        {
+            <InteractionBar ObjectId="@Note.Id"
+                           Object="@Note"
+                           ShowReply="@ShowReply"
+                           ShowBoost="@ShowBoost"
+                           ShowLike="@ShowLike"
+                           ShowBookmark="@ShowBookmark"
+                           CssClass="note-interactions" />
         }
 
         @if (AdditionalContent != null)
@@ -66,6 +87,54 @@
     public bool ShowActor { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether to show interactions (like, boost, reply, etc.).
+    /// </summary>
+    [Parameter]
+    public bool ShowInteractions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the reply button.
+    /// </summary>
+    [Parameter]
+    public bool ShowReply { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the boost button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBoost { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the like button.
+    /// </summary>
+    [Parameter]
+    public bool ShowLike { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the bookmark button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBookmark { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to use MediaGallery for image attachments.
+    /// </summary>
+    [Parameter]
+    public bool UseMediaGallery { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the display mode for MediaGallery.
+    /// </summary>
+    [Parameter]
+    public MediaGallery.GalleryDisplayMode MediaGalleryDisplayMode { get; set; } = MediaGallery.GalleryDisplayMode.Grid;
+
+    /// <summary>
+    /// Gets or sets the number of columns for MediaGallery grid display.
+    /// </summary>
+    [Parameter]
+    public int MediaGalleryColumns { get; set; } = 2;
+
+    /// <summary>
     /// Gets or sets additional CSS classes.
     /// </summary>
     [Parameter]
@@ -81,6 +150,18 @@
     {
         var actorId = Note?.AttributedTo?.FirstOrDefault();
         return actorId?.ToString() ?? "Unknown";
+    }
+
+    private bool HasMediaAttachments()
+    {
+        if (Note?.Attachment == null) return false;
+        return Note.Attachment.Any(a => a is Image);
+    }
+
+    private IEnumerable<Image> GetImageAttachments()
+    {
+        if (Note?.Attachment == null) return Enumerable.Empty<Image>();
+        return Note.Attachment.OfType<Image>();
     }
 
     private string FormatDateTime(DateTimeOffset dateTime)

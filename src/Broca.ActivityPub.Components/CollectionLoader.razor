@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Web.Virtualization
 @typeparam TItem
 @inject IActivityPubClient Client
+@implements IDisposable
 
 <div class="activitypub-collection-loader @CssClass">
     @if (CollectionUrl != null)
@@ -119,6 +120,9 @@
     private bool hasMore = true;
     private string? error;
     private Virtualize<TItem>? virtualizeComponent;
+    private Dictionary<string, List<TItem>> cache = new();
+    private string? lastLoadedCollectionUrl;
+    private CancellationTokenSource? loadCancellation;
 
     /// <summary>
     /// Gets or sets the collection URL to load items from.
@@ -137,6 +141,12 @@
     /// </summary>
     [Parameter]
     public bool UseVirtualization { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to enable caching of loaded items.
+    /// </summary>
+    [Parameter]
+    public bool EnableCaching { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the item size for virtualization (in pixels).
@@ -188,18 +198,36 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (CollectionUrl != null && !UseVirtualization && !items.Any())
+        // Check if collection URL changed
+        if (CollectionUrl?.ToString() != lastLoadedCollectionUrl)
         {
-            await LoadInitialItemsAsync();
+            lastLoadedCollectionUrl = CollectionUrl?.ToString();
+            
+            // Cancel any ongoing loads
+            loadCancellation?.Cancel();
+            loadCancellation = new CancellationTokenSource();
+            
+            // Try to load from cache first
+            if (EnableCaching && CollectionUrl != null && cache.TryGetValue(CollectionUrl.ToString(), out var cachedItems))
+            {
+                items = new List<TItem>(cachedItems);
+                hasMore = cachedItems.Count >= PageSize;
+                StateHasChanged();
+            }
+            else if (CollectionUrl != null && !UseVirtualization)
+            {
+                await LoadInitialItemsAsync();
+            }
         }
     }
 
     private async Task LoadInitialItemsAsync()
     {
-        if (isLoading) return;
+        if (isLoading || CollectionUrl == null) return;
 
         isLoading = true;
         error = null;
+        items.Clear();
         StateHasChanged();
 
         try
@@ -207,6 +235,11 @@
             var loadedItems = new List<TItem>();
             await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, PageSize))
             {
+                if (loadCancellation?.Token.IsCancellationRequested == true)
+                {
+                    return;
+                }
+
                 loadedItems.Add(item);
                 if (loadedItems.Count >= PageSize)
                 {
@@ -217,10 +250,20 @@
             items = loadedItems;
             hasMore = loadedItems.Count >= PageSize;
 
+            // Cache the loaded items
+            if (EnableCaching && CollectionUrl != null)
+            {
+                cache[CollectionUrl.ToString()] = new List<TItem>(loadedItems);
+            }
+
             if (OnItemsLoaded.HasDelegate)
             {
                 await OnItemsLoaded.InvokeAsync(items);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Load was cancelled, this is expected
         }
         catch (Exception ex)
         {
@@ -315,6 +358,12 @@
     /// </summary>
     public async Task RefreshAsync()
     {
+        // Clear cache for this collection
+        if (EnableCaching && CollectionUrl != null)
+        {
+            cache.Remove(CollectionUrl.ToString());
+        }
+
         items.Clear();
         hasMore = true;
         error = null;
@@ -327,5 +376,29 @@
         {
             await LoadInitialItemsAsync();
         }
+    }
+
+    /// <summary>
+    /// Clears all cached collections.
+    /// </summary>
+    public void ClearCache()
+    {
+        cache.Clear();
+    }
+
+    /// <summary>
+    /// Gets the current loaded items.
+    /// </summary>
+    public IReadOnlyList<TItem> GetItems() => items.AsReadOnly();
+
+    /// <summary>
+    /// Gets whether the component is currently loading.
+    /// </summary>
+    public bool IsLoading => isLoading;
+
+    public void Dispose()
+    {
+        loadCancellation?.Cancel();
+        loadCancellation?.Dispose();
     }
 }

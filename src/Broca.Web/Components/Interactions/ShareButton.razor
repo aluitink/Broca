@@ -1,0 +1,71 @@
+@* Share/boost button with dropdown options *@
+
+<div class="share-button-container">
+    <FluentButton Appearance="Appearance.Lightweight" OnClick="@HandleMainClick" Disabled="@(IsProcessing || Disabled)" Title="@(IsShared ? "Unshare" : "Share")" Class="@($"share-button {(IsShared ? "shared" : "")}")">
+        @if (IsShared)
+        {
+            <FluentIcon Value="@(new Icons.Filled.Size20.ArrowRepeatAll())" Color="Color.Success" />
+        }
+        else
+        {
+            <FluentIcon Value="@(new Icons.Regular.Size20.ArrowRepeatAll())" Color="Color.Neutral" />
+        }
+        @if (ShowCount && (ShareCount > 0 || IsShared))
+        {
+            <span class="share-count">@FormatCount(ShareCount)</span>
+        }
+    </FluentButton>
+    @if (ShowOptions)
+    {
+        <FluentButton Appearance="Appearance.Lightweight" OnClick="@ToggleMenu" Disabled="@Disabled" Title="Share options" Class="share-options-button">
+            <FluentIcon Value="@(new Icons.Regular.Size16.ChevronDown())" />
+        </FluentButton>
+    }
+    @if (_showMenu)
+    {
+        <FluentMenu Class="share-menu" @onmouseleave="@(() => _showMenu = false)">
+            <FluentMenuItem OnClick="@(() => HandleOption(ShareOption.Boost))"><FluentIcon Value="@(new Icons.Regular.Size20.ArrowRepeatAll())" Slot="start" />Boost</FluentMenuItem>
+            <FluentMenuItem OnClick="@(() => HandleOption(ShareOption.Quote))"><FluentIcon Value="@(new Icons.Regular.Size20.CommentQuote())" Slot="start" />Quote</FluentMenuItem>
+            <FluentMenuItem OnClick="@(() => HandleOption(ShareOption.CopyLink))"><FluentIcon Value="@(new Icons.Regular.Size20.Link())" Slot="start" />Copy Link</FluentMenuItem>
+        </FluentMenu>
+    }
+</div>
+
+@code {
+    [Parameter] public bool IsShared { get; set; }
+    [Parameter] public int ShareCount { get; set; }
+    [Parameter] public bool ShowCount { get; set; } = true;
+    [Parameter] public bool ShowOptions { get; set; } = true;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<bool> OnShareClick { get; set; }
+    [Parameter] public EventCallback<ShareOption> OnShareOption { get; set; }
+
+    private bool IsProcessing { get; set; }
+    private bool _showMenu;
+
+    private async Task HandleMainClick()
+    {
+        if (IsProcessing) return;
+        IsProcessing = true;
+        var previousState = IsShared;
+        IsShared = !IsShared;
+        ShareCount += IsShared ? 1 : -1;
+        StateHasChanged();
+        try { await OnShareClick.InvokeAsync(previousState); }
+        catch { IsShared = previousState; ShareCount += IsShared ? 1 : -1; throw; }
+        finally { IsProcessing = false; StateHasChanged(); }
+    }
+
+    private void ToggleMenu() => _showMenu = !_showMenu;
+    private async Task HandleOption(ShareOption option) { _showMenu = false; await OnShareOption.InvokeAsync(option); }
+    private string FormatCount(int count) => count >= 1000000 ? $"{count / 1000000.0:F1}M" : count >= 1000 ? $"{count / 1000.0:F1}K" : count.ToString();
+
+    public enum ShareOption { Boost, Quote, CopyLink }
+}
+
+<style>
+    .share-button-container { position: relative; display: inline-flex; align-items: center; }
+    .share-button { display: inline-flex; align-items: center; gap: 0.375rem; transition: all 0.2s ease; }
+    .share-count { font-size: 0.875rem; font-weight: 500; user-select: none; }
+    .share-menu { position: absolute; top: 100%; left: 0; margin-top: 0.25rem; z-index: 1000; }
+</style>

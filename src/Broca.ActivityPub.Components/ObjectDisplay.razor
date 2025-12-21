@@ -2,14 +2,46 @@
 @using Broca.ActivityPub.Components.Services
 @inject IObjectRendererRegistry RendererRegistry
 
-@if (Object != null)
-{
-    @RendererRegistry.GetRenderFragment(Object)
-}
-else if (RenderEmpty != null)
-{
-    @RenderEmpty
-}
+<div class="activitypub-object-display @CssClass">
+    @if (Object != null)
+    {
+        @if (CustomRenderer != null)
+        {
+            @CustomRenderer(Object)
+        }
+        else
+        {
+            try
+            {
+                @RendererRegistry.GetRenderFragment(Object)
+            }
+            catch (Exception ex)
+            {
+                @if (ErrorTemplate != null)
+                {
+                    @ErrorTemplate(ex.Message)
+                }
+                else
+                {
+                    <div class="object-display-error">
+                        <span class="error-icon">⚠️</span>
+                        <span>Failed to render object: @ex.Message</span>
+                    </div>
+                }
+            }
+        }
+    }
+    else if (RenderEmpty != null)
+    {
+        @RenderEmpty
+    }
+    else if (ShowEmptyState)
+    {
+        <div class="object-display-empty">
+            <p>No content to display</p>
+        </div>
+    }
+</div>
 
 @code {
     /// <summary>
@@ -25,6 +57,18 @@ else if (RenderEmpty != null)
     public RenderFragment? RenderEmpty { get; set; }
 
     /// <summary>
+    /// Gets or sets the error template for rendering errors.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show an empty state when object is null.
+    /// </summary>
+    [Parameter]
+    public bool ShowEmptyState { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets additional CSS classes for the container.
     /// </summary>
     [Parameter]
@@ -35,4 +79,10 @@ else if (RenderEmpty != null)
     /// </summary>
     [Parameter]
     public RenderFragment<object>? CustomRenderer { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback when the object is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<object> OnObjectClick { get; set; }
 }

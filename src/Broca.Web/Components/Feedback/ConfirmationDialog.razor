@@ -1,0 +1,111 @@
+@* Confirmation dialog for user actions *@
+
+<FluentDialog @bind-Hidden="@_isHidden" Modal="true" TrapFocus="true" PreventScroll="true">
+    <div class="confirmation-dialog">
+        @if (Icon != null)
+        {
+            <div class="confirmation-icon @GetIconClass()">
+                <FluentIcon Value="@Icon" Color="@GetIconColor()" />
+            </div>
+        }
+        <h3 class="confirmation-title">@Title</h3>
+        @if (!string.IsNullOrEmpty(Message))
+        {
+            <p class="confirmation-message">@Message</p>
+        }
+        @if (ShowInput)
+        {
+            <FluentTextField @bind-Value="@InputValue" Label="@InputLabel" Placeholder="@InputPlaceholder" Required="@InputRequired" Style="width: 100%;" />
+        }
+        <div class="confirmation-actions">
+            <FluentButton Appearance="Appearance.Neutral" OnClick="@HandleCancel" Disabled="@IsProcessing">@CancelText</FluentButton>
+            <FluentButton Appearance="@ConfirmAppearance" OnClick="@HandleConfirm" Disabled="@(IsProcessing || (ShowInput && InputRequired && string.IsNullOrWhiteSpace(InputValue)))">
+                @if (IsProcessing)
+                {
+                    <FluentProgressRing Style="width: 16px; height: 16px;" />
+                    <span>@ProcessingText</span>
+                }
+                else
+                {
+                    @ConfirmText
+                }
+            </FluentButton>
+        </div>
+    </div>
+</FluentDialog>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public string Title { get; set; } = "Confirm Action";
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public Icon? Icon { get; set; }
+    [Parameter] public ConfirmationType Type { get; set; } = ConfirmationType.Default;
+    [Parameter] public string ConfirmText { get; set; } = "Confirm";
+    [Parameter] public string CancelText { get; set; } = "Cancel";
+    [Parameter] public string ProcessingText { get; set; } = "Processing...";
+    [Parameter] public bool ShowInput { get; set; }
+    [Parameter] public string InputLabel { get; set; } = "";
+    [Parameter] public string InputPlaceholder { get; set; } = "";
+    [Parameter] public bool InputRequired { get; set; }
+    [Parameter] public string InputValue { get; set; } = "";
+    [Parameter] public EventCallback<string> InputValueChanged { get; set; }
+    [Parameter] public EventCallback<string> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool _isHidden = true;
+    private bool IsProcessing { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _isHidden = !IsOpen;
+    }
+
+    private Appearance ConfirmAppearance => Type switch { ConfirmationType.Danger => Appearance.Accent, ConfirmationType.Warning => Appearance.Accent, _ => Appearance.Accent };
+
+    private async Task HandleConfirm()
+    {
+        IsProcessing = true;
+        StateHasChanged();
+        try
+        {
+            await OnConfirm.InvokeAsync(InputValue);
+            IsOpen = false;
+            await IsOpenChanged.InvokeAsync(IsOpen);
+        }
+        finally
+        {
+            IsProcessing = false;
+            InputValue = "";
+            await InputValueChanged.InvokeAsync(InputValue);
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleCancel()
+    {
+        await OnCancel.InvokeAsync();
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(IsOpen);
+        _isHidden = true;
+        InputValue = "";
+        await InputValueChanged.InvokeAsync(InputValue);
+    }
+
+    private string GetIconClass() => Type switch { ConfirmationType.Danger => "icon-danger", ConfirmationType.Warning => "icon-warning", ConfirmationType.Success => "icon-success", _ => "icon-default" };
+    private Color GetIconColor() => Type switch { ConfirmationType.Danger => Color.Error, ConfirmationType.Warning => Color.Warning, ConfirmationType.Success => Color.Success, _ => Color.Info };
+
+    public enum ConfirmationType { Default, Danger, Warning, Success }
+}
+
+<style>
+    .confirmation-dialog { display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 1.5rem; min-width: 400px; max-width: 500px; }
+    .confirmation-icon { display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; background: var(--neutral-layer-2); }
+    .icon-danger { background: color-mix(in srgb, var(--error) 15%, transparent); }
+    .icon-warning { background: color-mix(in srgb, var(--warning) 15%, transparent); }
+    .icon-success { background: color-mix(in srgb, var(--success) 15%, transparent); }
+    .confirmation-title { margin: 0; font-size: 1.25rem; font-weight: 600; text-align: center; }
+    .confirmation-message { margin: 0; text-align: center; color: var(--neutral-foreground-rest); line-height: 1.5; }
+    .confirmation-actions { display: flex; gap: 0.75rem; margin-top: 0.5rem; width: 100%; justify-content: flex-end; }
+    @@media (max-width: 640px) { .confirmation-dialog { min-width: unset; width: 90vw; } .confirmation-actions { flex-direction: column-reverse; } }
+</style>

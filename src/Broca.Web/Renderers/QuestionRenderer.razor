@@ -1,0 +1,140 @@
+@* Enhanced question/poll renderer with Fluent UI *@
+<FluentCard Class="question-card">
+    <div class="question-header">
+        <FluentIcon Value="@(new Icons.Regular.Size24.QuestionCircle())" Color="Color.Accent" />
+        @if (!string.IsNullOrEmpty(Question?.Name?.FirstOrDefault()))
+        {
+            <h4 class="question-title">@Question.Name.First()</h4>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(Question?.Content?.FirstOrDefault()))
+    {
+        <p class="question-content">@((MarkupString)(Question.Content.First()))</p>
+    }
+
+    <div class="question-options">
+        @if (_hasVoted || _showResults)
+        {
+            @foreach (var option in GetOptions())
+            {
+                var percentage = GetPercentage(option);
+                var isWinning = percentage == GetMaxPercentage();
+                <div class="option-result @(isWinning ? "winning" : "")">
+                    <div class="option-text">
+                        <span>@option.Name</span>
+                        @if (_userVote == option.Name)
+                        {
+                            <FluentIcon Value="@(new Icons.Filled.Size16.Checkmark())" Color="Color.Success" />
+                        }
+                    </div>
+                    <div class="option-bar">
+                        <div class="option-bar-fill" style="width: @(percentage)%;"></div>
+                        <span class="option-percentage">@percentage%</span>
+                        <span class="option-votes">@option.Replies votes</span>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            @foreach (var option in GetOptions())
+            {
+                <FluentButton Appearance="@(_selectedOption == option.Name ? Appearance.Accent : Appearance.Outline)" OnClick="@(() => _selectedOption = option.Name)" Disabled="@_isVoting" Class="option-button">
+                    @if (_selectedOption == option.Name) { <FluentIcon Value="@(new Icons.Filled.Size20.CheckmarkCircle())" Slot="start" /> }
+                    @option.Name
+                </FluentButton>
+            }
+        }
+    </div>
+
+    <div class="question-meta">
+        <div class="question-info">
+            @if (Question?.EndTime != null)
+            {
+                var timeRemaining = Question.EndTime.Value - DateTimeOffset.Now;
+                <span><FluentIcon Value="@(new Icons.Regular.Size16.Clock())" /> @(timeRemaining.TotalSeconds > 0 ? $"{GetTimeText(timeRemaining)} remaining" : "Poll closed")</span>
+            }
+            @if (GetTotalVotes() > 0)
+            {
+                <span><FluentIcon Value="@(new Icons.Regular.Size16.People())" /> @GetTotalVotes() votes</span>
+            }
+        </div>
+        @if (!_hasVoted && !IsExpired())
+        {
+            <FluentButton Appearance="Appearance.Accent" OnClick="@SubmitVote" Disabled="@(string.IsNullOrEmpty(_selectedOption) || _isVoting)">
+                @if (_isVoting) { <FluentProgressRing Style="width: 16px; height: 16px;" /> <span>Submitting...</span> }
+                else { @("Vote") }
+            </FluentButton>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public Question? Question { get; set; }
+    [Parameter] public EventCallback<string> OnVote { get; set; }
+
+    private bool _hasVoted;
+    private bool _showResults;
+    private bool _isVoting;
+    private string? _selectedOption;
+    private string? _userVote;
+
+    private class QuestionOption { public string Name { get; set; } = ""; public int Replies { get; set; } }
+
+    private List<QuestionOption> GetOptions()
+    {
+        var options = new List<QuestionOption>();
+        if (Question?.OneOf != null)
+        {
+            foreach (var option in Question.OneOf)
+            {
+                if (option is Note note && !string.IsNullOrEmpty(note.Name?.FirstOrDefault()))
+                    options.Add(new QuestionOption { Name = note.Name.First(), Replies = (int)(note.Replies?.TotalItems ?? 0) });
+            }
+        }
+        if (Question?.AnyOf != null)
+        {
+            foreach (var option in Question.AnyOf)
+            {
+                if (option is Note note && !string.IsNullOrEmpty(note.Name?.FirstOrDefault()))
+                    options.Add(new QuestionOption { Name = note.Name.First(), Replies = (int)(note.Replies?.TotalItems ?? 0) });
+            }
+        }
+        return options;
+    }
+
+    private int GetTotalVotes() => GetOptions().Sum(o => o.Replies);
+    private int GetPercentage(QuestionOption option) { var total = GetTotalVotes(); return total == 0 ? 0 : (int)Math.Round((double)option.Replies / total * 100); }
+    private int GetMaxPercentage() { var options = GetOptions(); return !options.Any() ? 0 : options.Max(o => GetPercentage(o)); }
+    private bool IsExpired() => Question?.EndTime != null && Question.EndTime.Value < DateTimeOffset.Now;
+    private string GetTimeText(TimeSpan ts) => ts.TotalDays >= 1 ? $"{(int)ts.TotalDays} day{((int)ts.TotalDays != 1 ? "s" : "")}" : ts.TotalHours >= 1 ? $"{(int)ts.TotalHours} hour{((int)ts.TotalHours != 1 ? "s" : "")}" : ts.TotalMinutes >= 1 ? $"{(int)ts.TotalMinutes} minute{((int)ts.TotalMinutes != 1 ? "s" : "")}" : "< 1 minute";
+
+    private async Task SubmitVote()
+    {
+        if (string.IsNullOrEmpty(_selectedOption)) return;
+        _isVoting = true;
+        StateHasChanged();
+        try { await OnVote.InvokeAsync(_selectedOption); _hasVoted = true; _userVote = _selectedOption; _showResults = true; }
+        finally { _isVoting = false; StateHasChanged(); }
+    }
+}
+
+<style>
+    .question-card { padding: 1.5rem; }
+    .question-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+    .question-title { margin: 0; font-size: 1.125rem; font-weight: 600; }
+    .question-content { margin: 0 0 1.5rem; line-height: 1.6; }
+    .question-options { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
+    .option-button { width: 100%; justify-content: flex-start; text-align: left; padding: 0.875rem 1rem; }
+    .option-result { padding: 0.75rem; background: var(--neutral-layer-2); border-radius: var(--control-corner-radius); }
+    .option-result.winning { background: color-mix(in srgb, var(--accent-fill-rest) 10%, var(--neutral-layer-2)); border: 1px solid var(--accent-fill-rest); }
+    .option-text { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; font-weight: 500; }
+    .option-bar { position: relative; height: 28px; background: var(--neutral-layer-1); border-radius: var(--control-corner-radius); display: flex; align-items: center; padding: 0 0.5rem; gap: 0.5rem; }
+    .option-bar-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--accent-fill-rest); opacity: 0.3; transition: width 0.5s ease; }
+    .option-percentage { position: relative; z-index: 1; font-weight: 600; font-size: 0.875rem; }
+    .option-votes { position: relative; z-index: 1; margin-left: auto; font-size: 0.8125rem; color: var(--neutral-foreground-hint); }
+    .question-meta { display: flex; align-items: center; justify-content: space-between; padding-top: 1rem; border-top: 1px solid var(--neutral-stroke-rest); font-size: 0.875rem; }
+    .question-info { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .question-info span { display: flex; align-items: center; gap: 0.25rem; }
+</style>

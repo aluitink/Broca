@@ -1,0 +1,89 @@
+@* Enhanced event renderer with Fluent UI *@
+<FluentCard Class="event-card">
+    <div class="event-header">
+        <FluentIcon Value="@(new Icons.Regular.Size24.CalendarLtr())" Color="Color.Accent" />
+        <div class="event-title-area">
+            @if (!string.IsNullOrEmpty(Event?.Name?.FirstOrDefault()))
+            {
+                <h3 class="event-title">@Event.Name.First()</h3>
+            }
+            <FluentBadge Appearance="Appearance.Accent">Event</FluentBadge>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Event?.Summary?.FirstOrDefault()))
+    {
+        <div class="event-description">@((MarkupString)(Event.Summary.First()))</div>
+    }
+
+    <div class="event-details">
+        @if (Event?.StartTime != null)
+        {
+            <div class="event-detail">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Color="Color.Info" />
+                <div><strong>Starts:</strong> @FormatDateTime(Event.StartTime.Value)</div>
+            </div>
+        }
+        @if (Event?.EndTime != null)
+        {
+            <div class="event-detail">
+                <FluentIcon Value="@(new Icons.Regular.Size20.ClockDismiss())" Color="Color.Info" />
+                <div><strong>Ends:</strong> @FormatDateTime(Event.EndTime.Value)</div>
+            </div>
+        }
+        @if (Event?.Location != null)
+        {
+            <div class="event-detail">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Location())" Color="Color.Warning" />
+                <div><strong>Location:</strong> @GetLocationText()</div>
+            </div>
+        }
+    </div>
+
+    @if (ShowActions)
+    {
+        <div class="event-actions">
+            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => OnRSVP.InvokeAsync())">
+                <FluentIcon Value="@(new Icons.Regular.Size20.CheckmarkCircle())" Slot="start" />RSVP
+            </FluentButton>
+        </div>
+    }
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public Event? Event { get; set; }
+    [Parameter] public bool ShowActions { get; set; } = true;
+    [Parameter] public EventCallback OnRSVP { get; set; }
+
+    private string FormatDateTime(DateTimeOffset dateTime)
+    {
+        var local = dateTime.ToLocalTime();
+        var now = DateTimeOffset.Now;
+        if (local.Date == now.Date) return $"Today at {local:h:mm tt}";
+        if (local.Date == now.Date.AddDays(1)) return $"Tomorrow at {local:h:mm tt}";
+        if (local.Year == now.Year) return local.ToString("MMM d 'at' h:mm tt");
+        return local.ToString("MMM d, yyyy 'at' h:mm tt");
+    }
+
+    private string GetLocationText()
+    {
+        if (Event?.Location == null) return "";
+        var location = Event.Location.FirstOrDefault();
+        if (location is Place place && !string.IsNullOrEmpty(place.Name?.FirstOrDefault()))
+            return place.Name.First();
+        if (location != null && !string.IsNullOrEmpty(location.Name?.FirstOrDefault()))
+            return location.Name.First();
+        return "See event details";
+    }
+}
+
+<style>
+    .event-card { padding: 1.5rem; }
+    .event-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+    .event-title-area { flex: 1; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .event-title { margin: 0; font-size: 1.25rem; font-weight: 600; flex: 1; }
+    .event-description { margin-bottom: 1.5rem; padding: 1rem; background: var(--neutral-layer-2); border-radius: var(--control-corner-radius); line-height: 1.6; }
+    .event-details { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem; padding: 1rem; background: var(--neutral-layer-1); border-radius: var(--control-corner-radius); }
+    .event-detail { display: flex; align-items: flex-start; gap: 0.75rem; }
+    .event-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+</style>

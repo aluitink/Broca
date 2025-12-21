@@ -61,6 +61,17 @@
             </div>
         }
 
+        @if (ShowInteractions && Article.Id != null)
+        {
+            <InteractionBar ObjectId="@Article.Id"
+                           Object="@Article"
+                           ShowReply="@ShowReply"
+                           ShowBoost="@ShowBoost"
+                           ShowLike="@ShowLike"
+                           ShowBookmark="@ShowBookmark"
+                           CssClass="article-interactions" />
+        }
+
         @if (AdditionalContent != null)
         {
             @AdditionalContent(Article)
@@ -104,6 +115,36 @@
     /// </summary>
     [Parameter]
     public bool ShowReadTime { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show interactions (like, boost, reply, etc.).
+    /// </summary>
+    [Parameter]
+    public bool ShowInteractions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the reply button.
+    /// </summary>
+    [Parameter]
+    public bool ShowReply { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the boost button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBoost { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the like button.
+    /// </summary>
+    [Parameter]
+    public bool ShowLike { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the bookmark button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBookmark { get; set; } = true;
 
     /// <summary>
     /// Gets or sets additional CSS classes.

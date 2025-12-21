@@ -1,0 +1,205 @@
+@page "/post/{objectId}"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Components
+@using Broca.ActivityPub.Core.Interfaces
+@using KristofferStrube.ActivityStreams
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+@inject IActivityPubClient Client
+@inject ILogger<Post> Logger
+
+<PageTitle>Post - Broca</PageTitle>
+
+<div class="post-detail-container">
+    @if (!AuthState.IsAuthenticated)
+    {
+        <FluentCard>
+            <h2>Authentication Required</h2>
+            <p>Please login to view posts.</p>
+            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString($"/post/{ObjectId}")}"))">
+                Login
+            </FluentButton>
+        </FluentCard>
+    }
+    else if (_isLoading)
+    {
+        <FluentCard>
+            <FluentProgressRing />
+            <p>Loading post...</p>
+        </FluentCard>
+    }
+    else if (_error != null)
+    {
+        <FluentCard>
+            <h2>
+                <FluentIcon Value="@(new Icons.Regular.Size20.ErrorCircle())" Color="Color.Error" />
+                Error Loading Post
+            </h2>
+            <p>@_error</p>
+            <FluentButton Appearance="Appearance.Outline" OnClick="@LoadPostAsync">
+                Try Again
+            </FluentButton>
+        </FluentCard>
+    }
+    else if (_post != null)
+    {
+        <FluentCard Class="post-detail-card">
+            <div class="post-header">
+                <FluentButton Appearance="Appearance.Lightweight" 
+                             IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                             OnClick="@(() => Navigation.NavigateTo("/"))">
+                    Back
+                </FluentButton>
+                <h1>Post Details</h1>
+            </div>
+
+            <div class="post-content">
+                <ObjectDisplay Object="@_post" />
+            </div>
+        </FluentCard>
+
+        <FluentCard Class="post-thread-card">
+            <h2>
+                <FluentIcon Value="@(new Icons.Regular.Size20.Comment())" Color="Color.Accent" />
+                Conversation
+            </h2>
+            <ReplyThread RootPostId="@_post.Id"
+                        RootPost="@_post"
+                        MaxDepth="10"
+                        PageSize="20"
+                        ShowLoadMore="true"
+                        ShowEmptyState="true"
+                        CssClass="post-reply-thread">
+                <PostTemplate Context="reply">
+                    <ObjectDisplay Object="@reply" />
+                </PostTemplate>
+            </ReplyThread>
+        </FluentCard>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string? ObjectId { get; set; }
+
+    private KristofferStrube.ActivityStreams.Object? _post;
+    private bool _isLoading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthStateChanged;
+        await LoadPostAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(ObjectId))
+        {
+            await LoadPostAsync();
+        }
+    }
+
+    private async Task LoadPostAsync()
+    {
+        if (!AuthState.IsAuthenticated || string.IsNullOrEmpty(ObjectId))
+        {
+            _isLoading = false;
+            return;
+        }
+
+        _isLoading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            // Decode the object ID from the URL parameter
+            var decodedObjectId = Uri.UnescapeDataString(ObjectId);
+            var objectUri = new Uri(decodedObjectId);
+
+            // Fetch the object using GetAsync
+            _post = await Client.GetAsync<KristofferStrube.ActivityStreams.Object>(objectUri);
+
+            if (_post == null)
+            {
+                _error = "Post not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading post {ObjectId}", ObjectId);
+            _error = $"Failed to load post: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        InvokeAsync(async () =>
+        {
+            if (isAuthenticated)
+            {
+                await LoadPostAsync();
+            }
+            else
+            {
+                StateHasChanged();
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}
+
+<style>
+    .post-detail-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+
+    .post-detail-card,
+    .post-thread-card {
+        width: 100%;
+    }
+
+    .post-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .post-header h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        flex: 1;
+    }
+
+    .post-content {
+        margin-bottom: 1rem;
+    }
+
+    .post-thread-card h2 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        font-size: 1.25rem;
+    }
+
+    .post-reply-thread {
+        margin-top: 1rem;
+    }
+</style>

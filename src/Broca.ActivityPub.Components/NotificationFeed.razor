@@ -1,6 +1,7 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Core.Interfaces
 @inject IActivityPubClient Client
+@implements IDisposable
 
 <div class="activitypub-notification-feed @CssClass">
     @if (!string.IsNullOrEmpty(Title))
@@ -150,6 +151,9 @@
     private NotificationFilter activeFilter = NotificationFilter.All;
     private int unreadCount = 0;
     private int currentPage = 0;
+    private System.Threading.Timer? refreshTimer;
+    private bool isRefreshActive = false;
+    private HashSet<string> readNotificationIds = new();
 
     /// <summary>
     /// Gets or sets the title of the feed.
@@ -247,7 +251,51 @@
 
         if (AutoRefresh)
         {
-            // TODO: Implement timer for auto-refresh
+            StartAutoRefresh();
+        }
+    }
+
+    private void StartAutoRefresh()
+    {
+        if (isRefreshActive) return;
+
+        isRefreshActive = true;
+        refreshTimer = new System.Threading.Timer(
+            async _ => await RefreshNotificationsAsync(),
+            null,
+            TimeSpan.FromSeconds(RefreshInterval),
+            TimeSpan.FromSeconds(RefreshInterval)
+        );
+    }
+
+    private void StopAutoRefresh()
+    {
+        isRefreshActive = false;
+        refreshTimer?.Dispose();
+        refreshTimer = null;
+    }
+
+    private async Task RefreshNotificationsAsync()
+    {
+        try
+        {
+            // Reload first page to check for new notifications
+            var tempPage = currentPage;
+            currentPage = 0;
+            
+            var previousCount = notifications.Count;
+            notifications.Clear();
+            unreadCount = 0;
+            
+            await LoadNotificationsAsync();
+            
+            currentPage = tempPage;
+            
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Silently fail refresh
         }
     }
 
@@ -487,8 +535,34 @@
     public async Task RefreshAsync()
     {
         notifications.Clear();
+        unreadCount = 0;
         currentPage = 0;
         await LoadNotificationsAsync();
+    }
+
+    /// <summary>
+    /// Marks a specific notification as read.
+    /// </summary>
+    public void MarkAsRead(string notificationId)
+    {
+        var notification = notifications.FirstOrDefault(n => n.Id == notificationId);
+        if (notification != null && !notification.IsRead)
+        {
+            notification.IsRead = true;
+            readNotificationIds.Add(notificationId);
+            unreadCount--;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of unread notifications.
+    /// </summary>
+    public int GetUnreadCount() => unreadCount;
+
+    public void Dispose()
+    {
+        StopAutoRefresh();
     }
 
     public enum NotificationFilter

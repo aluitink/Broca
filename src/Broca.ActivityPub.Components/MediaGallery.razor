@@ -63,11 +63,11 @@
 
     @if (IsLightboxOpen)
     {
-        <div class="media-lightbox" @onclick="CloseLightbox">
+        <div class="media-lightbox" @onclick="CloseLightbox" @onkeydown="HandleKeyDown" tabindex="-1">
             <div class="lightbox-overlay"></div>
             
             <div class="lightbox-content" @onclick:stopPropagation="true">
-                <button class="lightbox-close" @onclick="CloseLightbox" title="Close">×</button>
+                <button class="lightbox-close" @onclick="CloseLightbox" title="Close (ESC)" aria-label="Close lightbox">×</button>
 
                 <div class="lightbox-media">
                     @if (currentIndex >= 0 && currentIndex < mediaItems.Count)
@@ -82,14 +82,16 @@
                             @onclick="NavigatePreviousLightbox"
                             @onclick:stopPropagation="true"
                             disabled="@(!CanNavigatePrevious)"
-                            title="Previous">
+                            title="Previous (←)"
+                            aria-label="Previous image">
                         ‹
                     </button>
                     <button class="lightbox-nav-button next-button" 
                             @onclick="NavigateNextLightbox"
                             @onclick:stopPropagation="true"
                             disabled="@(!CanNavigateNext)"
-                            title="Next">
+                            title="Next (→)"
+                            aria-label="Next image">
                         ›
                     </button>
                 }
@@ -374,6 +376,54 @@
             currentIndex = index;
             StateHasChanged();
         }
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (!isLightboxOpen) return;
+
+        switch (e.Key)
+        {
+            case "Escape":
+                CloseLightbox();
+                break;
+            case "ArrowLeft":
+                if (CanNavigatePrevious)
+                {
+                    NavigatePrevious();
+                }
+                break;
+            case "ArrowRight":
+                if (CanNavigateNext)
+                {
+                    NavigateNext();
+                }
+                break;
+            case "Home":
+                currentIndex = 0;
+                StateHasChanged();
+                break;
+            case "End":
+                currentIndex = mediaItems.Count - 1;
+                StateHasChanged();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Programmatically opens the lightbox at a specific index.
+    /// </summary>
+    public void OpenLightboxAt(int index)
+    {
+        OpenLightbox(index);
+    }
+
+    /// <summary>
+    /// Programmatically closes the lightbox.
+    /// </summary>
+    public void Close()
+    {
+        CloseLightbox();
     }
 
     /// <summary>
