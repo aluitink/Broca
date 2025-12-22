@@ -116,6 +116,7 @@
 
 @code {
     private List<TItem> items = new();
+    private HashSet<string> loadedItemIds = new();
     private bool isLoading;
     private bool hasMore = true;
     private string? error;
@@ -211,6 +212,7 @@
             if (EnableCaching && CollectionUrl != null && cache.TryGetValue(CollectionUrl.ToString(), out var cachedItems))
             {
                 items = new List<TItem>(cachedItems);
+                RebuildIdSet();
                 hasMore = cachedItems.Count >= PageSize;
                 StateHasChanged();
             }
@@ -221,6 +223,56 @@
         }
     }
 
+    private void RebuildIdSet()
+    {
+        loadedItemIds.Clear();
+        foreach (var item in items)
+        {
+            var id = GetItemId(item);
+            if (!string.IsNullOrEmpty(id))
+            {
+                loadedItemIds.Add(id);
+            }
+        }
+    }
+
+    private string? GetItemId(TItem item)
+    {
+        if (item == null) return null;
+
+        // Try to get ID from common ActivityStreams properties
+        var type = item.GetType();
+        var idProperty = type.GetProperty("Id");
+        if (idProperty != null && idProperty.PropertyType == typeof(string))
+        {
+            return idProperty.GetValue(item) as string;
+        }
+
+        return null;
+    }
+
+    private bool ShouldIncludeItem(TItem item)
+    {
+        var id = GetItemId(item);
+        if (string.IsNullOrEmpty(id))
+        {
+            // If no ID, include the item (can't deduplicate)
+            return true;
+        }
+
+        return !loadedItemIds.Contains(id);
+    }
+
+    private void AddItemWithTracking(TItem item)
+    {
+        items.Add(item);
+        var id = GetItemId(item);
+        if (!string.IsNullOrEmpty(id))
+        {
+            loadedItemIds.Add(id);
+        }
+    }
+
     private async Task LoadInitialItemsAsync()
     {
         if (isLoading || CollectionUrl == null) return;
@@ -228,6 +280,7 @@
         isLoading = true;
         error = null;
         items.Clear();
+        loadedItemIds.Clear();
         StateHasChanged();
 
         try
@@ -240,7 +293,16 @@
                     return;
                 }
 
-                loadedItems.Add(item);
+                if (ShouldIncludeItem(item))
+                {
+                    loadedItems.Add(item);
+                    var id = GetItemId(item);
+                    if (!string.IsNullOrEmpty(id))
+                    {
+                        loadedItemIds.Add(id);
+                    }
+                }
+
                 if (loadedItems.Count >= PageSize)
                 {
                     break;
@@ -296,7 +358,16 @@
                     continue;
                 }
 
-                loadedItems.Add(item);
+                if (ShouldIncludeItem(item))
+                {
+                    loadedItems.Add(item);
+                    var id = GetItemId(item);
+                    if (!string.IsNullOrEmpty(id))
+                    {
+                        loadedItemIds.Add(id);
+                    }
+                }
+
                 if (loadedItems.Count >= PageSize)
                 {
                     break;
@@ -365,6 +436,7 @@
         }
 
         items.Clear();
+        loadedItemIds.Clear();
         hasMore = true;
         error = null;
 

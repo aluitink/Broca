@@ -41,6 +41,9 @@ public static class ServiceCollectionExtensions
         // Register actor resolution service
         services.TryAddScoped<ActorResolutionService>();
 
+        // Register activity stream notification service
+        services.TryAddScoped<ActivityStreamNotificationService>();
+
         // Register default renderers
         RegisterDefaultRenderers(services);
 

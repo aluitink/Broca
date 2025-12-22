@@ -1,6 +1,8 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Core.Interfaces
+@using Broca.ActivityPub.Components.Services
 @inject IActivityPubClient Client
+@inject ActivityStreamNotificationService? NotificationService
 
 <div class="activitypub-post-composer @CssClass">
     @if (ComposerTemplate != null)
@@ -354,6 +356,12 @@
             content = string.Empty;
             contentWarning = null;
             hasContentWarning = false;
+
+            // Notify subscribers about the new activity
+            if (NotificationService != null)
+            {
+                await NotificationService.NotifyActivityPostedAsync(activity);
+            }
 
             if (OnPostCreated.HasDelegate)
             {

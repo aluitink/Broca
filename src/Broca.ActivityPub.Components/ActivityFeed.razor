@@ -1,6 +1,8 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Core.Interfaces
+@using Broca.ActivityPub.Components.Services
 @inject IActivityPubClient Client
+@inject ActivityStreamNotificationService? NotificationService
 @implements IDisposable
 
 <div class="activitypub-activity-feed @CssClass">
@@ -99,6 +101,7 @@
     private bool isAutoRefreshActive = false;
     private string? latestActivityId = null;
     private CollectionLoader<Activity>? collectionLoaderRef;
+    private IDisposable? notificationSubscription;
 
     /// <summary>
     /// Gets or sets the URL of the activity collection (e.g., outbox, inbox).
@@ -144,10 +147,15 @@
 
     /// <summary>
     /// Gets or sets whether to show recipients.
-    /// </summary>whether to enable auto-refresh.
     /// </summary>
     [Parameter]
-    public bool EnableAutoRefresh { get; set; } = false;
+    public bool ShowRecipients { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to enable auto-refresh.
+    /// </summary>
+    [Parameter]
+    public bool EnableAutoRefresh { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the auto-refresh interval in seconds.
@@ -168,11 +176,6 @@
     public bool AutoScrollToNew { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets 
-    [Parameter]
-    public bool ShowRecipients { get; set; } = false;
-
-    /// <summary>
     /// Gets or sets additional CSS classes.
     /// </summary>
     [Parameter]
@@ -190,6 +193,22 @@
         {
             StartAutoRefresh();
         }
+
+        // Subscribe to activity notifications
+        if (NotificationService != null)
+        {
+            notificationSubscription = NotificationService.Subscribe(OnActivityPostedAsync);
+        }
+    }
+
+    private async Task OnActivityPostedAsync(Activity activity)
+    {
+        // When a new activity is posted, immediately refresh the feed
+        // This ensures the user sees their new post without manual refresh
+        await InvokeAsync(async () =>
+        {
+            await RefreshAsync();
+        });
     }
 
     protected override void OnParametersSet()
@@ -345,6 +364,7 @@
     public void Dispose()
     {
         StopAutoRefresh();
+        notificationSubscription?.Dispose();
     }    /// <summary>
     /// Gets or sets a custom activity rendering template.
     /// </summary>
