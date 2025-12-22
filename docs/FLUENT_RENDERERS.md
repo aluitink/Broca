@@ -201,11 +201,75 @@ The renderer system uses a **proxy pattern** where each renderer implements `IOb
 
 **Styling**: FluentAddContentButtonRenderer.razor.css
 
+### 9. FluentPostComposerRenderer
+
+**Purpose**: Renders a Fluent UI post composer for creating new content
+
+**Features**:
+- Fluent UI text input components
+- Visibility selector with Fluent dropdown
+- Character counter with warning states
+- Toolbar with Fluent buttons for attachments, emoji, polls, content warnings
+- Reply indicator for threaded replies
+- Fluent message bars for errors and success
+- Responsive toolbar layout
+- Loading states with Fluent button spinner
+
+**Parameters**:
+- `Context` - The PostComposer component context
+
+**Usage**:
+```razor
+<PostComposer 
+    ComposerTemplate="FluentPostComposerRenderer.Template"
+    OnPostCreated="HandlePostCreated" />
+```
+
+**Styling**: FluentPostComposerRenderer.razor.css
+
+### 10. FluentInteractionBarRenderer
+
+**Purpose**: Renders a Fluent UI interaction bar with social engagement buttons
+
+**Features**:
+- Reply button with count (chat bubble icon)
+- Boost/Announce button with count (repeat icon)
+- Like/Favorite button with count (heart icon - filled when liked)
+- Bookmark button (bookmark icon - filled when bookmarked)
+- Share button (share icon)
+- More options button (three-dot menu icon)
+- Fluent button appearances (Stealth/Accent based on state)
+- Disabled states for processing and unauthenticated users
+- Reply composer integration with Fluent renderer
+- Fluent message bar for errors
+- Count formatting (1.2K, 3.4M)
+- Responsive layout for mobile devices
+
+**Parameters**:
+- `Context` - The InteractionBar component context with:
+  - State: `IsLiked`, `IsBoosted`, `IsBookmarked`, `IsProcessing`, `CanInteract`
+  - Counts: `ReplyCount`, `BoostCount`, `LikeCount`
+  - Visibility: `ShowReply`, `ShowBoost`, `ShowLike`, `ShowBookmark`, `ShowShare`, `ShowMore`
+  - Actions: `HandleReplyClick`, `HandleLikeClick`, `HandleBoostClick`, etc.
+
+**Usage**:
+```razor
+<InteractionBar 
+    ObjectId="@objectId"
+    BarTemplate="FluentInteractionBarRenderer.Template"
+    ShowReply="true"
+    ShowBoost="true"
+    ShowLike="true" />
+```
+
+**Styling**: FluentInteractionBarRenderer.razor.css
+
 ## Type Mappings
 
 The following ActivityStreams types and components are mapped to renderers:
 
 ```csharp
+// ActivityStreams Object Types
 Note → FluentNoteRenderer
 Article → FluentArticleRenderer
 Person → FluentActorRenderer
@@ -214,8 +278,11 @@ Activity → FluentActivityRenderer
 Image → FluentImageRenderer
 Video → FluentVideoRenderer
 Document → FluentDocumentRenderer
+
+// Component Template Renderers
 AddContentButton (component) → FluentAddContentButtonRenderer
 PostComposer (component) → FluentPostComposerRenderer
+InteractionBar (component) → FluentInteractionBarRenderer
 ```
 
 ## Usage

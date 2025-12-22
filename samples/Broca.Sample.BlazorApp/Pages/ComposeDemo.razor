@@ -1,5 +1,6 @@
 @page "/compose"
 @using Broca.ActivityPub.Components
+@using Broca.Web.Renderers
 @using KristofferStrube.ActivityStreams
 
 <PageTitle>Compose Post</PageTitle>
@@ -75,6 +76,7 @@
 
 <!-- AddContentButton Component -->
 <AddContentButton 
+    ButtonTemplate="FluentAddContentButtonRenderer.Template"
     OnPostCreated="HandlePostCreated"
     ButtonIcon="✏️"
     ButtonTitle="Create new post"

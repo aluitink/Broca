@@ -2,7 +2,13 @@
 @using Broca.ActivityPub.Core.Interfaces
 @inject IActivityPubClient Client
 
-<div class="activitypub-interaction-bar @CssClass">
+@if (BarTemplate != null)
+{
+    @BarTemplate(new InteractionBarContext(this))
+}
+else
+{
+    <div class="activitypub-interaction-bar @CssClass">
     @if (ShowReply)
     {
         <button class="interaction-button reply-button @(IsReplying ? "active" : "")" 
@@ -79,7 +85,8 @@
     {
         <div class="interaction-error">@error</div>
     }
-</div>
+    </div>
+}
 
 @if (showReplyComposer && ObjectId != null)
 {
@@ -194,6 +201,12 @@
     /// </summary>
     [Parameter]
     public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets the template for rendering the interaction bar.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<InteractionBarContext>? BarTemplate { get; set; }
 
     /// <summary>
     /// Gets or sets a callback for when the reply button is clicked.
@@ -420,5 +433,59 @@
         if (count < 1000000)
             return $"{count / 1000.0:F1}K";
         return $"{count / 1000000.0:F1}M";
+    }
+
+    /// <summary>
+    /// Context provided to the bar template.
+    /// </summary>
+    public class InteractionBarContext
+    {
+        private readonly InteractionBar _bar;
+
+        public InteractionBarContext(InteractionBar bar)
+        {
+            _bar = bar;
+        }
+
+        // State properties
+        public string? ObjectId => _bar.ObjectId;
+        public KristofferStrube.ActivityStreams.Object? Object => _bar.Object;
+        public int ReplyCount => _bar.ReplyCount;
+        public int BoostCount => _bar.BoostCount;
+        public int LikeCount => _bar.LikeCount;
+        public bool IsLiked => _bar.IsLiked;
+        public bool IsBoosted => _bar.IsBoosted;
+        public bool IsBookmarked => _bar.IsBookmarked;
+        public bool IsReplying => _bar.IsReplying;
+        public bool IsProcessing => _bar.isProcessing;
+        public bool CanInteract => _bar.CanInteract;
+        public string? Error => _bar.error;
+        public bool ShowReplyComposer => _bar.showReplyComposer;
+
+        // Feature flags
+        public bool ShowReply => _bar.ShowReply;
+        public bool ShowBoost => _bar.ShowBoost;
+        public bool ShowLike => _bar.ShowLike;
+        public bool ShowBookmark => _bar.ShowBookmark;
+        public bool ShowShare => _bar.ShowShare;
+        public bool ShowMore => _bar.ShowMore;
+
+        // Event callbacks
+        public EventCallback OnReplyClick => _bar.OnReplyClick;
+        public EventCallback<bool> OnBoostClick => _bar.OnBoostClick;
+        public EventCallback<bool> OnLikeClick => _bar.OnLikeClick;
+        public EventCallback<bool> OnBookmarkClick => _bar.OnBookmarkClick;
+        public EventCallback OnShareClick => _bar.OnShareClick;
+        public EventCallback OnMoreClick => _bar.OnMoreClick;
+
+        // Actions
+        public Task HandleReplyClick() => _bar.HandleReplyClick();
+        public Task HandleLikeClick() => _bar.HandleLikeClick();
+        public Task HandleBoostClick() => _bar.HandleBoostClick();
+        public Task HandleBookmarkClick() => _bar.HandleBookmarkClick();
+        public Task HandleShareClick() => _bar.HandleShareClick();
+        public Task HandleMoreClick() => _bar.HandleMoreClick();
+        public Task HandleCancelReply() => _bar.HandleCancelReply();
+        public Task HandleReplyCreated(Activity activity) => _bar.HandleReplyCreated(activity);
     }
 }

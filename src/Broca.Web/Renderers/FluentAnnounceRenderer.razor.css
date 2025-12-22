@@ -1,0 +1,22 @@
+/* Fluent Announce Renderer Styles */
+.fluent-announce-card {
+    margin-bottom: 16px;
+    border-left: 3px solid var(--accent-fill-rest);
+}
+
+.announce-header {
+    align-items: center;
+}
+
+.announce-timestamp {
+    white-space: nowrap;
+}
+
+.announce-object {
+    margin: 0;
+    padding-left: 8px;
+}
+
+.actor-info-clickable:hover {
+    opacity: 0.8;
+}

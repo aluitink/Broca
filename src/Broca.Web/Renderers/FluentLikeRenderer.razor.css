@@ -1,0 +1,22 @@
+/* Fluent Like Renderer Styles */
+.fluent-like-card {
+    margin-bottom: 16px;
+    border-left: 3px solid var(--error);
+}
+
+.like-header {
+    align-items: center;
+}
+
+.like-timestamp {
+    white-space: nowrap;
+}
+
+.like-object {
+    margin: 0;
+    padding-left: 8px;
+}
+
+.actor-info-clickable:hover {
+    opacity: 0.8;
+}

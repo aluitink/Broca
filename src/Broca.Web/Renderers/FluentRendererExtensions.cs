@@ -20,6 +20,8 @@ public static class FluentRendererExtensions
         registry.RegisterRenderer(typeof(Article), new FluentArticleRendererProxy());
         registry.RegisterRenderer(typeof(Person), new FluentActorRendererProxy());
         registry.RegisterRenderer(typeof(Actor), new FluentActorRendererProxy());
+        registry.RegisterRenderer(typeof(Like), new FluentLikeRendererProxy());
+        registry.RegisterRenderer(typeof(Announce), new FluentAnnounceRendererProxy());
         registry.RegisterRenderer(typeof(Activity), new FluentActivityRendererProxy());
         registry.RegisterRenderer(typeof(Image), new FluentImageRendererProxy());
         registry.RegisterRenderer(typeof(Video), new FluentVideoRendererProxy());
@@ -86,6 +88,38 @@ internal class FluentActivityRendererProxy : ObjectRendererBase<Activity>
         {
             builder.OpenComponent<FluentActivityRenderer>(0);
             builder.AddAttribute(1, "Activity", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Like objects using FluentLikeRenderer.
+/// </summary>
+internal class FluentLikeRendererProxy : ObjectRendererBase<Like>
+{
+    protected override RenderFragment Render(Like obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentLikeRenderer>(0);
+            builder.AddAttribute(1, "Like", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Announce objects using FluentAnnounceRenderer.
+/// </summary>
+internal class FluentAnnounceRendererProxy : ObjectRendererBase<Announce>
+{
+    protected override RenderFragment Render(Announce obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentAnnounceRenderer>(0);
+            builder.AddAttribute(1, "Announce", obj);
             builder.CloseComponent();
         };
     }

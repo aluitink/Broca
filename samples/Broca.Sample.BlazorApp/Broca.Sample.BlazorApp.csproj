@@ -12,6 +12,7 @@
     <!-- Temporarily using project references until packages are published -->
     <ProjectReference Include="..\..\src\Broca.ActivityPub.Client.WebCrypto\Broca.ActivityPub.Client.WebCrypto.csproj" />
     <ProjectReference Include="..\..\src\Broca.ActivityPub.Components\Broca.ActivityPub.Components.csproj" />
+    <ProjectReference Include="..\..\src\Broca.Web\Broca.Web.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
