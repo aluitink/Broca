@@ -71,8 +71,8 @@
 
     private string GetUsername()
     {
-        if (AuthState.CurrentActor is Person person && !string.IsNullOrWhiteSpace(person.PreferredUsername))
-            return $"@{person.PreferredUsername}";
+        if (AuthState.CurrentActor != null && !string.IsNullOrWhiteSpace(AuthState.CurrentActor.PreferredUsername))
+            return $"@{AuthState.CurrentActor.PreferredUsername}";
         
         return "User";
     }

@@ -1,6 +1,7 @@
 @page "/profile"
 @using Broca.Web.Services
 @using Broca.ActivityPub.Components
+@using Broca.Web.Components
 @inject AuthenticationStateService AuthState
 @inject NavigationManager Navigation
 
@@ -28,6 +29,8 @@ else if (AuthState.CurrentActorId != null)
 
         <ActorProfile ActorUri="@(new Uri(AuthState.CurrentActorId))" />
 
+        <ProfileEditor Actor="@AuthState.CurrentActor" OnProfileUpdated="@HandleProfileUpdatedAsync" />
+
         <FluentCard Class="profile-info">
             <h3>Account Information</h3>
             <FluentDataGrid Items="@GetProfileData()" GridTemplateColumns="200px 1fr">
@@ -50,6 +53,13 @@ else if (AuthState.CurrentActorId != null)
 }
 
 @code {
+    private async Task HandleProfileUpdatedAsync(KristofferStrube.ActivityStreams.Actor updatedActor)
+    {
+        // Refresh the authentication state with the updated actor
+        await AuthState.RefreshActorAsync(updatedActor);
+        StateHasChanged();
+    }
+
     private IQueryable<ProfileDataItem> GetProfileData()
     {
         var items = new List<ProfileDataItem>();

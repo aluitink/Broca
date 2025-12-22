@@ -176,6 +176,9 @@ public class OutboxProcessor
             case Create createActivity:
                 await HandleOutgoingCreateAsync(username, createActivity, cancellationToken);
                 break;
+            case Update updateActivity:
+                await HandleOutgoingUpdateAsync(username, updateActivity, cancellationToken);
+                break;
             case Follow followActivity:
                 await HandleOutgoingFollowAsync(username, followActivity, cancellationToken);
                 break;
@@ -212,6 +215,79 @@ public class OutboxProcessor
                 _logger.LogInformation("User {Username} now following {FollowingActorId}", username, followingActorId);
             }
         }
+    }
+
+    private async Task HandleOutgoingUpdateAsync(string username, Update updateActivity, CancellationToken cancellationToken)
+    {
+        if (updateActivity.Object == null)
+        {
+            return;
+        }
+
+        var updatedObject = updateActivity.Object.FirstOrDefault();
+        if (updatedObject == null)
+        {
+            return;
+        }
+
+        // Check if the updated object is an Actor/Person (profile update)
+        if (updatedObject is Actor updatedActor)
+        {
+            await HandleOutgoingUpdateActorAsync(username, updatedActor, cancellationToken);
+        }
+    }
+
+    private async Task HandleOutgoingUpdateActorAsync(string username, Actor updatedActor, CancellationToken cancellationToken)
+    {
+        // Verify the actor being updated matches the authenticated user
+        if (updatedActor.PreferredUsername != username)
+        {
+            _logger.LogWarning("User {Username} attempted to update actor with preferredUsername {PreferredUsername}",
+                username, updatedActor.PreferredUsername);
+            return;
+        }
+
+        // Get the existing actor
+        var existingActor = await _actorRepository.GetActorByUsernameAsync(username, cancellationToken);
+        if (existingActor == null)
+        {
+            _logger.LogWarning("Cannot update actor - actor {Username} not found", username);
+            return;
+        }
+
+        // Preserve non-editable fields from existing actor
+        updatedActor.Id = existingActor.Id;
+        updatedActor.Type = existingActor.Type;
+        updatedActor.PreferredUsername = existingActor.PreferredUsername;
+        updatedActor.Inbox = existingActor.Inbox;
+        updatedActor.Outbox = existingActor.Outbox;
+        updatedActor.Following = existingActor.Following;
+        updatedActor.Followers = existingActor.Followers;
+        // Note: PublicKey is stored in extension data, will be preserved below
+        updatedActor.Endpoints = existingActor.Endpoints;
+        updatedActor.Published = existingActor.Published;
+
+        // Preserve private key from extension data
+        if (existingActor.ExtensionData?.ContainsKey("privateKeyPem") == true)
+        {
+            updatedActor.ExtensionData ??= new Dictionary<string, JsonElement>();
+            updatedActor.ExtensionData["privateKeyPem"] = existingActor.ExtensionData["privateKeyPem"];
+        }
+
+        // Preserve publicKey from extension data if present
+        if (existingActor.ExtensionData?.ContainsKey("publicKey") == true)
+        {
+            updatedActor.ExtensionData ??= new Dictionary<string, JsonElement>();
+            updatedActor.ExtensionData["publicKey"] = existingActor.ExtensionData["publicKey"];
+        }
+
+        // Update the timestamp
+        updatedActor.Updated = DateTime.UtcNow;
+
+        // Save the updated actor
+        await _actorRepository.SaveActorAsync(username, updatedActor, cancellationToken);
+        
+        _logger.LogInformation("Updated actor profile for user {Username}", username);
     }
 
     private async Task HandleOutgoingCreateAsync(string username, Create createActivity, CancellationToken cancellationToken)
