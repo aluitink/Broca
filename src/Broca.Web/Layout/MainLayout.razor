@@ -42,9 +42,9 @@
     @if (AuthState.IsAuthenticated)
     {
         <AddContentButton 
+            ButtonTemplate="FluentAddContentButtonRenderer.Template"
             Placeholder="What would you like to share?"
             ButtonTitle="Create new post"
-            ButtonIcon="✏️"
             OnPostCreated="@HandlePostCreated">
         </AddContentButton>
     }

@@ -151,11 +151,17 @@
         
         // Try to get Name property if it's an Actor/Person
         if (actor is Actor actorObj && actorObj.Name?.Any() == true)
-            return actorObj.Name.First();
+        {
+            var name = actorObj.Name.FirstOrDefault();
+            return name ?? string.Empty;
+        }
         
         // Try to get Name from any Object
         if (actor is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
-            return obj.Name.First();
+        {
+            var name = obj.Name.FirstOrDefault();
+            return name ?? string.Empty;
+        }
         
         // Fallback to ID
         return GetActorId();
@@ -281,7 +287,10 @@
         if (recipient is KristofferStrube.ActivityStreams.Object obj)
         {
             if (obj.Name?.Any() == true)
-                return obj.Name.First();
+            {
+                var name = obj.Name.FirstOrDefault();
+                return name ?? string.Empty;
+            }
             if (!string.IsNullOrEmpty(obj.Id))
                 return obj.Id;
         }

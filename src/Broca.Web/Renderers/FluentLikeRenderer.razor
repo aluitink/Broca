@@ -66,6 +66,19 @@
                             </FluentAnchor>
                         </FluentStack>
                     }
+                    else if (!isLoading)
+                    {
+                        var urlString = Like.Object.First()?.ToString();
+                        if (!string.IsNullOrEmpty(urlString))
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Link())" Color="Color.Neutral" />
+                                <FluentAnchor Href="@urlString" Target="_blank" Appearance="Appearance.Hypertext">
+                                    @urlString
+                                </FluentAnchor>
+                            </FluentStack>
+                        }
+                    }
                     else if (isLoading)
                     {
                         <FluentProgressRing Style="width: 24px; height: 24px;" />
@@ -157,8 +170,25 @@
             return;
         }
 
-        // If it's a link, try to fetch the object
+        // Get the URL to fetch
+        Uri? urlToFetch = null;
+        
         if (objRef is Link link && link.Href != null)
+        {
+            urlToFetch = link.Href;
+        }
+        else
+        {
+            // Try to get the string representation and parse as URL
+            var urlString = objRef?.ToString();
+            if (!string.IsNullOrEmpty(urlString) && Uri.TryCreate(urlString, UriKind.Absolute, out var uri))
+            {
+                urlToFetch = uri;
+            }
+        }
+
+        // If we have a URL, try to fetch the object
+        if (urlToFetch != null)
         {
             try
             {
@@ -166,7 +196,7 @@
                 StateHasChanged();
 
                 var fetchedObject = await ActivityPubClient.GetAsync<KristofferStrube.ActivityStreams.Object>(
-                    link.Href, 
+                    urlToFetch, 
                     useCache: true);
                 
                 if (fetchedObject != null)

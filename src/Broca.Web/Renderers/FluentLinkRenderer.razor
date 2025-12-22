@@ -1,0 +1,48 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@inherits ComponentBase
+
+<FluentCard Class="@($"fluent-link-card {CssClass}")">
+    @if (Link != null)
+    {
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Link())" Color="Color.Accent" />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="flex: 1;">
+                @if (Link.Name?.Any() == true)
+                {
+                    var name = Link.Name.FirstOrDefault();
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        <FluentLabel Typo="Typography.Subject" Weight="FontWeight.Bold">
+                            @name
+                        </FluentLabel>
+                    }
+                }
+                
+                @if (Link.Href != null)
+                {
+                    <FluentAnchor Href="@Link.Href.ToString()" 
+                                  Target="_blank" 
+                                  Appearance="Appearance.Hypertext">
+                        @Link.Href.ToString()
+                    </FluentAnchor>
+                }
+            </FluentStack>
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Link to render.
+    /// </summary>
+    [Parameter]
+    public Link? Link { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+}

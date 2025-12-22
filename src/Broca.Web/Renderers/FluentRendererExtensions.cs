@@ -26,6 +26,7 @@ public static class FluentRendererExtensions
         registry.RegisterRenderer(typeof(Image), new FluentImageRendererProxy());
         registry.RegisterRenderer(typeof(Video), new FluentVideoRendererProxy());
         registry.RegisterRenderer(typeof(Document), new FluentDocumentRendererProxy());
+        registry.RegisterRenderer(typeof(Link), new FluentLinkRendererProxy());
     }
 }
 
@@ -168,6 +169,22 @@ internal class FluentDocumentRendererProxy : ObjectRendererBase<Document>
         {
             builder.OpenComponent<FluentDocumentRenderer>(0);
             builder.AddAttribute(1, "Document", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Link objects using FluentLinkRenderer.
+/// </summary>
+internal class FluentLinkRendererProxy : ObjectRendererBase<Link>
+{
+    protected override RenderFragment Render(Link obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentLinkRenderer>(0);
+            builder.AddAttribute(1, "Link", obj);
             builder.CloseComponent();
         };
     }
