@@ -1,71 +1,43 @@
 @using KristofferStrube.ActivityStreams
 @inherits ComponentBase
 
-<div class="activitypub-activity @CssClass">
-    @if (Activity != null)
+@* Render only the inner objects without the activity wrapper *@
+@if (Activity != null)
+{
+    @if (Activity.Object?.Any() == true)
     {
-        <div class="activity-header">
-            @if (!string.IsNullOrEmpty(GetActorId()))
+        @foreach (var obj in Activity.Object)
+        {
+            @if (ObjectRenderer != null)
             {
-                <div class="activity-actor">
-                    <span class="actor-id">@GetActorId()</span>
-                </div>
+                @ObjectRenderer(obj)
             }
-
-            <div class="activity-type">
-                <span class="type-badge">@Activity.Type</span>
-            </div>
-
-            @if (Activity.Published.HasValue)
+            else
             {
-                <div class="activity-time">
-                    <time datetime="@Activity.Published.Value.ToString("o")">
-                        @FormatDateTime(Activity.Published.Value)
-                    </time>
-                </div>
+                <ObjectDisplay Object="@obj" 
+                             ShowMissingRenderer="@ShowMissingRenderer"
+                             AutoResolveLinks="true" />
             }
-        </div>
-
-        @if (Activity.Summary?.Any() == true)
-        {
-            <div class="activity-summary">
-                @Activity.Summary.First()
-            </div>
-        }
-
-        @if (ShowRecipients && HasRecipients())
-        {
-            <div class="activity-recipients">
-                <span class="recipients-label">To:</span>
-                @RenderRecipients()
-            </div>
-        }
-
-        @if (ShowObject && Activity.Object?.Any() == true)
-        {
-            <div class="activity-objects">
-                @foreach (var obj in Activity.Object)
-                {
-                    <div class="activity-object">
-                        @if (ObjectRenderer != null)
-                        {
-                            @ObjectRenderer(obj)
-                        }
-                        else
-                        {
-                            <ObjectDisplay Object="@obj" ShowMissingRenderer="true" />
-                        }
-                    </div>
-                }
-            </div>
-        }
-
-        @if (AdditionalContent != null)
-        {
-            @AdditionalContent(Activity)
         }
     }
-</div>
+    else if (ShowEmptyState)
+    {
+        <div class="activitypub-activity-empty @CssClass">
+            <div class="empty-state">
+                <p>No content available</p>
+                @if (Activity.Type?.Any() == true)
+                {
+                    <span class="activity-type-badge">@Activity.Type.First()</span>
+                }
+            </div>
+        </div>
+    }
+
+    @if (AdditionalContent != null)
+    {
+        @AdditionalContent(Activity)
+    }
+}
 
 @code {
     /// <summary>
@@ -75,16 +47,16 @@
     public Activity? Activity { get; set; }
 
     /// <summary>
-    /// Gets or sets whether to show the activity object(s).
+    /// Gets or sets whether to show an empty state when no objects are present.
     /// </summary>
     [Parameter]
-    public bool ShowObject { get; set; } = true;
+    public bool ShowEmptyState { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets whether to show the recipients.
+    /// Gets or sets whether to show a message when no renderer is available for objects.
     /// </summary>
     [Parameter]
-    public bool ShowRecipients { get; set; } = false;
+    public bool ShowMissingRenderer { get; set; } = false;
 
     /// <summary>
     /// Gets or sets additional CSS classes.
@@ -103,111 +75,4 @@
     /// </summary>
     [Parameter]
     public RenderFragment<Activity>? AdditionalContent { get; set; }
-
-    private string GetActorId()
-    {
-        var actor = Activity?.Actor?.FirstOrDefault();
-        if (actor == null) return string.Empty;
-        
-        // If it's an IObject with an Id
-        if (actor is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
-            return actorObj.Id;
-        
-        // If it's a Link with Href
-        if (actor is Link link && link.Href != null)
-            return link.Href.ToString();
-        
-        // Try to get Name if available
-        if (actor is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
-            return obj.Name.First();
-        
-        return string.Empty;
-    }
-
-    private bool HasRecipients()
-    {
-        return Activity?.To?.Any() == true || 
-               Activity?.Cc?.Any() == true || 
-               Activity?.Bcc?.Any() == true;
-    }
-
-    private RenderFragment RenderRecipients()
-    {
-        return builder =>
-        {
-            var sequence = 0;
-            
-            if (Activity?.To?.Any() == true)
-            {
-                foreach (var recipient in Activity.To)
-                {
-                    var display = GetRecipientDisplay(recipient);
-                    if (!string.IsNullOrEmpty(display))
-                    {
-                        builder.OpenElement(sequence++, "span");
-                        builder.AddAttribute(sequence++, "class", "recipient");
-                        builder.AddContent(sequence++, display);
-                        builder.CloseElement();
-                    }
-                }
-            }
-
-            if (Activity?.Cc?.Any() == true)
-            {
-                foreach (var recipient in Activity.Cc)
-                {
-                    var display = GetRecipientDisplay(recipient);
-                    if (!string.IsNullOrEmpty(display))
-                    {
-                        builder.OpenElement(sequence++, "span");
-                        builder.AddAttribute(sequence++, "class", "recipient cc");
-                        builder.AddContent(sequence++, display);
-                        builder.CloseElement();
-                    }
-                }
-            }
-        };
-    }
-    
-    private string GetRecipientDisplay(IObjectOrLink? recipient)
-    {
-        if (recipient == null) return string.Empty;
-        
-        // Check for public addressing
-        if (recipient is Link link)
-        {
-            var href = link.Href?.ToString() ?? string.Empty;
-            if (href.Contains("#Public") || href.EndsWith("/followers"))
-                return href.Contains("#Public") ? "Public" : "Followers";
-            return href;
-        }
-        
-        // If it's an Object, try to get Name or Id
-        if (recipient is KristofferStrube.ActivityStreams.Object obj)
-        {
-            if (obj.Name?.Any() == true)
-                return obj.Name.First();
-            if (!string.IsNullOrEmpty(obj.Id))
-                return obj.Id;
-        }
-        
-        return string.Empty;
-    }
-
-    private string FormatDateTime(DateTimeOffset dateTime)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var diff = now - dateTime;
-
-        if (diff.TotalMinutes < 1)
-            return "just now";
-        if (diff.TotalMinutes < 60)
-            return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours < 24)
-            return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 7)
-            return $"{(int)diff.TotalDays}d ago";
-        
-        return dateTime.ToString("MMM d, yyyy");
-    }
 }

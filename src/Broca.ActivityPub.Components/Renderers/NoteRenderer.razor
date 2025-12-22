@@ -2,60 +2,58 @@
 @using Microsoft.AspNetCore.Components.Rendering
 @inherits ComponentBase
 
-<div class="activitypub-note @CssClass">
-    @if (Note != null)
-    {
-        @if (ShowActor && Note.AttributedTo?.Any() == true)
+<ObjectCard Actor="@(Note?.AttributedTo?.FirstOrDefault())"
+            ObjectType="Note"
+            Timestamp="@Note?.Published"
+            ShowActor="@ShowActor"
+            ShowType="false"
+            ShowTimestamp="true"
+            CssClass="@CssClass">
+    <ChildContent>
+        @if (Note != null)
         {
-            <div class="note-attribution">
-                <span class="note-actor">@GetActorDisplay()</span>
-            </div>
-        }
-
-        @if (Note.Name?.Any() == true)
-        {
-            <div class="note-name">@Note.Name.First()</div>
-        }
-
-        @if (Note.Content?.Any() == true)
-        {
-            <div class="note-content">
-                @((MarkupString)(Note.Content.First() ?? string.Empty))
-            </div>
-        }
-
-        @if (Note.Published.HasValue)
-        {
-            <div class="note-metadata">
-                <time datetime="@Note.Published.Value.ToString("o")">
-                    @FormatDateTime(Note.Published.Value)
-                </time>
-            </div>
-        }
-
-        @if (Note.Attachment?.Any() == true)
-        {
-            @if (UseMediaGallery && HasMediaAttachments())
+            @if (Note.Name?.Any() == true)
             {
-                <MediaGallery Images="@GetImageAttachments()"
-                             DisplayMode="@MediaGalleryDisplayMode"
-                             GridColumns="@MediaGalleryColumns"
-                             CssClass="note-media-gallery" />
+                <div class="note-name">@Note.Name.First()</div>
             }
-            else
+
+            @if (Note.Content?.Any() == true)
             {
-                <div class="note-attachments">
-                    @foreach (var attachment in Note.Attachment)
-                    {
-                        <div class="attachment-item">
-                            @RenderAttachment(attachment)
-                        </div>
-                    }
+                <div class="note-content">
+                    @((MarkupString)(Note.Content.First() ?? string.Empty))
                 </div>
             }
-        }
 
-        @if (ShowInteractions && Note.Id != null)
+            @if (Note.Attachment?.Any() == true)
+            {
+                @if (UseMediaGallery && HasMediaAttachments())
+                {
+                    <MediaGallery Images="@GetImageAttachments()"
+                                 DisplayMode="@MediaGalleryDisplayMode"
+                                 GridColumns="@MediaGalleryColumns"
+                                 CssClass="note-media-gallery" />
+                }
+                else
+                {
+                    <div class="note-attachments">
+                        @foreach (var attachment in Note.Attachment)
+                        {
+                            <div class="attachment-item">
+                                @RenderAttachment(attachment)
+                            </div>
+                        }
+                    </div>
+                }
+            }
+
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Note)
+            }
+        }
+    </ChildContent>
+    <FooterContent>
+        @if (ShowInteractions && Note?.Id != null)
         {
             <InteractionBar ObjectId="@Note.Id"
                            Object="@Note"
@@ -65,13 +63,8 @@
                            ShowBookmark="@ShowBookmark"
                            CssClass="note-interactions" />
         }
-
-        @if (AdditionalContent != null)
-        {
-            @AdditionalContent(Note)
-        }
-    }
-</div>
+    </FooterContent>
+</ObjectCard>
 
 @code {
     /// <summary>
@@ -146,31 +139,6 @@
     [Parameter]
     public RenderFragment<Note>? AdditionalContent { get; set; }
 
-    private string GetActorDisplay()
-    {
-        var actorLink = Note?.AttributedTo?.FirstOrDefault();
-        if (actorLink == null) return "Unknown";
-        
-        // Try to get Name from Actor
-        if (actorLink is Actor actor && actor.Name?.Any() == true)
-            return actor.Name.First();
-        
-        // Try to get Name from any Object
-        if (actorLink is KristofferStrube.ActivityStreams.Object obj)
-        {
-            if (obj.Name?.Any() == true)
-                return obj.Name.First();
-            if (!string.IsNullOrEmpty(obj.Id))
-                return obj.Id;
-        }
-        
-        // Try to get Href from Link
-        if (actorLink is Link link && link.Href != null)
-            return link.Href.ToString();
-        
-        return "Unknown";
-    }
-
     private bool HasMediaAttachments()
     {
         if (Note?.Attachment == null) return false;
@@ -181,23 +149,6 @@
     {
         if (Note?.Attachment == null) return Enumerable.Empty<Image>();
         return Note.Attachment.OfType<Image>();
-    }
-
-    private string FormatDateTime(DateTimeOffset dateTime)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var diff = now - dateTime;
-
-        if (diff.TotalMinutes < 1)
-            return "just now";
-        if (diff.TotalMinutes < 60)
-            return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours < 24)
-            return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 7)
-            return $"{(int)diff.TotalDays}d ago";
-        
-        return dateTime.ToString("MMM d, yyyy");
     }
 
     private RenderFragment RenderAttachment(object attachment)

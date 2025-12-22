@@ -1,0 +1,199 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-object-card @CssClass @GetTypeClass()">
+    @if (ShowHeader)
+    {
+        <div class="card-header">
+            @if (ShowActor && Actor != null)
+            {
+                <div class="card-actor">
+                    @if (!string.IsNullOrEmpty(GetActorName()))
+                    {
+                        <span class="actor-name">@GetActorName()</span>
+                    }
+                    @if (!string.IsNullOrEmpty(GetActorId()) && GetActorId() != GetActorName())
+                    {
+                        <span class="actor-id">@GetActorId()</span>
+                    }
+                </div>
+            }
+            
+            @if (ShowType && !string.IsNullOrEmpty(ObjectType))
+            {
+                <span class="type-badge">@ObjectType</span>
+            }
+            
+            @if (ShowTimestamp && Timestamp.HasValue)
+            {
+                <div class="card-time">
+                    <time datetime="@Timestamp.Value.ToString("o")">
+                        @FormatDateTime(Timestamp.Value)
+                    </time>
+                </div>
+            }
+            
+            @if (HeaderContent != null)
+            {
+                @HeaderContent
+            }
+        </div>
+    }
+    
+    <div class="card-body">
+        @if (ChildContent != null)
+        {
+            @ChildContent
+        }
+        else if (DefaultContent != null)
+        {
+            @DefaultContent
+        }
+    </div>
+    
+    @if (FooterContent != null)
+    {
+        <div class="card-footer">
+            @FooterContent
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the main content to display in the card body.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the default content when ChildContent is not provided.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? DefaultContent { get; set; }
+    
+    /// <summary>
+    /// Gets or sets additional content for the card header.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? HeaderContent { get; set; }
+    
+    /// <summary>
+    /// Gets or sets content for the card footer (typically interactions).
+    /// </summary>
+    [Parameter]
+    public RenderFragment? FooterContent { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the actor/author of the object.
+    /// </summary>
+    [Parameter]
+    public object? Actor { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the object type for display.
+    /// </summary>
+    [Parameter]
+    public string? ObjectType { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the timestamp for the object.
+    /// </summary>
+    [Parameter]
+    public DateTimeOffset? Timestamp { get; set; }
+    
+    /// <summary>
+    /// Gets or sets whether to show the header section.
+    /// </summary>
+    [Parameter]
+    public bool ShowHeader { get; set; } = true;
+    
+    /// <summary>
+    /// Gets or sets whether to show the actor information.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+    
+    /// <summary>
+    /// Gets or sets whether to show the object type badge.
+    /// </summary>
+    [Parameter]
+    public bool ShowType { get; set; } = false;
+    
+    /// <summary>
+    /// Gets or sets whether to show the timestamp.
+    /// </summary>
+    [Parameter]
+    public bool ShowTimestamp { get; set; } = true;
+    
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+    
+    private string GetTypeClass()
+    {
+        return string.IsNullOrEmpty(ObjectType) 
+            ? string.Empty 
+            : $"type-{ObjectType.ToLowerInvariant()}";
+    }
+    
+    private string GetActorName()
+    {
+        if (Actor == null) return string.Empty;
+        
+        if (Actor is Person person)
+        {
+            if (!string.IsNullOrEmpty(person.PreferredUsername))
+                return person.PreferredUsername;
+                
+            var name = person.Name?.FirstOrDefault();
+            if (!string.IsNullOrEmpty(name))
+                return name;
+                
+            return string.Empty;
+        }
+        
+        if (Actor is Actor actorObj && actorObj.Name?.Any() == true)
+            return actorObj.Name.First();
+        
+        if (Actor is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
+            return obj.Name.First();
+        
+        if (Actor is Link link && link.Name?.Any() == true)
+            return link.Name.First();
+        
+        return string.Empty;
+    }
+    
+    private string GetActorId()
+    {
+        if (Actor == null) return string.Empty;
+        
+        if (Actor is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
+            return actorObj.Id;
+        
+        if (Actor is Link link && link.Href != null)
+            return link.Href.ToString();
+        
+        return string.Empty;
+    }
+    
+    private string FormatDateTime(DateTimeOffset dateTime)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - dateTime;
+
+        if (diff.TotalMinutes < 1)
+            return "just now";
+        if (diff.TotalMinutes < 60)
+            return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24)
+            return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7)
+            return $"{(int)diff.TotalDays}d ago";
+        
+        return dateTime.ToString("MMM d, yyyy");
+    }
+}

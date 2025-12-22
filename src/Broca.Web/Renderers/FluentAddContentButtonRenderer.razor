@@ -1,217 +1,68 @@
 @using Microsoft.FluentUI.AspNetCore.Components
 @using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
 @using Broca.ActivityPub.Components
+@using Broca.Web.Components
+@inject IDialogService DialogService
 
 @* 
     FluentAddContentButtonRenderer - A Fluent UI floating action button for the AddContentButton component.
     This renderer provides a modern FAB (Floating Action Button) that floats in the bottom right corner.
+    The actual dialog is rendered by the FluentDialogProvider using the PostComposerDialog component.
 *@
 
 <div class="fluent-add-content-wrapper">
-    @if (Context.ShowDialog)
-    {
-        <div class="add-content-overlay" @onclick="Context.CloseDialog"></div>
-        <FluentCard class="add-content-dialog">
-            <div class="dialog-header">
-                <FluentLabel Typo="Typography.Header" Weight="FontWeight.Bold">Create Post</FluentLabel>
-                <FluentButton 
-                    Appearance="Appearance.Stealth"
-                    IconStart="@(new Icons.Regular.Size20.Dismiss())"
-                    OnClick="Context.CloseDialog" 
-                    Title="Close" />
-            </div>
-            <div class="dialog-body">
-                <PostComposer
-                    ShowCancelButton="true"
-                    OnCancel="Context.CloseDialog"
-                    OnPostCreated="Context.HandlePostCreated"
-                    OnAttachmentClick="Context.HandleAttachmentClick"
-                    ShowVisibilitySelector="true"
-                    ShowAttachmentButton="true"
-                    ShowEmojiButton="true"
-                    ShowContentWarning="true"
-                    ShowPollButton="false"
-                    Placeholder="@Context.Placeholder"
-                    MaxLength="@Context.MaxLength"
-                    Rows="@Context.DialogRows"
-                    ComposerTemplate="FluentPostComposerRenderer.Template" />
-                
-                @if (Context.Attachments.Count > 0)
-                {
-                    <div class="attachment-preview-section">
-                        <FluentLabel Typo="Typography.Subject" Weight="FontWeight.Bold">Attachments</FluentLabel>
-                        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" class="attachment-list">
-                            @foreach (var attachment in Context.Attachments)
-                            {
-                                <FluentCard class="attachment-preview-item">
-                                    @if (attachment.Type == "image")
-                                    {
-                                        <img src="@attachment.PreviewUrl" alt="@attachment.Name" class="attachment-thumbnail" />
-                                    }
-                                    else if (attachment.Type == "video")
-                                    {
-                                        <div class="attachment-video-preview">
-                                            <FluentIcon Value="@(new Icons.Regular.Size24.VideoClip())" />
-                                            <FluentLabel Typo="Typography.Body">@attachment.Name</FluentLabel>
-                                        </div>
-                                    }
-                                    else
-                                    {
-                                        <div class="attachment-file-preview">
-                                            <FluentIcon Value="@(new Icons.Regular.Size24.Document())" />
-                                            <FluentLabel Typo="Typography.Body">@attachment.Name</FluentLabel>
-                                        </div>
-                                    }
-                                    <FluentButton 
-                                        Appearance="Appearance.Stealth"
-                                        IconStart="@(new Icons.Regular.Size16.Dismiss())"
-                                        OnClick="() => Context.RemoveAttachment(attachment)" 
-                                        Title="Remove"
-                                        class="attachment-remove-button" />
-                                </FluentCard>
-                            }
-                        </FluentStack>
-                    </div>
-                }
-
-                @if (Context.Mentions.Count > 0)
-                {
-                    <div class="mentions-section">
-                        <FluentLabel Typo="Typography.Subject" Weight="FontWeight.Bold">Mentions</FluentLabel>
-                        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" class="mentions-list">
-                            @foreach (var mention in Context.Mentions)
-                            {
-                                <FluentBadge Appearance="Appearance.Accent" class="mention-item">
-                                    @@@mention
-                                    <FluentButton 
-                                        Appearance="Appearance.Stealth"
-                                        IconStart="@(new Icons.Regular.Size12.Dismiss())"
-                                        OnClick="() => Context.RemoveMention(mention)" 
-                                        Title="Remove"
-                                        Style="margin-left: 4px; padding: 0;" />
-                                </FluentBadge>
-                            }
-                        </FluentStack>
-                        <FluentStack Orientation="Orientation.Horizontal" class="mention-input">
-                            <FluentTextField 
-                                @bind-Value="Context.NewMention"
-                                @bind-Value:after="StateHasChanged"
-                                @onkeypress="Context.HandleMentionKeyPress"
-                                Placeholder="Add mention (e.g., user@domain.com)"
-                                Style="flex: 1;" />
-                            <FluentButton 
-                                Appearance="Appearance.Accent"
-                                IconStart="@(new Icons.Regular.Size16.Add())"
-                                OnClick="Context.AddMention"
-                                Disabled="@string.IsNullOrWhiteSpace(Context.NewMention)">
-                                Add
-                            </FluentButton>
-                        </FluentStack>
-                    </div>
-                }
-                else
-                {
-                    <div class="mentions-section-collapsed">
-                        <FluentButton 
-                            Appearance="Appearance.Lightweight"
-                            IconStart="@(new Icons.Regular.Size16.Add())"
-                            OnClick="Context.ShowMentions">
-                            Add Mentions
-                        </FluentButton>
-                    </div>
-                }
-
-                @if (Context.Tags.Count > 0)
-                {
-                    <div class="tags-section">
-                        <FluentLabel Typo="Typography.Subject" Weight="FontWeight.Bold">Tags</FluentLabel>
-                        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" class="tags-list">
-                            @foreach (var tag in Context.Tags)
-                            {
-                                <FluentBadge Appearance="Appearance.Neutral" class="tag-item">
-                                    #@tag
-                                    <FluentButton 
-                                        Appearance="Appearance.Stealth"
-                                        IconStart="@(new Icons.Regular.Size12.Dismiss())"
-                                        OnClick="() => Context.RemoveTag(tag)" 
-                                        Title="Remove"
-                                        Style="margin-left: 4px; padding: 0;" />
-                                </FluentBadge>
-                            }
-                        </FluentStack>
-                        <FluentStack Orientation="Orientation.Horizontal" class="tag-input">
-                            <FluentTextField 
-                                @bind-Value="Context.NewTag"
-                                @bind-Value:after="StateHasChanged"
-                                @onkeypress="Context.HandleTagKeyPress"
-                                Placeholder="Add tag (without #)"
-                                Style="flex: 1;" />
-                            <FluentButton 
-                                Appearance="Appearance.Accent"
-                                IconStart="@(new Icons.Regular.Size16.Add())"
-                                OnClick="Context.AddTag"
-                                Disabled="@string.IsNullOrWhiteSpace(Context.NewTag)">
-                                Add
-                            </FluentButton>
-                        </FluentStack>
-                    </div>
-                }
-                else
-                {
-                    <div class="tags-section-collapsed">
-                        <FluentButton 
-                            Appearance="Appearance.Lightweight"
-                            IconStart="@(new Icons.Regular.Size16.Add())"
-                            OnClick="Context.ShowTags">
-                            Add Tags
-                        </FluentButton>
-                    </div>
-                }
-
-                @if (Context.ShowAttachmentPicker)
-                {
-                    <div class="attachment-picker">
-                        <input type="file" 
-                               @ref="fileInputRef" 
-                               @onchange="HandleFileChange" 
-                               multiple 
-                               accept="@Context.AcceptedFileTypes"
-                               class="file-input" />
-                    </div>
-                }
-            </div>
-        </FluentCard>
-    }
-
     @if (!Context.HideButton)
     {
         <FluentButton 
             Appearance="Appearance.Accent"
-            IconStart="@(new Icons.Regular.Size24.Add())"
+            IconStart="@(new Icons.Regular.Size24.Edit())"
             class="add-content-fab"
             Title="@Context.ButtonTitle"
-            OnClick="Context.OpenDialog"
+            OnClick="HandleClick"
             Style="@GetButtonStyle()" />
     }
 </div>
 
 @code {
-    private ElementReference fileInputRef;
-
     /// <summary>
     /// The AddContentButton component context.
     /// </summary>
     [Parameter]
     public AddContentButton Context { get; set; } = default!;
 
+    private async Task HandleClick()
+    {
+        var dialogData = new PostComposerDialogData
+        {
+            Title = string.IsNullOrWhiteSpace(Context.InReplyToId) ? Context.DialogTitle : "Reply",
+            Placeholder = Context.Placeholder,
+            MaxLength = Context.MaxLength,
+            Rows = Context.DialogRows,
+            AcceptedFileTypes = Context.AcceptedFileTypes,
+            InReplyToId = Context.InReplyToId,
+            OnPostCreated = Context.OnPostCreated
+        };
+
+        var parameters = new DialogParameters<PostComposerDialogData>()
+        {
+            Content = dialogData,
+            Title = dialogData.Title,
+            Width = "800px",
+            Height = "auto",
+            Modal = true,
+            PreventDismissOnOverlayClick = false,
+            TrapFocus = true,
+            ShowDismiss = true,
+            PrimaryAction = null,
+            SecondaryAction = null
+        };
+
+        await DialogService.ShowDialogAsync<PostComposerDialog>(dialogData, parameters);
+    }
+
     private string GetButtonStyle()
     {
         return $"position: fixed; bottom: {Context.BottomPosition}px; right: {Context.RightPosition}px; z-index: 1000;";
-    }
-
-    private void HandleFileChange(ChangeEventArgs e)
-    {
-        Context.HandleFileSelected(e);
     }
 
     /// <summary>

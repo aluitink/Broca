@@ -43,9 +43,7 @@
                 }
                 else
                 {
-                    <ActivityRenderer Activity="@activity" 
-                                    ShowObject="@ShowObjects"
-                                    ShowRecipients="@ShowRecipients" />
+                    <ActivityRenderer Activity="@activity" />
                 }
             </ItemTemplate>
             <LoadingTemplate>
@@ -138,18 +136,6 @@
     /// </summary>
     [Parameter]
     public int OverscanCount { get; set; } = 3;
-
-    /// <summary>
-    /// Gets or sets whether to show activity objects.
-    /// </summary>
-    [Parameter]
-    public bool ShowObjects { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets whether to show recipients.
-    /// </summary>
-    [Parameter]
-    public bool ShowRecipients { get; set; } = false;
 
     /// <summary>
     /// Gets or sets whether to enable auto-refresh.

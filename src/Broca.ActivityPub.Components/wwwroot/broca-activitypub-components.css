@@ -1,6 +1,185 @@
 /* ActivityPub Component Styles */
 
-/* Base Object Display */
+/* Unified Object Card */
+.activitypub-object-card {
+    padding: 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #fff;
+    margin-bottom: 1rem;
+    transition: box-shadow 0.2s ease;
+}
+
+.activitypub-object-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.activitypub-object-card .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.activitypub-object-card .card-actor {
+    flex: 1;
+    min-width: 0;
+}
+
+.activitypub-object-card .actor-name {
+    font-weight: 600;
+    color: #333;
+    display: block;
+}
+
+.activitypub-object-card .actor-id {
+    font-size: 0.75rem;
+    color: #666;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.activitypub-object-card .type-badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    background-color: #e3f2fd;
+    color: #1976d2;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.activitypub-object-card .card-time {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: #666;
+}
+
+.activitypub-object-card .card-body {
+    margin-bottom: 0.5rem;
+}
+
+.activitypub-object-card .card-footer {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+/* Note Content Styles */
+.note-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #1a1a1a;
+}
+
+.note-content {
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+    color: #333;
+}
+
+.note-attachments {
+    margin-top: 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.5rem;
+}
+
+.attachment-item {
+    padding: 0.5rem;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+}
+
+/* Article Content Styles */
+.article-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    color: #1a1a1a;
+}
+
+.article-read-time {
+    font-size: 0.875rem;
+    color: #666;
+    margin-bottom: 0.75rem;
+}
+
+.article-featured-image {
+    margin: 1rem 0;
+}
+
+.article-featured-image img {
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+.article-summary {
+    font-style: italic;
+    color: #666;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.article-content {
+    line-height: 1.6;
+    color: #333;
+}
+
+.article-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.article-tag {
+    padding: 0.25rem 0.75rem;
+    background-color: #f5f5f5;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: #666;
+}
+
+/* Object Display States */
+.object-display-loading,
+.object-display-error,
+.object-display-empty,
+.object-display-no-renderer {
+    padding: 1rem;
+    text-align: center;
+    color: #666;
+}
+
+.object-display-error {
+    background-color: #ffebee;
+    color: #c62828;
+    border-radius: 4px;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid #e0e0e0;
+    border-top-color: #1976d2;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Base Object Display (Fallback) */
 .activitypub-object-fallback {
     padding: 1rem;
     background-color: #f5f5f5;
@@ -12,58 +191,6 @@
 .activitypub-object-fallback .object-type {
     font-weight: bold;
     color: #666;
-}
-
-/* Note Renderer */
-.activitypub-note {
-    padding: 1rem;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    background-color: #fff;
-    margin-bottom: 1rem;
-}
-
-.activitypub-note .note-attribution {
-    margin-bottom: 0.5rem;
-    font-size: 0.875rem;
-}
-
-.activitypub-note .note-actor {
-    font-weight: 600;
-    color: #333;
-}
-
-.activitypub-note .note-name {
-    font-size: 1.125rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: #1a1a1a;
-}
-
-.activitypub-note .note-content {
-    margin-bottom: 0.75rem;
-    line-height: 1.5;
-    color: #333;
-}
-
-.activitypub-note .note-metadata {
-    font-size: 0.75rem;
-    color: #666;
-    margin-top: 0.5rem;
-}
-
-.activitypub-note .note-attachments {
-    margin-top: 1rem;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 0.5rem;
-}
-
-.activitypub-note .attachment-item {
-    padding: 0.5rem;
-    background-color: #f5f5f5;
-    border-radius: 4px;
-    border: 1px solid #e0e0e0;
 }
 
 /* Actor/Profile Renderer */
@@ -148,30 +275,23 @@
     text-decoration: underline;
 }
 
-/* Activity Renderer */
-.activitypub-activity {
+/* Activity Empty State */
+.activitypub-activity-empty {
     padding: 1rem;
-    border: 1px solid #e0e0e0;
+    text-align: center;
+    background-color: #f9f9f9;
+    border: 1px dashed #ccc;
     border-radius: 8px;
-    background-color: #fff;
     margin-bottom: 1rem;
 }
 
-.activitypub-activity .activity-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-    flex-wrap: wrap;
+.activitypub-activity-empty .empty-state {
+    color: #666;
 }
 
-.activitypub-activity .activity-actor {
-    font-weight: 600;
-    color: #333;
-}
-
-.activitypub-activity .type-badge {
+.activitypub-activity-empty .activity-type-badge {
     display: inline-block;
+    margin-top: 0.5rem;
     padding: 0.125rem 0.5rem;
     background-color: #e3f2fd;
     color: #1976d2;
@@ -179,56 +299,6 @@
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
-}
-
-.activitypub-activity .activity-time {
-    margin-left: auto;
-    font-size: 0.75rem;
-    color: #666;
-}
-
-.activitypub-activity .activity-summary {
-    margin-bottom: 0.75rem;
-    font-style: italic;
-    color: #666;
-}
-
-.activitypub-activity .activity-objects {
-    margin-top: 1rem;
-}
-
-.activitypub-activity .activity-object {
-    margin-bottom: 0.5rem;
-}
-
-.activitypub-activity .activity-object:last-child {
-    margin-bottom: 0;
-}
-
-.activitypub-activity .activity-recipients {
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid #e0e0e0;
-    font-size: 0.75rem;
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.activitypub-activity .recipients-label {
-    font-weight: 600;
-    color: #666;
-}
-
-.activitypub-activity .recipient {
-    padding: 0.125rem 0.5rem;
-    background-color: #f5f5f5;
-    border-radius: 12px;
-    color: #333;
-}
-
-.activitypub-activity .recipient.cc {
-    opacity: 0.7;
 }
 
 /* Interaction Bar */

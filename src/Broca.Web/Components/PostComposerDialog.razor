@@ -1,0 +1,54 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@using Broca.ActivityPub.Components
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Broca.Web.Renderers
+@implements IDialogContentComponent<PostComposerDialogData>
+
+<FluentDialogBody>
+    <div class="post-composer-dialog-content">
+        <PostComposer
+            ShowCancelButton="false"
+            OnPostCreated="HandlePostCreated"
+            ShowVisibilitySelector="true"
+            ShowAttachmentButton="true"
+            ShowEmojiButton="true"
+            ShowContentWarning="true"
+            ShowPollButton="false"
+            Placeholder="@Content.Placeholder"
+            MaxLength="@Content.MaxLength"
+            Rows="@Content.Rows"
+            InReplyToId="@Content.InReplyToId"
+            ComposerTemplate="FluentPostComposerRenderer.Template" />
+    </div>
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="@CancelAsync">
+        Cancel
+    </FluentButton>
+</FluentDialogFooter>
+
+@code {
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    [Parameter]
+    public PostComposerDialogData Content { get; set; } = default!;
+
+    private async Task HandlePostCreated(Activity activity)
+    {
+        if (Content.OnPostCreated.HasDelegate)
+        {
+            await Content.OnPostCreated.InvokeAsync(activity);
+        }
+        
+        // Close dialog after successful post
+        await Dialog.CloseAsync(DialogResult.Ok(activity));
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}
