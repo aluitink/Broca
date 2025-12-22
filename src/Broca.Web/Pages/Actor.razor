@@ -1,0 +1,91 @@
+@page "/actor"
+@using Broca.ActivityPub.Components
+@using Broca.Web.Services
+@inject NavigationManager Navigation
+@inject AuthenticationStateService AuthState
+
+<PageTitle>Actor Profile - Broca</PageTitle>
+
+<div class="actor-page">
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <FluentCard>
+            <FluentMessageBar Title="Error" Intent="MessageIntent.Error">
+                @errorMessage
+            </FluentMessageBar>
+        </FluentCard>
+    }
+    else if (actorUri != null)
+    {
+        <ActorView ActorUri="@actorUri"
+                   InitialTab="@initialTab"
+                   ShowFollowButton="true"
+                   ShowOpenProfileButton="true" />
+    }
+    else if (!string.IsNullOrEmpty(actorHandle))
+    {
+        <ActorView ActorHandle="@actorHandle"
+                   InitialTab="@initialTab"
+                   ShowFollowButton="true"
+                   ShowOpenProfileButton="true" />
+    }
+    else if (!string.IsNullOrEmpty(username))
+    {
+        <ActorView Username="@username"
+                   InitialTab="@initialTab"
+                   ShowFollowButton="false"
+                   ShowOpenProfileButton="false" />
+    }
+    else
+    {
+        <FluentCard>
+            <FluentMessageBar Title="No Actor Specified" Intent="MessageIntent.Warning">
+                Please provide an actor ID, handle, or username.
+            </FluentMessageBar>
+        </FluentCard>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")]
+    private string? actorIdParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "handle")]
+    private string? actorHandle { get; set; }
+
+    [SupplyParameterFromQuery(Name = "username")]
+    private string? username { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tab")]
+    private string? tabParam { get; set; }
+
+    private Uri? actorUri;
+    private string? errorMessage;
+    private ActorView.ActorViewTab initialTab = ActorView.ActorViewTab.Outbox;
+
+    protected override void OnParametersSet()
+    {
+        errorMessage = null;
+        actorUri = null;
+
+        // Parse actor ID
+        if (!string.IsNullOrEmpty(actorIdParam))
+        {
+            if (Uri.TryCreate(actorIdParam, UriKind.Absolute, out var uri))
+            {
+                actorUri = uri;
+            }
+            else
+            {
+                errorMessage = "Invalid actor ID format";
+            }
+        }
+
+        // Parse initial tab
+        if (!string.IsNullOrEmpty(tabParam) && 
+            Enum.TryParse<ActorView.ActorViewTab>(tabParam, true, out var tab))
+        {
+            initialTab = tab;
+        }
+    }
+}

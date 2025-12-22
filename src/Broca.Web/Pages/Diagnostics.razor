@@ -85,14 +85,14 @@
 </style>
 
 @code {
-    private Actor? lastSelectedActor;
+    private Person? lastSelectedActor;
     private System.Timers.Timer? notificationTimer;
 
     private Task HandleActorSelected(KristofferStrube.ActivityStreams.Object actorObject)
     {
-        if (actorObject is Actor actor)
+        if (actorObject is Person person)
         {
-            lastSelectedActor = actor;
+            lastSelectedActor = person;
             StateHasChanged();
             
             // Auto-hide notification after 4 seconds
@@ -112,10 +112,13 @@
         return Task.CompletedTask;
     }
 
-    private string GetActorName(Actor actor)
+    private string GetActorName(Person? person)
     {
-        var name = actor.Name?.FirstOrDefault();
-        var username = actor.PreferredUsername;
+        if (person == null)
+            return "Unknown Actor";
+            
+        var name = person.Name?.FirstOrDefault();
+        var username = person.PreferredUsername;
         
         if (!string.IsNullOrEmpty(name))
             return name;

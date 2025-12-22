@@ -81,9 +81,23 @@
     }
 </div>
 
+@if (showReplyComposer && ObjectId != null)
+{
+    <div class="reply-composer-container">
+        <PostComposer InReplyToId="@ObjectId"
+                     ShowCancelButton="true"
+                     OnCancel="@HandleCancelReply"
+                     OnPostCreated="@HandleReplyCreated"
+                     Placeholder="Write your reply..."
+                     PostButtonText="Reply"
+                     CssClass="interaction-reply-composer" />
+    </div>
+}
+
 @code {
     private bool isProcessing;
     private string? error;
+    private bool showReplyComposer;
 
     /// <summary>
     /// Gets or sets the object ID to interact with.
@@ -223,10 +237,29 @@
 
     private async Task HandleReplyClick()
     {
+        showReplyComposer = !showReplyComposer;
+        IsReplying = showReplyComposer;
+        StateHasChanged();
+        
         if (OnReplyClick.HasDelegate)
         {
             await OnReplyClick.InvokeAsync();
         }
+    }
+
+    private async Task HandleCancelReply()
+    {
+        showReplyComposer = false;
+        IsReplying = false;
+        StateHasChanged();
+    }
+
+    private async Task HandleReplyCreated(Activity activity)
+    {
+        showReplyComposer = false;
+        IsReplying = false;
+        ReplyCount++;
+        StateHasChanged();
     }
 
     private async Task HandleLikeClick()
@@ -250,9 +283,13 @@
 
             if (newLikedState)
             {
-                // Like the object
+                // Create and post Like activity to outbox
+                // The server will handle delivering it to the object's owner (attributedTo)
                 var likeActivity = Client.CreateActivityBuilder().Like(targetObjectId);
-                await Client.PostToOutboxAsync(likeActivity);
+                
+                // Post to the actor's outbox - the server handles delivery
+                var response = await Client.PostToOutboxAsync(likeActivity);
+                response.EnsureSuccessStatusCode();
             }
             else
             {

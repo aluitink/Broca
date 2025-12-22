@@ -2,6 +2,8 @@
 @using Microsoft.FluentUI.AspNetCore.Components
 @using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
 @using Broca.ActivityPub.Components.Services
+@inject ActorResolutionService ActorResolver
+@inject NavigationManager Navigation
 @inherits ComponentBase
 
 <FluentCard Class="@($"fluent-note-card {CssClass}")">
@@ -12,17 +14,19 @@
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="note-header">
                 @if (ShowActor && Note.AttributedTo?.Any() == true)
                 {
-                    <FluentPersona Name="@GetActorDisplay()"
-                                   Image="@GetActorImageUrl()"
-                                   ImageSize="32px"
-                                   TextPosition="@TextPosition.End">
-                        @if (!string.IsNullOrEmpty(GetActorUsername()))
-                        {
-                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
-                                @@@GetActorUsername()
-                            </FluentLabel>
-                        }
-                    </FluentPersona>
+                    <div class="actor-info-clickable" @onclick="NavigateToActor" style="cursor: pointer;">
+                        <FluentPersona Name="@GetActorDisplay()"
+                                       Image="@GetActorImageUrl()"
+                                       ImageSize="32px"
+                                       TextPosition="@TextPosition.End">
+                            @if (!string.IsNullOrEmpty(GetActorUsername()))
+                            {
+                                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                    @@@GetActorUsername()
+                                </FluentLabel>
+                            }
+                        </FluentPersona>
+                    </div>
                 }
                 
                 @if (Note.Published.HasValue)
@@ -96,6 +100,8 @@
 </FluentCard>
 
 @code {
+    private ActorInfo? actorInfo;
+
     /// <summary>
     /// Gets or sets the Note object to render.
     /// </summary>
@@ -144,8 +150,28 @@
     [Parameter]
     public EventCallback<Note> OnLike { get; set; }
 
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Note?.AttributedTo?.Any() == true)
+        {
+            actorInfo = await ActorResolver.ResolveActorAsync(Note.AttributedTo.First());
+        }
+    }
+
+    private void NavigateToActor()
+    {
+        if (actorInfo?.Id != null)
+        {
+            var encodedActorId = Uri.EscapeDataString(actorInfo.Id);
+            Navigation.NavigateTo($"/actor?id={encodedActorId}");
+        }
+    }
+
     private string GetActorDisplay()
     {
+        if (actorInfo != null)
+            return actorInfo.Name;
+
         var actorLink = Note?.AttributedTo?.FirstOrDefault();
         if (actorLink == null) return "Unknown";
         
@@ -171,6 +197,9 @@
 
     private string GetActorImageUrl()
     {
+        if (actorInfo?.IconUrl != null)
+            return actorInfo.IconUrl;
+
         var actorLink = Note?.AttributedTo?.FirstOrDefault();
         if (actorLink == null) return string.Empty;
         
@@ -190,6 +219,9 @@
 
     private string GetActorUsername()
     {
+        if (actorInfo != null)
+            return actorInfo.PreferredUsername;
+
         var actorLink = Note?.AttributedTo?.FirstOrDefault();
         if (actorLink == null) return string.Empty;
         

@@ -38,6 +38,9 @@ public static class ServiceCollectionExtensions
         // Register the object renderer registry
         services.TryAddSingleton<IObjectRendererRegistry, ObjectRendererRegistry>();
 
+        // Register actor resolution service
+        services.TryAddScoped<ActorResolutionService>();
+
         // Register default renderers
         RegisterDefaultRenderers(services);
 

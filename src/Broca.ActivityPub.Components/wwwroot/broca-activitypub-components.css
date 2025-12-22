@@ -230,3 +230,88 @@
 .activitypub-activity .recipient.cc {
     opacity: 0.7;
 }
+
+/* Interaction Bar */
+.activitypub-interaction-bar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.5rem 0;
+    flex-wrap: wrap;
+}
+
+.interaction-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+    color: #666;
+}
+
+.interaction-button:hover:not(:disabled) {
+    background-color: #f5f5f5;
+    color: #333;
+}
+
+.interaction-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.interaction-button.active {
+    color: #1976d2;
+    font-weight: 600;
+}
+
+.interaction-button .icon {
+    font-size: 1.125rem;
+}
+
+.interaction-button .count {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.interaction-button.like-button.active {
+    color: #e91e63;
+}
+
+.interaction-button.boost-button.active {
+    color: #4caf50;
+}
+
+.interaction-button.reply-button.active {
+    color: #2196f3;
+}
+
+.interaction-button.bookmark-button.active {
+    color: #ff9800;
+}
+
+.interaction-error {
+    padding: 0.5rem;
+    background-color: #ffebee;
+    color: #c62828;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    width: 100%;
+    margin-top: 0.5rem;
+}
+
+.reply-composer-container {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.interaction-reply-composer {
+    background-color: #fff;
+}

@@ -1,0 +1,508 @@
+@using Broca.ActivityPub.Core.Interfaces
+@using Broca.ActivityPub.Core.Models
+@using KristofferStrube.ActivityStreams
+@inject IActivityPubClient Client
+@inject ICollectionService CollectionService
+@inject NavigationManager Navigation
+
+<div class="activitypub-actor-view @CssClass">
+    @if (isLoading)
+    {
+        @if (LoadingTemplate != null)
+        {
+            @LoadingTemplate
+        }
+        else
+        {
+            <div class="actor-view-loading">
+                <span class="loading-spinner"></span>
+                <span>Loading actor...</span>
+            </div>
+        }
+    }
+    else if (error != null)
+    {
+        @if (ErrorTemplate != null)
+        {
+            @ErrorTemplate(error)
+        }
+        else
+        {
+            <div class="actor-view-error">
+                <p>Error: @error</p>
+            </div>
+        }
+    }
+    else if (currentActor != null)
+    {
+        <div class="actor-view-content">
+            @* Actor Profile Section *@
+            <div class="actor-profile-section">
+                @if (ActorProfileTemplate != null)
+                {
+                    @ActorProfileTemplate(currentActor)
+                }
+                else
+                {
+                    <ActorRenderer Actor="currentActor" ShowDetails="true" />
+                }
+
+                @* Action Buttons *@
+                <div class="actor-actions">
+                    @if (IsExternalActor)
+                    {
+                        @if (ShowFollowButton)
+                        {
+                            <button @onclick="HandleFollowAsync" 
+                                    class="@GetFollowButtonClass()" 
+                                    disabled="@isProcessingAction">
+                                @(isFollowing ? "Unfollow" : "Follow")
+                            </button>
+                        }
+                        
+                        @if (ShowOpenProfileButton && !string.IsNullOrEmpty(currentActor.Id))
+                        {
+                            <a href="@currentActor.Id" 
+                               target="_blank" 
+                               rel="noopener noreferrer" 
+                               class="actor-action-button external-profile">
+                                Open Profile ↗
+                            </a>
+                        }
+                    }
+                    
+                    @if (AdditionalActions != null)
+                    {
+                        @AdditionalActions(currentActor)
+                    }
+                </div>
+            </div>
+
+            @* Tabs for different views *@
+            <div class="actor-view-tabs">
+                <div class="tab-headers">
+                    <button class="@GetTabClass(ActorViewTab.Outbox)" 
+                            @onclick="() => SetActiveTab(ActorViewTab.Outbox)">
+                        Outbox
+                    </button>
+                    <button class="@GetTabClass(ActorViewTab.Following)" 
+                            @onclick="() => SetActiveTab(ActorViewTab.Following)">
+                        Following
+                    </button>
+                    <button class="@GetTabClass(ActorViewTab.Followers)" 
+                            @onclick="() => SetActiveTab(ActorViewTab.Followers)">
+                        Followers
+                    </button>
+                    @if (customCollections.Any())
+                    {
+                        <button class="@GetTabClass(ActorViewTab.Collections)" 
+                                @onclick="() => SetActiveTab(ActorViewTab.Collections)">
+                            Collections (@customCollections.Count)
+                        </button>
+                    }
+                </div>
+
+                <div class="tab-content">
+                    @if (activeTab == ActorViewTab.Outbox)
+                    {
+                        <div class="tab-panel">
+                            @if (currentActor is Actor actor && actor.Outbox != null)
+                            {
+                                <ActivityFeed CollectionUrl="@actor.Outbox.Href" 
+                                            Title="Posts"
+                                            PageSize="20"
+                                            ShowObjects="true" />
+                            }
+                            else
+                            {
+                                <p>No outbox available</p>
+                            }
+                        </div>
+                    }
+                    else if (activeTab == ActorViewTab.Following)
+                    {
+                        <div class="tab-panel">
+                            @if (currentActor is Actor actor && actor.Following != null)
+                            {
+                                <FollowingList ActorId="@actor.Id" 
+                                             FollowingUrl="@actor.Following.Href" />
+                            }
+                            else
+                            {
+                                <p>Following information not available</p>
+                            }
+                        </div>
+                    }
+                    else if (activeTab == ActorViewTab.Followers)
+                    {
+                        <div class="tab-panel">
+                            @if (currentActor is Actor actor && actor.Followers != null)
+                            {
+                                <FollowersList ActorId="@actor.Id" 
+                                             FollowersUrl="@actor.Followers.Href" />
+                            }
+                            else
+                            {
+                                <p>Followers information not available</p>
+                            }
+                        </div>
+                    }
+                    else if (activeTab == ActorViewTab.Collections)
+                    {
+                        <div class="tab-panel">
+                            <div class="collections-list">
+                                @foreach (var collection in customCollections)
+                                {
+                                    <div class="collection-item" @onclick="() => ViewCollection(collection)">
+                                        <h4>@collection.Name</h4>
+                                        @if (!string.IsNullOrEmpty(collection.Description))
+                                        {
+                                            <p>@collection.Description</p>
+                                        }
+                                        <span class="collection-meta">
+                                            @collection.Type.ToString() • @collection.Visibility.ToString()
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                            
+                            @if (selectedCollection != null)
+                            {
+                                <div class="collection-viewer">
+                                    <h3>@selectedCollection.Name</h3>
+                                    <CollectionLoader TItem="KristofferStrube.ActivityStreams.Object"
+                                                    CollectionUrl="@GetCollectionUrl(selectedCollection)"
+                                                    PageSize="20">
+                                        <ItemTemplate Context="item">
+                                            <ObjectDisplay Object="@item" />
+                                        </ItemTemplate>
+                                    </CollectionLoader>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="actor-view-empty">
+            <p>No actor specified</p>
+        </div>
+    }
+</div>
+
+@code {
+    private KristofferStrube.ActivityStreams.Object? currentActor;
+    private bool isLoading;
+    private string? error;
+    private bool isFollowing;
+    private bool isProcessingAction;
+    private ActorViewTab activeTab = ActorViewTab.Outbox;
+    private List<CustomCollectionDefinition> customCollections = new();
+    private CustomCollectionDefinition? selectedCollection;
+
+    /// <summary>
+    /// The actor URI to display
+    /// </summary>
+    [Parameter]
+    public Uri? ActorUri { get; set; }
+
+    /// <summary>
+    /// The actor handle (e.g., user@domain.com)
+    /// </summary>
+    [Parameter]
+    public string? ActorHandle { get; set; }
+
+    /// <summary>
+    /// The actor object directly
+    /// </summary>
+    [Parameter]
+    public KristofferStrube.ActivityStreams.Object? Actor { get; set; }
+
+    /// <summary>
+    /// The username if this is a local actor
+    /// </summary>
+    [Parameter]
+    public string? Username { get; set; }
+
+    /// <summary>
+    /// CSS class for the container
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Show follow button
+    /// </summary>
+    [Parameter]
+    public bool ShowFollowButton { get; set; } = true;
+
+    /// <summary>
+    /// Show open profile button
+    /// </summary>
+    [Parameter]
+    public bool ShowOpenProfileButton { get; set; } = true;
+
+    /// <summary>
+    /// Initial tab to display
+    /// </summary>
+    [Parameter]
+    public ActorViewTab InitialTab { get; set; } = ActorViewTab.Outbox;
+
+    /// <summary>
+    /// Template for actor profile display
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? ActorProfileTemplate { get; set; }
+
+    /// <summary>
+    /// Template for loading state
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Template for error state
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Additional action buttons
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? AdditionalActions { get; set; }
+
+    /// <summary>
+    /// Callback when follow state changes
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> OnFollowStateChanged { get; set; }
+
+    /// <summary>
+    /// Determines if this is an external actor (not on the current instance)
+    /// </summary>
+    private bool IsExternalActor
+    {
+        get
+        {
+            if (currentActor?.Id == null) return true;
+            
+            // Check if actor's domain matches client's actor domain
+            if (!string.IsNullOrEmpty(Client.ActorId) && 
+                Uri.TryCreate(Client.ActorId, UriKind.Absolute, out var clientUri) &&
+                Uri.TryCreate(currentActor.Id, UriKind.Absolute, out var actorUri))
+            {
+                return clientUri.Host != actorUri.Host;
+            }
+            
+            return true;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        activeTab = InitialTab;
+        await LoadActorAsync();
+    }
+
+    private async Task LoadActorAsync()
+    {
+        isLoading = true;
+        error = null;
+        currentActor = null;
+        customCollections.Clear();
+        StateHasChanged();
+
+        try
+        {
+            // Load actor from various sources
+            if (Actor != null)
+            {
+                currentActor = Actor;
+            }
+            else if (ActorUri != null)
+            {
+                currentActor = await Client.GetActorAsync(ActorUri);
+            }
+            else if (!string.IsNullOrEmpty(ActorHandle))
+            {
+                currentActor = await Client.GetActorByAliasAsync(ActorHandle);
+            }
+            else if (!string.IsNullOrEmpty(Username))
+            {
+                // Try to construct actor URI from username
+                // This assumes local instance pattern
+                var baseUri = Navigation.BaseUri.TrimEnd('/');
+                var actorUri = new Uri($"{baseUri}/ap/users/{Username}");
+                currentActor = await Client.GetActorAsync(actorUri);
+            }
+
+            if (currentActor != null)
+            {
+                // Load custom collections if this is a local actor or collections are accessible
+                await LoadCustomCollectionsAsync();
+                
+                // TODO: Check follow status
+                await CheckFollowStatusAsync();
+            }
+            else
+            {
+                error = "Actor not found";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load actor: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadCustomCollectionsAsync()
+    {
+        if (currentActor is not Actor actor) return;
+        
+        try
+        {
+            // Extract username from actor ID
+            var username = actor.PreferredUsername;
+            if (string.IsNullOrEmpty(username)) return;
+
+            var definitions = await CollectionService.GetCollectionDefinitionsAsync(username);
+            customCollections = definitions
+                .Where(d => d.Visibility == CollectionVisibility.Public)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            // Collections not available, that's ok
+            Console.WriteLine($"Could not load collections: {ex.Message}");
+        }
+    }
+
+    private async Task CheckFollowStatusAsync()
+    {
+        // TODO: Implement checking if current user follows this actor
+        // This would require querying the current user's following collection
+        isFollowing = false;
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleFollowAsync()
+    {
+        if (isProcessingAction) return;
+        
+        isProcessingAction = true;
+        StateHasChanged();
+
+        try
+        {
+            if (isFollowing)
+            {
+                await UnfollowActorAsync();
+            }
+            else
+            {
+                await FollowActorAsync();
+            }
+
+            if (OnFollowStateChanged.HasDelegate)
+            {
+                await OnFollowStateChanged.InvokeAsync(isFollowing);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to {(isFollowing ? "unfollow" : "follow")} actor: {ex.Message}";
+        }
+        finally
+        {
+            isProcessingAction = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task FollowActorAsync()
+    {
+        if (currentActor?.Id == null) return;
+
+        var builder = Client.CreateActivityBuilder();
+        var followActivity = builder.Follow(currentActor.Id);
+
+        await Client.PostToOutboxAsync(followActivity);
+        isFollowing = true;
+    }
+
+    private async Task UnfollowActorAsync()
+    {
+        if (currentActor?.Id == null) return;
+
+        // To undo a follow, we need the original Follow activity
+        // For now, we'll create a basic Undo Follow structure
+        var builder = Client.CreateActivityBuilder();
+        
+        // Create a Follow activity reference (this would ideally be stored when following)
+        var followActivity = builder.Follow(currentActor.Id);
+        var undoActivity = builder.Undo(followActivity);
+
+        await Client.PostToOutboxAsync(undoActivity);
+        isFollowing = false;
+    }
+
+    private void SetActiveTab(ActorViewTab tab)
+    {
+        activeTab = tab;
+        StateHasChanged();
+    }
+
+    private string GetTabClass(ActorViewTab tab)
+    {
+        return tab == activeTab ? "tab-header active" : "tab-header";
+    }
+
+    private string GetFollowButtonClass()
+    {
+        return isFollowing 
+            ? "actor-action-button following" 
+            : "actor-action-button follow";
+    }
+
+    private void ViewCollection(CustomCollectionDefinition collection)
+    {
+        selectedCollection = selectedCollection?.Id == collection.Id ? null : collection;
+        StateHasChanged();
+    }
+
+    private Uri? GetCollectionUrl(CustomCollectionDefinition collection)
+    {
+        if (currentActor is not Actor actor || string.IsNullOrEmpty(actor.Id))
+            return null;
+
+        try
+        {
+            var actorUri = new Uri(actor.Id);
+            return new Uri(actorUri, $"/collections/{collection.Id}");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Tabs available in the actor view
+    /// </summary>
+    public enum ActorViewTab
+    {
+        Outbox,
+        Following,
+        Followers,
+        Collections
+    }
+}
