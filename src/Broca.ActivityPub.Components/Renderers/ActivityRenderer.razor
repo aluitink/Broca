@@ -4,7 +4,7 @@
 @* Render only the inner objects without the activity wrapper *@
 @if (Activity != null)
 {
-    @if (Activity.Object?.Any() == true)
+    @if (ShowObjects && Activity.Object?.Any() == true)
     {
         @foreach (var obj in Activity.Object)
         {
@@ -51,6 +51,12 @@
     /// </summary>
     [Parameter]
     public bool ShowEmptyState { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show objects.
+    /// </summary>
+    [Parameter]
+    public bool ShowObjects { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether to show a message when no renderer is available for objects.

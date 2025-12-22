@@ -43,7 +43,7 @@
                 }
                 else
                 {
-                    <ActivityRenderer Activity="@activity" />
+                    <ActivityRenderer Activity="@activity" ShowObjects="@ShowObjects" />
                 }
             </ItemTemplate>
             <LoadingTemplate>
@@ -160,6 +160,12 @@
     /// </summary>
     [Parameter]
     public bool AutoScrollToNew { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show activity objects.
+    /// </summary>
+    [Parameter]
+    public bool ShowObjects { get; set; } = true;
 
     /// <summary>
     /// Gets or sets additional CSS classes.
