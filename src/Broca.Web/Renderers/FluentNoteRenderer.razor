@@ -1,6 +1,7 @@
 @using KristofferStrube.ActivityStreams
 @using Microsoft.FluentUI.AspNetCore.Components
 @using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
 @using Broca.ActivityPub.Components.Services
 @inject ActorResolutionService ActorResolver
 @inject NavigationManager Navigation
@@ -68,27 +69,17 @@
                 </FluentStack>
             }
 
-            @* Actions *@
-            @if (ShowActions)
+            @* Interaction Bar *@
+            @if (ShowActions && !string.IsNullOrEmpty(Note.Id))
             {
                 <FluentDivider Style="margin: 0;" />
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" class="note-actions">
-                    <FluentButton Appearance="Appearance.Lightweight" 
-                                  IconStart="@(new Icons.Regular.Size16.ArrowReply())"
-                                  OnClick="@(() => OnReply.InvokeAsync(Note))">
-                        Reply
-                    </FluentButton>
-                    <FluentButton Appearance="Appearance.Lightweight" 
-                                  IconStart="@(new Icons.Regular.Size16.ArrowRepeatAll())"
-                                  OnClick="@(() => OnBoost.InvokeAsync(Note))">
-                        Boost
-                    </FluentButton>
-                    <FluentButton Appearance="Appearance.Lightweight" 
-                                  IconStart="@(new Icons.Regular.Size16.Heart())"
-                                  OnClick="@(() => OnLike.InvokeAsync(Note))">
-                        Like
-                    </FluentButton>
-                </FluentStack>
+                <InteractionBar ObjectId="@Note.Id"
+                                Object="@Note"
+                                ShowReply="true"
+                                ShowBoost="true"
+                                ShowLike="true"
+                                ShowBookmark="false"
+                                ShowShare="false" />
             }
 
             @if (AdditionalContent != null)

@@ -1,6 +1,7 @@
 @using KristofferStrube.ActivityStreams
 @using Microsoft.FluentUI.AspNetCore.Components
 @using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
 @inherits ComponentBase
 
 <article class="@($"fluent-article {CssClass}")">
@@ -97,6 +98,19 @@
                     </FluentStack>
                 }
 
+                @* Interaction Bar *@
+                @if (ShowInteractions && !string.IsNullOrEmpty(Article.Id))
+                {
+                    <FluentDivider Style="margin: 0;" />
+                    <InteractionBar ObjectId="@Article.Id"
+                                    Object="@Article"
+                                    ShowReply="true"
+                                    ShowBoost="true"
+                                    ShowLike="true"
+                                    ShowBookmark="false"
+                                    ShowShare="false" />
+                }
+
                 @if (AdditionalContent != null)
                 {
                     <FluentDivider Style="margin: 0;" />
@@ -143,6 +157,12 @@
     /// </summary>
     [Parameter]
     public bool ShowReadTime { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show interaction buttons (like, boost, reply).
+    /// </summary>
+    [Parameter]
+    public bool ShowInteractions { get; set; } = true;
 
     /// <summary>
     /// Gets or sets additional CSS classes.
