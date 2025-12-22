@@ -20,6 +20,7 @@ public static class FluentRendererExtensions
         registry.RegisterRenderer(typeof(Article), new FluentArticleRendererProxy());
         registry.RegisterRenderer(typeof(Person), new FluentActorRendererProxy());
         registry.RegisterRenderer(typeof(Actor), new FluentActorRendererProxy());
+        registry.RegisterRenderer(typeof(Create), new FluentCreateRendererProxy());
         registry.RegisterRenderer(typeof(Like), new FluentLikeRendererProxy());
         registry.RegisterRenderer(typeof(Announce), new FluentAnnounceRendererProxy());
         registry.RegisterRenderer(typeof(Activity), new FluentActivityRendererProxy());
@@ -89,6 +90,22 @@ internal class FluentActivityRendererProxy : ObjectRendererBase<Activity>
         {
             builder.OpenComponent<FluentActivityRenderer>(0);
             builder.AddAttribute(1, "Activity", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Create objects using FluentCreateRenderer.
+/// </summary>
+internal class FluentCreateRendererProxy : ObjectRendererBase<Create>
+{
+    protected override RenderFragment Render(Create obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentCreateRenderer>(0);
+            builder.AddAttribute(1, "Create", obj);
             builder.CloseComponent();
         };
     }

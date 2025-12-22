@@ -86,19 +86,19 @@ else
         <div class="interaction-error">@error</div>
     }
     </div>
-}
 
-@if (showReplyComposer && ObjectId != null)
-{
-    <div class="reply-composer-container">
-        <PostComposer InReplyToId="@ObjectId"
-                     ShowCancelButton="true"
-                     OnCancel="@HandleCancelReply"
-                     OnPostCreated="@HandleReplyCreated"
-                     Placeholder="Write your reply..."
-                     PostButtonText="Reply"
-                     CssClass="interaction-reply-composer" />
-    </div>
+    @if (showReplyComposer && ObjectId != null)
+    {
+        <div class="reply-composer-container">
+            <PostComposer InReplyToId="@ObjectId"
+                         ShowCancelButton="true"
+                         OnCancel="@HandleCancelReply"
+                         OnPostCreated="@HandleReplyCreated"
+                         Placeholder="Write your reply..."
+                         PostButtonText="Reply"
+                         CssClass="interaction-reply-composer" />
+        </div>
+    }
 }
 
 @code {
