@@ -13,30 +13,39 @@
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
             @* Header with actor and timestamp *@
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="note-header">
-                @if (ShowActor && Note.AttributedTo?.Any() == true)
-                {
-                    <div class="actor-info-clickable" @onclick="NavigateToActor" style="cursor: pointer;">
-                        <FluentPersona Name="@GetActorDisplay()"
-                                       Image="@GetActorImageUrl()"
-                                       ImageSize="32px"
-                                       TextPosition="@TextPosition.End">
-                            @if (!string.IsNullOrEmpty(GetActorUsername()))
-                            {
-                                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
-                                    @@@GetActorUsername()
-                                </FluentLabel>
-                            }
-                        </FluentPersona>
-                    </div>
-                }
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center" Style="flex: 1;">
+                    @if (ShowActor && Note.AttributedTo?.Any() == true)
+                    {
+                        <div class="actor-info-clickable" @onclick="NavigateToActor" style="cursor: pointer;">
+                            <FluentPersona Name="@GetActorDisplay()"
+                                           Image="@GetActorImageUrl()"
+                                           ImageSize="32px"
+                                           TextPosition="@TextPosition.End">
+                                @if (!string.IsNullOrEmpty(GetActorUsername()))
+                                {
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                        @@@GetActorUsername()
+                                    </FluentLabel>
+                                }
+                            </FluentPersona>
+                        </div>
+                    }
+                    
+                    @if (Note.Published.HasValue)
+                    {
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="note-timestamp">
+                            <time datetime="@Note.Published.Value.ToString("o")" title="@Note.Published.Value.ToString("f")">
+                                @FormatDateTime(Note.Published.Value)
+                            </time>
+                        </FluentLabel>
+                    }
+                </FluentStack>
                 
-                @if (Note.Published.HasValue)
+                @if (ShowMenu)
                 {
-                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="note-timestamp">
-                        <time datetime="@Note.Published.Value.ToString("o")" title="@Note.Published.Value.ToString("f")">
-                            @FormatDateTime(Note.Published.Value)
-                        </time>
-                    </FluentLabel>
+                    <ObjectMenu Object="@Note"
+                               ObjectId="@Note.Id"
+                               ActorId="@(actorInfo?.Id ?? (Note.AttributedTo?.FirstOrDefault() as IObject)?.Id)" />
                 }
             </FluentStack>
 
@@ -111,6 +120,12 @@
     /// </summary>
     [Parameter]
     public bool ShowActions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the menu button.
+    /// </summary>
+    [Parameter]
+    public bool ShowMenu { get; set; } = true;
 
     /// <summary>
     /// Gets or sets additional CSS classes.

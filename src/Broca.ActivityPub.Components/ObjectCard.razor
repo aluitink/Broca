@@ -5,37 +5,47 @@
     @if (ShowHeader)
     {
         <div class="card-header">
-            @if (ShowActor && Actor != null)
-            {
-                <div class="card-actor">
-                    @if (!string.IsNullOrEmpty(GetActorName()))
-                    {
-                        <span class="actor-name">@GetActorName()</span>
-                    }
-                    @if (!string.IsNullOrEmpty(GetActorId()) && GetActorId() != GetActorName())
-                    {
-                        <span class="actor-id">@GetActorId()</span>
-                    }
-                </div>
-            }
+            <div class="card-header-content">
+                @if (ShowActor && Actor != null)
+                {
+                    <div class="card-actor">
+                        @if (!string.IsNullOrEmpty(GetActorName()))
+                        {
+                            <span class="actor-name">@GetActorName()</span>
+                        }
+                        @if (!string.IsNullOrEmpty(GetActorId()) && GetActorId() != GetActorName())
+                        {
+                            <span class="actor-id">@GetActorId()</span>
+                        }
+                    </div>
+                }
+                
+                @if (ShowType && !string.IsNullOrEmpty(ObjectType))
+                {
+                    <span class="type-badge">@ObjectType</span>
+                }
+                
+                @if (ShowTimestamp && Timestamp.HasValue)
+                {
+                    <div class="card-time">
+                        <time datetime="@Timestamp.Value.ToString("o")">
+                            @FormatDateTime(Timestamp.Value)
+                        </time>
+                    </div>
+                }
+                
+                @if (HeaderContent != null)
+                {
+                    @HeaderContent
+                }
+            </div>
             
-            @if (ShowType && !string.IsNullOrEmpty(ObjectType))
+            @if (ShowMenu)
             {
-                <span class="type-badge">@ObjectType</span>
-            }
-            
-            @if (ShowTimestamp && Timestamp.HasValue)
-            {
-                <div class="card-time">
-                    <time datetime="@Timestamp.Value.ToString("o")">
-                        @FormatDateTime(Timestamp.Value)
-                    </time>
-                </div>
-            }
-            
-            @if (HeaderContent != null)
-            {
-                @HeaderContent
+                <ObjectMenu Object="@ObjectData"
+                           ObjectId="@ObjectId"
+                           ActorId="@GetActorId()"
+                           OnMenuItemClicked="@OnMenuItemClicked" />
             }
         </div>
     }
@@ -131,6 +141,30 @@
     /// </summary>
     [Parameter]
     public string? CssClass { get; set; }
+    
+    /// <summary>
+    /// Gets or sets whether to show the menu button.
+    /// </summary>
+    [Parameter]
+    public bool ShowMenu { get; set; } = true;
+    
+    /// <summary>
+    /// Gets or sets the object data for the menu (the full ActivityPub object).
+    /// </summary>
+    [Parameter]
+    public object? ObjectData { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the object ID for navigation.
+    /// </summary>
+    [Parameter]
+    public string? ObjectId { get; set; }
+    
+    /// <summary>
+    /// Event callback when a menu item is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnMenuItemClicked { get; set; }
     
     private string GetTypeClass()
     {

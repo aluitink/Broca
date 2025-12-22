@@ -80,7 +80,9 @@ public class FileSystemActivityRepository : IActivityRepository
 
     public async Task<IEnumerable<IObjectOrLink>> GetOutboxActivitiesAsync(string username, int limit = 20, int offset = 0, CancellationToken cancellationToken = default)
     {
-        return await GetActivitiesFromDirectoryAsync(GetOutboxDirectory(username), limit, offset, cancellationToken);
+        // Filter to only return Activities (not bare Objects like Note, Article, etc.)
+        // Per ActivityPub spec, outbox should only contain Activities
+        return await GetActivitiesFromDirectoryAsync(GetOutboxDirectory(username), limit, offset, cancellationToken, filterToActivitiesOnly: true);
     }
 
     public async Task<IObjectOrLink?> GetActivityByIdAsync(string activityId, CancellationToken cancellationToken = default)
@@ -161,7 +163,8 @@ public class FileSystemActivityRepository : IActivityRepository
 
     public async Task<int> GetOutboxCountAsync(string username, CancellationToken cancellationToken = default)
     {
-        return await GetActivityCountAsync(GetOutboxDirectory(username), cancellationToken);
+        // Only count Activities, not bare Objects
+        return await GetActivityCountAsync(GetOutboxDirectory(username), cancellationToken, filterToActivitiesOnly: true);
     }
 
     public async Task<IEnumerable<IObjectOrLink>> GetRepliesAsync(string objectId, int limit = 20, int offset = 0, CancellationToken cancellationToken = default)
@@ -283,6 +286,59 @@ public class FileSystemActivityRepository : IActivityRepository
         return activities;
     }
 
+    private async Task<IEnumerable<IObjectOrLink>> GetActivitiesFromDirectoryAsync(string directory, int limit, int offset, CancellationToken cancellationToken, bool filterToActivitiesOnly)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return Array.Empty<IObjectOrLink>();
+        }
+
+        var files = Directory.GetFiles(directory, "*.json")
+            .OrderByDescending(f => File.GetCreationTimeUtc(f));
+
+        var activities = new List<IObjectOrLink>();
+        var skipped = 0;
+        var taken = 0;
+
+        foreach (var file in files)
+        {
+            try
+            {
+                var json = await File.ReadAllTextAsync(file, cancellationToken);
+                var activity = JsonSerializer.Deserialize<IObjectOrLink>(json, _jsonOptions);
+                
+                if (activity != null)
+                {
+                    // Filter to only Activities if requested
+                    bool isActivity = activity is Activity;
+                    
+                    if (!filterToActivitiesOnly || isActivity)
+                    {
+                        if (skipped < offset)
+                        {
+                            skipped++;
+                        }
+                        else if (taken < limit)
+                        {
+                            activities.Add(activity);
+                            taken++;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error reading activity file {Path}", file);
+            }
+        }
+
+        return activities;
+    }
+
     private async Task<IEnumerable<IObjectOrLink>> GetActivitiesFromFileListAsync(string listFilePath, int limit, int offset, CancellationToken cancellationToken)
     {
         if (!File.Exists(listFilePath))
@@ -323,6 +379,43 @@ public class FileSystemActivityRepository : IActivityRepository
         }
 
         return Directory.GetFiles(directory, "*.json").Length;
+    }
+
+    private async Task<int> GetActivityCountAsync(string directory, CancellationToken cancellationToken, bool filterToActivitiesOnly)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return 0;
+        }
+
+        if (!filterToActivitiesOnly)
+        {
+            return Directory.GetFiles(directory, "*.json").Length;
+        }
+
+        // Count only Activities
+        var files = Directory.GetFiles(directory, "*.json");
+        var count = 0;
+
+        foreach (var file in files)
+        {
+            try
+            {
+                var json = await File.ReadAllTextAsync(file, cancellationToken);
+                var activity = JsonSerializer.Deserialize<IObjectOrLink>(json, _jsonOptions);
+                
+                if (activity is Activity)
+                {
+                    count++;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error reading activity file {Path} for counting", file);
+            }
+        }
+
+        return count;
     }
 
     private async Task<int> GetObjectMetadataCountAsync(string objectId, string metadataType, CancellationToken cancellationToken)

@@ -64,10 +64,13 @@ public class ObjectController : ActivityPubControllerBase
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
 
+            _logger.LogDebug("Looking for object with full ID: {FullObjectId}", fullObjectId);
+
             // Get the object/activity
             var obj = await _activityRepository.GetActivityByIdAsync(fullObjectId);
             if (obj == null)
             {
+                _logger.LogWarning("Object not found with ID: {FullObjectId}", fullObjectId);
                 return NotFound(new { error = "Object not found" });
             }
 

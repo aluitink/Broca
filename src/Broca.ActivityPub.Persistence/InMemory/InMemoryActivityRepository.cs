@@ -84,7 +84,10 @@ public class InMemoryActivityRepository : IActivityRepository
         {
             lock (outbox)
             {
+                // Filter to only return Activities (not bare Objects like Note, Article, etc.)
+                // Per ActivityPub spec, outbox should only contain Activities
                 var activities = outbox
+                    .Where(x => x.Activity is Activity)  // Only include Activity types
                     .OrderByDescending(x => x.Timestamp)
                     .Skip(offset)
                     .Take(limit)
@@ -152,7 +155,9 @@ public class InMemoryActivityRepository : IActivityRepository
         {
             lock (outbox)
             {
-                return Task.FromResult(outbox.Count);
+                // Only count Activities, not bare Objects
+                var count = outbox.Count(x => x.Activity is Activity);
+                return Task.FromResult(count);
             }
         }
         return Task.FromResult(0);

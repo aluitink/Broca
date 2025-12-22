@@ -20,12 +20,21 @@
                 }
 
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" class="article-header">
-                    @if (Article.Name?.Any() == true)
-                    {
-                        <FluentLabel Typo="Typography.PageTitle" Weight="FontWeight.Bold" class="article-title">
-                            @Article.Name.First()
-                        </FluentLabel>
-                    }
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                        @if (Article.Name?.Any() == true)
+                        {
+                            <FluentLabel Typo="Typography.PageTitle" Weight="FontWeight.Bold" class="article-title">
+                                @Article.Name.First()
+                            </FluentLabel>
+                        }
+                        
+                        @if (ShowMenu)
+                        {
+                            <ObjectMenu Object="@Article"
+                                       ObjectId="@Article.Id"
+                                       ActorId="@((Article.AttributedTo?.FirstOrDefault() as IObject)?.Id)" />
+                        }
+                    </FluentStack>
 
                     <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="article-meta">
                         @if (ShowAuthor && Article.AttributedTo?.Any() == true)
@@ -164,6 +173,12 @@
     /// </summary>
     [Parameter]
     public bool ShowInteractions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the menu button.
+    /// </summary>
+    [Parameter]
+    public bool ShowMenu { get; set; } = true;
 
     /// <summary>
     /// Gets or sets additional CSS classes.

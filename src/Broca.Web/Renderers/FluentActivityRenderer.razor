@@ -10,35 +10,44 @@
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
             @* Header with actor persona, activity type, and timestamp *@
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="activity-header">
-                @if (!string.IsNullOrEmpty(GetActorId()))
-                {
-                    <FluentPersona Name="@GetActorName()"
-                                   Image="@GetActorImageUrl()"
-                                   ImageSize="32px"
-                                   TextPosition="@TextPosition.End">
-                        @if (!string.IsNullOrEmpty(GetActorUsername()))
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center" Style="flex: 1;">
+                    @if (!string.IsNullOrEmpty(GetActorId()))
+                    {
+                        <FluentPersona Name="@GetActorName()"
+                                       Image="@GetActorImageUrl()"
+                                       ImageSize="32px"
+                                       TextPosition="@TextPosition.End">
+                            @if (!string.IsNullOrEmpty(GetActorUsername()))
+                            {
+                                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                    @@@GetActorUsername()
+                                </FluentLabel>
+                            }
+                        </FluentPersona>
+                    }
+                    
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentBadge Appearance="Appearance.Accent">
+                            @GetActivityTypeIcon() @GetActivityType()
+                        </FluentBadge>
+
+                        @if (Activity.Published.HasValue)
                         {
-                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
-                                @@@GetActorUsername()
+                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="activity-timestamp">
+                                <time datetime="@Activity.Published.Value.ToString("o")" title="@Activity.Published.Value.ToString("f")">
+                                    @FormatDateTime(Activity.Published.Value)
+                                </time>
                             </FluentLabel>
                         }
-                    </FluentPersona>
-                }
-                
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
-                    <FluentBadge Appearance="Appearance.Accent">
-                        @GetActivityTypeIcon() @GetActivityType()
-                    </FluentBadge>
-
-                    @if (Activity.Published.HasValue)
-                    {
-                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="activity-timestamp">
-                            <time datetime="@Activity.Published.Value.ToString("o")" title="@Activity.Published.Value.ToString("f")">
-                                @FormatDateTime(Activity.Published.Value)
-                            </time>
-                        </FluentLabel>
-                    }
+                    </FluentStack>
                 </FluentStack>
+                
+                @if (ShowMenu)
+                {
+                    <ObjectMenu Object="@Activity"
+                               ObjectId="@Activity.Id"
+                               ActorId="@GetActorId()" />
+                }
             </FluentStack>
 
             @* Summary *@
@@ -109,6 +118,12 @@
     /// </summary>
     [Parameter]
     public bool ShowRecipients { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show the menu button.
+    /// </summary>
+    [Parameter]
+    public bool ShowMenu { get; set; } = true;
 
     /// <summary>
     /// Gets or sets additional CSS classes.

@@ -1,5 +1,6 @@
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
+using Broca.ActivityPub.Server.Services;
 using KristofferStrube.ActivityStreams;
 using KristofferStrube.ActivityStreams.JsonLD;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,7 @@ public class CollectionsController : ActivityPubControllerBase
 {
     private readonly ICollectionService _collectionService;
     private readonly IActorRepository _actorRepository;
+    private readonly ObjectEnrichmentService _enrichmentService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<CollectionsController> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -24,11 +26,13 @@ public class CollectionsController : ActivityPubControllerBase
     public CollectionsController(
         ICollectionService collectionService,
         IActorRepository actorRepository,
+        ObjectEnrichmentService enrichmentService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<CollectionsController> logger)
     {
         _collectionService = collectionService;
         _actorRepository = actorRepository;
+        _enrichmentService = enrichmentService;
         _options = options.Value;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
@@ -125,6 +129,9 @@ public class CollectionsController : ActivityPubControllerBase
             var items = await _collectionService.GetCollectionItemsAsync(username, collectionId, limit, offset);
             var totalCount = await _collectionService.GetCollectionItemCountAsync(username, collectionId);
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+
+            // Enrich items with collection information
+            await _enrichmentService.EnrichActivitiesAsync(items, baseUrl);
 
             var collection = new OrderedCollectionPage
             {

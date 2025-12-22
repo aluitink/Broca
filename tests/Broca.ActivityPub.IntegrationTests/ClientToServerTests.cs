@@ -53,21 +53,14 @@ public class ClientToServerTests : TwoServerFixture
     [Fact]
     public async Task C2S_UserPostsLike_ActivityStoredInOutbox()
     {
-        // Arrange - Seed Alice and a note on Server A
+        // Arrange - Seed Alice on Server A
         using var scope = ServerA.Services.CreateScope();
         var actorRepo = scope.ServiceProvider.GetRequiredService<IActorRepository>();
-        var activityRepo = scope.ServiceProvider.GetRequiredService<IActivityRepository>();
 
         var (alice, alicePrivateKey) = await TestDataSeeder.SeedActorAsync(
             actorRepo, 
             "alice", 
             ServerA.BaseUrl);
-
-        // Create a note first
-        var note = TestDataSeeder.CreateNote(alice.Id!, "Test note");
-        var noteId = $"{ServerA.BaseUrl}/users/alice/notes/{Guid.NewGuid()}";
-        note.Id = noteId;
-        await activityRepo.SaveOutboxActivityAsync("alice", noteId, note);
 
         // Create authenticated client for Alice
         var aliceClient = TestClientFactory.CreateAuthenticatedClient(
@@ -77,7 +70,15 @@ public class ClientToServerTests : TwoServerFixture
 
         var c2sHelper = new ClientToServerHelper(aliceClient, alice.Id!, ClientA);
 
-        // Act - Alice likes her own note
+        // Act - Alice posts a Create activity first
+        var createActivity = TestDataSeeder.CreateCreateActivity(alice.Id!, "Test note");
+        await c2sHelper.PostToOutboxAsync(createActivity);
+        
+        // Extract the note ID for the Like
+        var noteObj = createActivity.Object?.FirstOrDefault() as KristofferStrube.ActivityStreams.Object;
+        var noteId = noteObj?.Id ?? throw new InvalidOperationException("Note ID not found");
+        
+        // Alice likes the note
         var likeActivity = TestDataSeeder.CreateLike(alice.Id!, noteId);
         var response = await c2sHelper.PostToOutboxAsync(likeActivity);
 
@@ -86,8 +87,9 @@ public class ClientToServerTests : TwoServerFixture
         var outboxActivities = await s2sHelper.GetOutboxActivitiesAsync("alice");
 
         Assert.True(response.IsSuccessStatusCode);
-        // Should have at least 2 activities: the note and the like
-        Assert.True(outboxActivities.Count() >= 2);
+        // Should have at least 2 activities: the Create activity and the Like
+        // (Note: bare objects are filtered out from outbox per ActivityPub spec)
+        Assert.True(outboxActivities.Count() >= 2, $"Expected at least 2 activities in outbox, but found {outboxActivities.Count()}");
     }
 
     [Fact]

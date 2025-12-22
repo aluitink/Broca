@@ -276,7 +276,9 @@ public class InboxProcessor : IInboxHandler
             if (string.IsNullOrEmpty(objectId))
             {
                 // Generate an ID for the object
-                objectId = $"https://localhost/users/{username}/objects/{Guid.NewGuid()}";
+                var baseUrl = (_options.BaseUrl ?? "http://localhost").TrimEnd('/');
+                var routePrefix = _options.NormalizedRoutePrefix;
+                objectId = $"{baseUrl}{routePrefix}/users/{username}/objects/{Guid.NewGuid()}";
                 obj.Id = objectId;
             }
 

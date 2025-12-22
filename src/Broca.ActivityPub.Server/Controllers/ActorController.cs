@@ -16,6 +16,7 @@ public class ActorController : ActivityPubControllerBase
     private readonly IActorRepository _actorRepository;
     private readonly IActivityRepository _activityRepository;
     private readonly ICollectionService _collectionService;
+    private readonly ObjectEnrichmentService _enrichmentService;
     private readonly IdentityProviderService? _identityProviderService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<ActorController> _logger;
@@ -25,6 +26,7 @@ public class ActorController : ActivityPubControllerBase
         IActorRepository actorRepository,
         IActivityRepository activityRepository,
         ICollectionService collectionService,
+        ObjectEnrichmentService enrichmentService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<ActorController> logger,
         IdentityProviderService? identityProviderService = null)
@@ -32,6 +34,7 @@ public class ActorController : ActivityPubControllerBase
         _actorRepository = actorRepository;
         _activityRepository = activityRepository;
         _collectionService = collectionService;
+        _enrichmentService = enrichmentService;
         _identityProviderService = identityProviderService;
         _options = options.Value;
         _logger = logger;
@@ -278,6 +281,9 @@ public class ActorController : ActivityPubControllerBase
             var totalCount = await _activityRepository.GetLikedByActorCountAsync(username);
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
 
+            // Enrich activities with collection information
+            await _enrichmentService.EnrichActivitiesAsync(liked, baseUrl);
+
             if (page == 0 && limit == 20)
             {
                 // Return the collection wrapper
@@ -341,6 +347,9 @@ public class ActorController : ActivityPubControllerBase
             var shared = await _activityRepository.GetSharedByActorAsync(username, limit, offset);
             var totalCount = await _activityRepository.GetSharedByActorCountAsync(username);
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+
+            // Enrich activities with collection information
+            await _enrichmentService.EnrichActivitiesAsync(shared, baseUrl);
 
             if (page == 0 && limit == 20)
             {

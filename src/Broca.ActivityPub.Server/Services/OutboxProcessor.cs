@@ -63,6 +63,9 @@ public class OutboxProcessor
             _logger.LogInformation("Processing outgoing {ActivityType} activity {ActivityId} for user {Username}",
                 activityType, activityId, username);
 
+            // Pre-process activity to assign IDs to embedded objects before saving
+            PreprocessActivity(username, activityObj);
+
             // Save to outbox
             await _activityRepository.SaveOutboxActivityAsync(username, activityId, activity, cancellationToken);
 
@@ -167,6 +170,36 @@ public class OutboxProcessor
             IObject obj => obj.Id,
             _ => null
         };
+    }
+
+    private void PreprocessActivity(string username, IObject? activityObj)
+    {
+        if (activityObj == null) return;
+
+        var baseUrl = (_options.BaseUrl ?? "http://localhost").TrimEnd('/');
+        var routePrefix = _options.NormalizedRoutePrefix;
+
+        // For Create activities, assign ID to the created object if needed
+        if (activityObj is Create createActivity && createActivity.Object != null)
+        {
+            var createdObject = createActivity.Object.FirstOrDefault();
+            if (createdObject is IObject obj && string.IsNullOrEmpty(obj.Id))
+            {
+                obj.Id = $"{baseUrl}{routePrefix}/users/{username}/objects/{Guid.NewGuid()}";
+                _logger.LogDebug("Pre-assigned ID to created object: {ObjectId}", obj.Id);
+            }
+        }
+
+        // For Add activities, assign ID to the added object if needed
+        if (activityObj is Add addActivity && addActivity.Object != null)
+        {
+            var objectRef = addActivity.Object.FirstOrDefault();
+            if (objectRef is IObject obj && string.IsNullOrEmpty(obj.Id))
+            {
+                obj.Id = $"{baseUrl}{routePrefix}/users/{username}/objects/{Guid.NewGuid()}";
+                _logger.LogDebug("Pre-assigned ID to added object: {ObjectId}", obj.Id);
+            }
+        }
     }
 
     private async Task ProcessActivitySideEffectsAsync(string username, string activityType, IObject? activity, CancellationToken cancellationToken)
@@ -301,6 +334,22 @@ public class OutboxProcessor
         if (createdObject == null)
         {
             return;
+        }
+
+        // Generate ID for the object if it doesn't have one
+        if (createdObject is IObject obj && string.IsNullOrEmpty(obj.Id))
+        {
+            var baseUrl = (_options.BaseUrl ?? "http://localhost").TrimEnd('/');
+            var routePrefix = _options.NormalizedRoutePrefix;
+            obj.Id = $"{baseUrl}{routePrefix}/users/{username}/objects/{Guid.NewGuid()}";
+            _logger.LogInformation("Generated ID for created object: {ObjectId}", obj.Id);
+        }
+
+        // Save the created object separately so it can be retrieved directly
+        if (createdObject is IObject objectToSave && !string.IsNullOrEmpty(objectToSave.Id))
+        {
+            await _activityRepository.SaveOutboxActivityAsync(username, objectToSave.Id, objectToSave, cancellationToken);
+            _logger.LogInformation("Saved created object {ObjectId} for direct retrieval", objectToSave.Id);
         }
 
         // Check if the created object is a Collection
