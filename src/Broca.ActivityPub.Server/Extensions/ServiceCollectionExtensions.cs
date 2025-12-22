@@ -55,6 +55,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AdminOperationsHandler>();
         services.AddScoped<AttachmentProcessingService>();
         services.AddScoped<ICollectionService, CollectionService>();
+        services.AddScoped<ObjectEnrichmentService>();
 
         // Register background worker for activity delivery
         services.AddHostedService<ActivityDeliveryWorker>();

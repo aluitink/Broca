@@ -38,10 +38,6 @@
                 <FluentDivider Style="margin: 0.5rem 0;" />
             }
             
-            <FluentNavLink Href="diagnostics" Icon="@(new Icons.Regular.Size20.Wrench())" IconColor="Color.Accent">
-                Diagnostics
-            </FluentNavLink>
-            
             @if (!AuthState.IsAuthenticated)
             {
                 <FluentNavLink Href="login" Icon="@(new Icons.Regular.Size20.PersonKey())" IconColor="Color.Accent">

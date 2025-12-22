@@ -17,6 +17,7 @@ public class OutboxController : ActivityPubControllerBase
     private readonly IActorRepository _actorRepository;
     private readonly OutboxProcessor _outboxProcessor;
     private readonly AttachmentProcessingService _attachmentProcessingService;
+    private readonly ObjectEnrichmentService _enrichmentService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<OutboxController> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -26,6 +27,7 @@ public class OutboxController : ActivityPubControllerBase
         IActorRepository actorRepository,
         OutboxProcessor outboxProcessor,
         AttachmentProcessingService attachmentProcessingService,
+        ObjectEnrichmentService enrichmentService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<OutboxController> logger)
     {
@@ -33,6 +35,7 @@ public class OutboxController : ActivityPubControllerBase
         _actorRepository = actorRepository;
         _outboxProcessor = outboxProcessor;
         _attachmentProcessingService = attachmentProcessingService;
+        _enrichmentService = enrichmentService;
         _options = options.Value;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
@@ -58,17 +61,21 @@ public class OutboxController : ActivityPubControllerBase
             var offset = page * limit;
             var activities = await _activityRepository.GetOutboxActivitiesAsync(username, limit, offset);
             
-            // Rewrite attachment URLs to use local blob storage
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+            
+            // Rewrite attachment URLs and enrich with collection metadata
             foreach (var activity in activities)
             {
                 if (activity is IObject obj)
                 {
                     await _attachmentProcessingService.RewriteAttachmentUrlsAsync(obj, username);
                 }
+                
+                // Enrich activities with collection information (replies, likes, shares counts)
+                await _enrichmentService.EnrichActivityAsync(activity, baseUrl);
             }
             
             var totalCount = await _activityRepository.GetOutboxCountAsync(username);
-            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
 
             // Check if pagination parameters were explicitly provided
             var hasPageParam = Request.Query.ContainsKey("page");

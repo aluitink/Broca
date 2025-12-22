@@ -115,3 +115,19 @@ internal class DefaultActivityRendererProxy : ObjectRendererBase<Activity>
         };
     }
 }
+
+/// <summary>
+/// Default proxy renderer for Link objects.
+/// </summary>
+internal class DefaultLinkRendererProxy : ObjectRendererBase<Link>
+{
+    protected override RenderFragment Render(Link obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<LinkRenderer>(0);
+            builder.AddAttribute(1, "Link", obj);
+            builder.CloseComponent();
+        };
+    }
+}

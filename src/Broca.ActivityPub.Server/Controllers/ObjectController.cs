@@ -1,5 +1,6 @@
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
+using Broca.ActivityPub.Server.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -18,6 +19,7 @@ public class ObjectController : ActivityPubControllerBase
 {
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
+    private readonly ObjectEnrichmentService _enrichmentService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<ObjectController> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -25,11 +27,13 @@ public class ObjectController : ActivityPubControllerBase
     public ObjectController(
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
+        ObjectEnrichmentService enrichmentService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<ObjectController> logger)
     {
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
+        _enrichmentService = enrichmentService;
         _options = options.Value;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
@@ -72,6 +76,9 @@ public class ObjectController : ActivityPubControllerBase
             {
                 asObject.Id = fullObjectId;
             }
+
+            // Enrich the object with collection metadata (replies, likes, shares)
+            await _enrichmentService.EnrichActivityAsync(obj, baseUrl);
 
             return Ok(obj);
         }

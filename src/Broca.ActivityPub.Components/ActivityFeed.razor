@@ -168,6 +168,12 @@
     public bool ShowObjects { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether to show recipients (for custom renderers that support it).
+    /// </summary>
+    [Parameter]
+    public bool ShowRecipients { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets additional CSS classes.
     /// </summary>
     [Parameter]

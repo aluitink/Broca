@@ -95,6 +95,7 @@ public static class ServiceCollectionExtensions
                     registry.RegisterRenderer(typeof(Person), new DefaultActorRendererProxy());
                     registry.RegisterRenderer(typeof(Actor), new DefaultActorRendererProxy());
                     registry.RegisterRenderer(typeof(Activity), new DefaultActivityRendererProxy());
+                    registry.RegisterRenderer(typeof(Link), new DefaultLinkRendererProxy());
                 }
             });
     }

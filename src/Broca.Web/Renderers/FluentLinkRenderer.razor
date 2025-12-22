@@ -1,11 +1,33 @@
 @using KristofferStrube.ActivityStreams
 @using Microsoft.FluentUI.AspNetCore.Components
+@using Broca.ActivityPub.Core.Interfaces
+@using Broca.ActivityPub.Components
 @using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@inject IActivityPubClient Client
 @inherits ComponentBase
 
-<FluentCard Class="@($"fluent-link-card {CssClass}")">
-    @if (Link != null)
-    {
+@if (resolvedObject != null)
+{
+    @* Show the resolved ActivityPub object using ObjectDisplay with Fluent renderers *@
+    <div class="fluent-link-resolved @CssClass">
+        <ObjectDisplay Object="@resolvedObject" 
+                      AutoResolveLinks="false"
+                      ShowMissingRenderer="false" />
+    </div>
+}
+else if (isLoading)
+{
+    <FluentCard Class="@($"fluent-link-card-loading {CssClass}")">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+            <FluentProgressRing Style="width: 20px; height: 20px;" />
+            <FluentLabel Typo="Typography.Body">Loading link...</FluentLabel>
+        </FluentStack>
+    </FluentCard>
+}
+else if (Link != null)
+{
+    @* Fallback: Show the link itself with Fluent styling *@
+    <FluentCard Class="@($"fluent-link-card {CssClass}")">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Icons.Regular.Size20.Link())" Color="Color.Accent" />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="flex: 1;">
@@ -30,10 +52,13 @@
                 }
             </FluentStack>
         </FluentStack>
-    }
-</FluentCard>
+    </FluentCard>
+}
 
 @code {
+    private object? resolvedObject;
+    private bool isLoading = false;
+    
     /// <summary>
     /// Gets or sets the Link to render.
     /// </summary>
@@ -41,8 +66,56 @@
     public Link? Link { get; set; }
 
     /// <summary>
+    /// Gets or sets whether to automatically resolve the link.
+    /// When true, attempts to fetch the linked object using the ActivityPub client.
+    /// </summary>
+    [Parameter]
+    public bool AutoResolve { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets additional CSS classes.
     /// </summary>
     [Parameter]
     public string? CssClass { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ResolveLink();
+    }
+
+    private async Task ResolveLink()
+    {
+        resolvedObject = null;
+        
+        if (Link == null || Link.Href == null || !AutoResolve)
+        {
+            return;
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Try to fetch the linked object using the ActivityPub client
+            var fetchedObject = await Client.GetAsync<KristofferStrube.ActivityStreams.Object>(
+                Link.Href, 
+                useCache: true, 
+                cancellationToken: default);
+            
+            if (fetchedObject != null)
+            {
+                resolvedObject = fetchedObject;
+            }
+        }
+        catch (Exception)
+        {
+            // Failed to resolve - will fall back to showing the link
+            // Silently ignore errors and show the link fallback
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
 }
