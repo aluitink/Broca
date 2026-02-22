@@ -39,7 +39,7 @@ else
                                       Title="">
                             <ActorTemplate Context="follower">
                                 <FluentCard Class="actor-card">
-                                    <ActorProfile ActorUri="@(new Uri(follower.Id ?? string.Empty))" ShowActions="true" />
+                                    <ActorProfile ActorUri="@(new Uri(follower.Id ?? string.Empty))" ShowFollowButton="true" />
                                 </FluentCard>
                             </ActorTemplate>
                             <EmptyTemplate>
@@ -78,7 +78,7 @@ else
                                       Title="">
                             <ActorTemplate Context="following">
                                 <FluentCard Class="actor-card">
-                                    <ActorProfile ActorUri="@(new Uri(following.Id ?? string.Empty))" ShowActions="true" />
+                                    <ActorProfile ActorUri="@(new Uri(following.Id ?? string.Empty))" ShowFollowButton="true" />
                                 </FluentCard>
                             </ActorTemplate>
                             <EmptyTemplate>

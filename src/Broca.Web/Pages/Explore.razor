@@ -48,7 +48,7 @@
             </ErrorTemplate>
             <ProfileTemplate Context="actor">
                 <FluentCard Class="profile-result">
-                    <ActorProfile ActorUri="@(new Uri(actor.Id ?? string.Empty))" ShowActions="true" />
+                    <ActorProfile ActorUri="@(new Uri(actor.Id ?? string.Empty))" ShowFollowButton="true" />
                 </FluentCard>
             </ProfileTemplate>
         </ActorBrowser>
