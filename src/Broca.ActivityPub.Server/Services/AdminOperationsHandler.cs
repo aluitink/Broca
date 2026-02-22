@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
@@ -489,23 +488,9 @@ public class AdminOperationsHandler
         return null;
     }
 
-    private string ExportPrivateKey(RSACryptoServiceProvider rsa)
-    {
-        var privateKeyBytes = rsa.ExportRSAPrivateKey();
-        var sb = new StringBuilder();
-        sb.AppendLine("-----BEGIN PRIVATE KEY-----");
-        sb.AppendLine(Convert.ToBase64String(privateKeyBytes, Base64FormattingOptions.InsertLineBreaks));
-        sb.AppendLine("-----END PRIVATE KEY-----");
-        return sb.ToString();
-    }
+    private static string ExportPrivateKey(RSACryptoServiceProvider rsa) =>
+        rsa.ExportPkcs8PrivateKeyPem();
 
-    private string ExportPublicKey(RSACryptoServiceProvider rsa)
-    {
-        var publicKeyBytes = rsa.ExportSubjectPublicKeyInfo();
-        var sb = new StringBuilder();
-        sb.AppendLine("-----BEGIN PUBLIC KEY-----");
-        sb.AppendLine(Convert.ToBase64String(publicKeyBytes, Base64FormattingOptions.InsertLineBreaks));
-        sb.AppendLine("-----END PUBLIC KEY-----");
-        return sb.ToString();
-    }
+    private static string ExportPublicKey(RSACryptoServiceProvider rsa) =>
+        rsa.ExportSubjectPublicKeyInfoPem();
 }
