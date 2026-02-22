@@ -21,7 +21,7 @@ namespace Broca.ActivityPub.Server.Controllers;
 /// - User impersonation (if configured and authenticated)
 /// </remarks>
 [ApiController]
-[Route("api/[controller]")]
+[Route("[controller]")]
 public class ProxyController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;

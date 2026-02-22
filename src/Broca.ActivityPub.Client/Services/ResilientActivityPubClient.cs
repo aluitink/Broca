@@ -1,4 +1,5 @@
 using Broca.ActivityPub.Core.Interfaces;
+using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
@@ -52,11 +53,36 @@ public class ResilientActivityPubClient : IActivityPubClient
         {
             return await _innerClient.GetActorByAliasAsync(alias, cancellationToken);
         }
-        catch (HttpRequestException ex) when (IsCorsError(ex))
+        catch (Exception ex) when (ex is HttpRequestException || IsCorsLikeError(ex))
         {
-            _logger.LogWarning("CORS error resolving actor alias, will let inner client handle it: {Alias}", alias);
-            throw; // Can't easily proxy WebFinger, let the error propagate
+            _logger.LogWarning("Direct WebFinger lookup failed for {Alias}, attempting via proxy", alias);
+            return await ResolveViaWebFingerProxyAsync(alias, cancellationToken);
         }
+    }
+
+    private async Task<Actor> ResolveViaWebFingerProxyAsync(string alias, CancellationToken cancellationToken)
+    {
+        alias = alias.TrimStart('@');
+        var parts = alias.Split('@', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2)
+            throw new InvalidOperationException($"Cannot resolve alias via proxy: invalid format '{alias}'");
+
+        var webFingerUrl = new Uri(
+            $"https://{parts[1]}/.well-known/webfinger?resource=acct:{Uri.EscapeDataString(parts[0])}@{parts[1]}");
+
+        var resource = await _proxyService.GetViaProxyAsync<WebFingerResource>(webFingerUrl, cancellationToken)
+            ?? throw new InvalidOperationException($"WebFinger proxy returned no result for: {alias}");
+
+        var actorLink = resource.Links?.FirstOrDefault(l =>
+            l.Rel == "self" &&
+            !string.IsNullOrEmpty(l.Href) &&
+            (l.Type == "application/activity+json" ||
+             l.Type?.StartsWith("application/ld+json") == true));
+
+        if (actorLink?.Href == null || !Uri.TryCreate(actorLink.Href, UriKind.Absolute, out var actorUri))
+            throw new InvalidOperationException($"No ActivityPub profile found for alias: {alias}");
+
+        return await GetActorAsync(actorUri, cancellationToken);
     }
 
     public async Task<T?> GetAsync<T>(Uri uri, bool useCache = true, CancellationToken cancellationToken = default)
@@ -105,19 +131,18 @@ public class ResilientActivityPubClient : IActivityPubClient
         => _innerClient.PostToOutboxAsync(activity, cancellationToken);
 
     /// <summary>
-    /// Determines if an HTTP exception is likely caused by CORS
+    /// Determines if an HTTP exception is likely caused by CORS or a network-level block
     /// </summary>
-    private bool IsCorsError(HttpRequestException ex)
+    private bool IsCorsError(HttpRequestException ex) => IsCorsLikeError(ex);
+
+    private static bool IsCorsLikeError(Exception ex)
     {
-        // In browser environments, CORS errors often manifest as connection failures
-        // The inner exception might contain more details
         var message = ex.Message?.ToLowerInvariant() ?? "";
-        
         return message.Contains("cors") ||
                message.Contains("blocked") ||
                message.Contains("cross-origin") ||
                message.Contains("access-control") ||
-               // In Blazor WebAssembly, CORS errors sometimes appear as generic network errors
-               (ex.InnerException != null && ex.InnerException.Message.Contains("Failed to fetch"));
+               message.Contains("failed to fetch") ||
+               (ex.InnerException != null && IsCorsLikeError(ex.InnerException));
     }
 }

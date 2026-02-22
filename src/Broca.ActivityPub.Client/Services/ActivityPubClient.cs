@@ -191,8 +191,11 @@ public class ActivityPubClient : IActivityPubClient
         var webFingerResource = await _webFingerService.WebFingerUserByAliasAsync(httpClient, alias, cancellationToken);
 
         // Find the ActivityPub profile link
-        var actorLink = webFingerResource.Links?.FirstOrDefault(l => 
-            l.Rel == "self" && l.Type == "application/activity+json");
+        var actorLink = webFingerResource.Links?.FirstOrDefault(l =>
+            l.Rel == "self" &&
+            !string.IsNullOrEmpty(l.Href) &&
+            (l.Type == "application/activity+json" ||
+             l.Type?.StartsWith("application/ld+json") == true));
 
         if (actorLink?.Href == null)
         {
