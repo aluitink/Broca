@@ -26,6 +26,7 @@ public class SharedInboxController : ActivityPubControllerBase
     private readonly IInboxHandler _inboxHandler;
     private readonly IActorRepository _actorRepository;
     private readonly HttpSignatureService _signatureService;
+    private readonly IActivityPubClient _activityPubClient;
     private readonly IMemoryCache _cache;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<SharedInboxController> _logger;
@@ -35,6 +36,7 @@ public class SharedInboxController : ActivityPubControllerBase
         IInboxHandler inboxHandler,
         IActorRepository actorRepository,
         HttpSignatureService signatureService,
+        IActivityPubClient activityPubClient,
         IMemoryCache cache,
         IOptions<ActivityPubServerOptions> options,
         ILogger<SharedInboxController> logger)
@@ -42,6 +44,7 @@ public class SharedInboxController : ActivityPubControllerBase
         _inboxHandler = inboxHandler;
         _actorRepository = actorRepository;
         _signatureService = signatureService;
+        _activityPubClient = activityPubClient;
         _cache = cache;
         _options = options.Value;
         _logger = logger;
@@ -203,19 +206,22 @@ public class SharedInboxController : ActivityPubControllerBase
 
         try
         {
-            var actorUrl = keyId.Contains('#') ? keyId.Split('#')[0] : keyId;
-            var actor = await _actorRepository.GetActorByIdAsync(actorUrl, cancellationToken);
-            
-            if (actor?.ExtensionData != null &&
-                actor.ExtensionData.TryGetValue("publicKey", out var publicKeyElement))
+            var actorUrl = keyId.Split('#')[0];
+            Actor? actor = await _actorRepository.GetActorByIdAsync(actorUrl, cancellationToken);
+
+            if (actor == null)
             {
-                var publicKey = JsonSerializer.Deserialize<JsonElement>(publicKeyElement);
-                if (publicKey.TryGetProperty("publicKeyPem", out var pemElement))
-                {
-                    var pem = pemElement.GetString();
-                    _cache.Set(cacheKey, pem, TimeSpan.FromHours(1));
-                    return pem;
-                }
+                actor = await _activityPubClient.GetActorAsync(new Uri(actorUrl), cancellationToken);
+            }
+
+            if (actor?.ExtensionData != null &&
+                actor.ExtensionData.TryGetValue("publicKey", out var publicKeyElement) &&
+                publicKeyElement is JsonElement publicKey &&
+                publicKey.TryGetProperty("publicKeyPem", out var pemElement))
+            {
+                var pem = pemElement.GetString();
+                _cache.Set(cacheKey, pem, TimeSpan.FromHours(1));
+                return pem;
             }
         }
         catch (Exception ex)
