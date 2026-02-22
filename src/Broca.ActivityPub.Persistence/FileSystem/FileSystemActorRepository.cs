@@ -337,19 +337,24 @@ public class FileSystemActorRepository : IActorRepository
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
-            var collectionsDir = GetCollectionsDirectory(username);
-            EnsureDirectoryExists(collectionsDir);
-
-            var filePath = GetCollectionFilePath(username, definition.Id);
-            var json = JsonSerializer.Serialize(definition, _jsonOptions);
-            await File.WriteAllTextAsync(filePath, json, cancellationToken);
-
-            _logger.LogInformation("Saved collection definition {CollectionId} for {Username}", definition.Id, username);
+            await WriteCollectionDefinitionAsync(username, definition, cancellationToken);
         }
         finally
         {
             _writeLock.Release();
         }
+    }
+
+    private async Task WriteCollectionDefinitionAsync(string username, CustomCollectionDefinition definition, CancellationToken cancellationToken)
+    {
+        var collectionsDir = GetCollectionsDirectory(username);
+        EnsureDirectoryExists(collectionsDir);
+
+        var filePath = GetCollectionFilePath(username, definition.Id);
+        var json = JsonSerializer.Serialize(definition, _jsonOptions);
+        await File.WriteAllTextAsync(filePath, json, cancellationToken);
+
+        _logger.LogInformation("Saved collection definition {CollectionId} for {Username}", definition.Id, username);
     }
 
     public async Task DeleteCollectionDefinitionAsync(string username, string collectionId, CancellationToken cancellationToken = default)
@@ -390,7 +395,7 @@ public class FileSystemActorRepository : IActorRepository
             {
                 definition.Items.Add(itemId);
                 definition.Updated = DateTimeOffset.UtcNow;
-                await SaveCollectionDefinitionAsync(username, definition, cancellationToken);
+                await WriteCollectionDefinitionAsync(username, definition, cancellationToken);
                 _logger.LogInformation("Added item {ItemId} to collection {CollectionId} for {Username}", itemId, collectionId, username);
             }
         }
@@ -419,7 +424,7 @@ public class FileSystemActorRepository : IActorRepository
             if (definition.Items.Remove(itemId))
             {
                 definition.Updated = DateTimeOffset.UtcNow;
-                await SaveCollectionDefinitionAsync(username, definition, cancellationToken);
+                await WriteCollectionDefinitionAsync(username, definition, cancellationToken);
                 _logger.LogInformation("Removed item {ItemId} from collection {CollectionId} for {Username}", itemId, collectionId, username);
             }
         }

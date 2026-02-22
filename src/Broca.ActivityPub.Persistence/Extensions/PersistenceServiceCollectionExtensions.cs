@@ -1,23 +1,25 @@
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Persistence.FileSystem;
+using Broca.ActivityPub.Persistence.InMemory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace Broca.ActivityPub.Persistence.Extensions;
 
-/// <summary>
-/// Extension methods for configuring persistence services
-/// </summary>
 public static class PersistenceServiceCollectionExtensions
 {
-    /// <summary>
-    /// Adds FileSystem-based persistence services to the DI container
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="dataPath">The root path where data will be stored</param>
+    public static IServiceCollection AddInMemoryPersistence(this IServiceCollection services)
+    {
+        services.AddSingleton<IActorRepository, InMemoryActorRepository>();
+        services.AddSingleton<IActivityRepository, InMemoryActivityRepository>();
+        services.AddSingleton<IBlobStorageService, InMemoryBlobStorageService>();
+        services.AddSingleton<IDeliveryQueueRepository, InMemoryDeliveryQueueRepository>();
+
+        return services;
+    }
+
     public static IServiceCollection AddFileSystemPersistence(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         string dataPath)
     {
         services.Configure<FileSystemPersistenceOptions>(options =>
@@ -28,15 +30,11 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IActorRepository, FileSystemActorRepository>();
         services.AddSingleton<IActivityRepository, FileSystemActivityRepository>();
         services.AddSingleton<IBlobStorageService, FileSystemBlobStorageService>();
+        services.AddSingleton<IDeliveryQueueRepository, FileSystemDeliveryQueueRepository>();
 
         return services;
     }
 
-    /// <summary>
-    /// Adds FileSystem-based persistence services to the DI container using configuration
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configuration">Configuration containing Persistence:DataPath</param>
     public static IServiceCollection AddFileSystemPersistence(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -46,6 +44,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IActorRepository, FileSystemActorRepository>();
         services.AddSingleton<IActivityRepository, FileSystemActivityRepository>();
         services.AddSingleton<IBlobStorageService, FileSystemBlobStorageService>();
+        services.AddSingleton<IDeliveryQueueRepository, FileSystemDeliveryQueueRepository>();
 
         return services;
     }

@@ -1,23 +1,41 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Core.Interfaces
+@using Broca.ActivityPub.Components.Services
 @inject IActivityPubClient Client
+@inject ActivityStreamNotificationService? NotificationService
+@implements IDisposable
 
 <div class="activitypub-activity-feed @CssClass">
     @if (!string.IsNullOrEmpty(Title))
     {
         <div class="feed-header">
             <h3>@Title</h3>
+            @if (EnableAutoRefresh && isAutoRefreshActive)
+            {
+                <span class="refresh-indicator" title="Auto-refreshing every @AutoRefreshInterval seconds">🔄</span>
+            }
+        </div>
+    }
+
+    @if (newActivitiesCount > 0 && ShowNewPostsNotification)
+    {
+        <div class="new-posts-notification">
+            <button @onclick="LoadNewActivitiesAsync" class="load-new-button">
+                @newActivitiesCount new @(newActivitiesCount == 1 ? "post" : "posts") available
+            </button>
         </div>
     }
 
     @if (CollectionUrl != null)
     {
-        <CollectionLoader TItem="Activity" 
+        <CollectionLoader @ref="collectionLoaderRef"
+                         TItem="Activity" 
                          CollectionUrl="@CollectionUrl" 
                          PageSize="@PageSize"
                          UseVirtualization="@UseVirtualization"
                          ItemSize="@ItemSize"
-                         OverscanCount="@OverscanCount">
+                         OverscanCount="@OverscanCount"
+                         OnItemsLoaded="@HandleItemsLoaded">
             <ItemTemplate Context="activity">
                 @if (ActivityTemplate != null)
                 {
@@ -25,9 +43,7 @@
                 }
                 else
                 {
-                    <ActivityRenderer Activity="@activity" 
-                                    ShowObject="@ShowObjects"
-                                    ShowRecipients="@ShowRecipients" />
+                    <ActivityRenderer Activity="@activity" ShowObjects="@ShowObjects" />
                 }
             </ItemTemplate>
             <LoadingTemplate>
@@ -78,6 +94,13 @@
 </div>
 
 @code {
+    private System.Threading.Timer? refreshTimer;
+    private int newActivitiesCount = 0;
+    private bool isAutoRefreshActive = false;
+    private string? latestActivityId = null;
+    private CollectionLoader<Activity>? collectionLoaderRef;
+    private IDisposable? notificationSubscription;
+
     /// <summary>
     /// Gets or sets the URL of the activity collection (e.g., outbox, inbox).
     /// </summary>
@@ -115,13 +138,37 @@
     public int OverscanCount { get; set; } = 3;
 
     /// <summary>
+    /// Gets or sets whether to enable auto-refresh.
+    /// </summary>
+    [Parameter]
+    public bool EnableAutoRefresh { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the auto-refresh interval in seconds.
+    /// </summary>
+    [Parameter]
+    public int AutoRefreshInterval { get; set; } = 30;
+
+    /// <summary>
+    /// Gets or sets whether to show new posts notification.
+    /// </summary>
+    [Parameter]
+    public bool ShowNewPostsNotification { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to auto-scroll to new posts.
+    /// </summary>
+    [Parameter]
+    public bool AutoScrollToNew { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets whether to show activity objects.
     /// </summary>
     [Parameter]
     public bool ShowObjects { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets whether to show recipients.
+    /// Gets or sets whether to show recipients (for custom renderers that support it).
     /// </summary>
     [Parameter]
     public bool ShowRecipients { get; set; } = false;
@@ -133,6 +180,190 @@
     public string? CssClass { get; set; }
 
     /// <summary>
+    /// Gets or sets a callback for when new activities are detected.
+    /// </summary>
+    [Parameter]
+    public EventCallback<int> OnNewActivitiesDetected { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (EnableAutoRefresh)
+        {
+            StartAutoRefresh();
+        }
+
+        // Subscribe to activity notifications
+        if (NotificationService != null)
+        {
+            notificationSubscription = NotificationService.Subscribe(OnActivityPostedAsync);
+        }
+    }
+
+    private async Task OnActivityPostedAsync(Activity activity)
+    {
+        // When a new activity is posted, immediately refresh the feed
+        // This ensures the user sees their new post without manual refresh
+        await InvokeAsync(async () =>
+        {
+            await RefreshAsync();
+        });
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (EnableAutoRefresh && !isAutoRefreshActive)
+        {
+            StartAutoRefresh();
+        }
+        else if (!EnableAutoRefresh && isAutoRefreshActive)
+        {
+            StopAutoRefresh();
+        }
+    }
+
+    private void StartAutoRefresh()
+    {
+        if (isAutoRefreshActive) return;
+
+        isAutoRefreshActive = true;
+        refreshTimer = new System.Threading.Timer(
+            async _ => await CheckForNewActivitiesAsync(),
+            null,
+            TimeSpan.FromSeconds(AutoRefreshInterval),
+            TimeSpan.FromSeconds(AutoRefreshInterval)
+        );
+    }
+
+    private void StopAutoRefresh()
+    {
+        isAutoRefreshActive = false;
+        refreshTimer?.Dispose();
+        refreshTimer = null;
+    }
+
+    private async Task CheckForNewActivitiesAsync()
+    {
+        try
+        {
+            if (CollectionUrl == null) return;
+
+            // Get the first page to check for new activities
+            var loadedItems = new List<Activity>();
+            await foreach (var item in Client.GetCollectionAsync<Activity>(CollectionUrl, 5))
+            {
+                loadedItems.Add(item);
+                if (loadedItems.Count >= 5)
+                {
+                    break;
+                }
+            }
+
+            if (loadedItems.Any())
+            {
+                var newestId = loadedItems.First().Id;
+                
+                // If we have a latest activity ID and it's different, we have new activities
+                if (!string.IsNullOrEmpty(latestActivityId) && newestId != latestActivityId)
+                {
+                    // Count how many new activities there are
+                    var countNew = 0;
+                    foreach (var activity in loadedItems)
+                    {
+                        if (activity.Id == latestActivityId)
+                        {
+                            break;
+                        }
+                        countNew++;
+                    }
+                    
+                    newActivitiesCount = countNew;
+                    
+                    await InvokeAsync(StateHasChanged);
+                    
+                    if (OnNewActivitiesDetected.HasDelegate)
+                    {
+                        await OnNewActivitiesDetected.InvokeAsync(newActivitiesCount);
+                    }
+
+                    if (AutoScrollToNew)
+                    {
+                        await LoadNewActivitiesAsync();
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Silently fail - don't interrupt the feed
+        }
+    }
+
+    private async Task LoadNewActivitiesAsync()
+    {
+        newActivitiesCount = 0;
+        
+        if (collectionLoaderRef != null)
+        {
+            await collectionLoaderRef.RefreshAsync();
+        }
+        
+        StateHasChanged();
+    }
+
+    private Task HandleItemsLoaded(IEnumerable<Activity> activities)
+    {
+        // Track the latest activity ID for new activity detection
+        var firstActivity = activities.FirstOrDefault();
+        if (firstActivity != null && !string.IsNullOrEmpty(firstActivity.Id))
+        {
+            latestActivityId = firstActivity.Id;
+        }
+        
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Manually refreshes the feed.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        newActivitiesCount = 0;
+        
+        if (collectionLoaderRef != null)
+        {
+            await collectionLoaderRef.RefreshAsync();
+        }
+        
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Starts auto-refresh if not already running.
+    /// </summary>
+    public void EnableRefresh()
+    {
+        if (!isAutoRefreshActive)
+        {
+            StartAutoRefresh();
+        }
+    }
+
+    /// <summary>
+    /// Stops auto-refresh.
+    /// </summary>
+    public void DisableRefresh()
+    {
+        if (isAutoRefreshActive)
+        {
+            StopAutoRefresh();
+        }
+    }
+
+    public void Dispose()
+    {
+        StopAutoRefresh();
+        notificationSubscription?.Dispose();
+    }    /// <summary>
     /// Gets or sets a custom activity rendering template.
     /// </summary>
     [Parameter]

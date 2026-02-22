@@ -380,6 +380,32 @@ public class ActivityPubClient : IActivityPubClient
                     }
                 }
             }
+            else if (items.ValueKind == JsonValueKind.Object)
+            {
+                // Handle malformed response where orderedItems/items is a single object instead of array
+                _logger.LogWarning("Collection returned a single object instead of an array. This is non-standard but will be handled.");
+                
+                if (limit.HasValue && itemCount >= limit.Value)
+                {
+                    yield break;
+                }
+
+                T? deserializedItem = default;
+                try
+                {
+                    deserializedItem = JsonSerializer.Deserialize<T>(items.GetRawText(), _jsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to deserialize collection item");
+                }
+
+                if (deserializedItem != null)
+                {
+                    yield return deserializedItem;
+                    itemCount++;
+                }
+            }
 
             // Check for next page
             if (page.TryGetProperty("next", out var next) && next.ValueKind == JsonValueKind.String)
@@ -402,9 +428,20 @@ public class ActivityPubClient : IActivityPubClient
                 "Activity builder requires authenticated mode. Configure ActorId and PrivateKeyPem.");
         }
 
-        // Extract base URL from actor ID
+        // Extract base URL from actor ID, including any route prefix
+        // Actor ID format: https://example.com/ap/users/username
+        // We need: https://example.com/ap (everything before /users/)
         var actorUri = new Uri(_options.ActorId);
         var baseUrl = $"{actorUri.Scheme}://{actorUri.Authority}";
+        
+        // Check if there's a path prefix before /users/ (e.g., /ap)
+        var path = actorUri.AbsolutePath;
+        var usersIndex = path.IndexOf("/users/", StringComparison.OrdinalIgnoreCase);
+        if (usersIndex > 0)
+        {
+            // Include the path up to but not including /users/
+            baseUrl += path.Substring(0, usersIndex);
+        }
 
         return new ActivityBuilder(_options.ActorId, baseUrl, _logger);
     }

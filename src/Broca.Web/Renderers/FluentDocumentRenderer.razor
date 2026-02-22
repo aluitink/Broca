@@ -1,0 +1,211 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@inherits ComponentBase
+
+<div class="@($"fluent-document {CssClass}")">
+    @if (Document != null)
+    {
+        @if (IsCompact)
+        {
+            <FluentButton Appearance="Appearance.Lightweight" 
+                          IconStart="@GetDocumentIconFluent()"
+                          OnClick="@OpenDocument"
+                          Style="width: 100%;">
+                @GetDocumentName()
+            </FluentButton>
+        }
+        else
+        {
+            <FluentCard>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
+                    <div style="font-size: 48px; display: flex; align-items: center;">
+                        @GetDocumentIcon()
+                    </div>
+
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="flex: 1;">
+                        @if (!string.IsNullOrEmpty(GetDocumentName()))
+                        {
+                            <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                                @GetDocumentName()
+                            </FluentLabel>
+                        }
+
+                        @if (!string.IsNullOrEmpty(GetDescription()))
+                        {
+                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                @GetDescription()
+                            </FluentLabel>
+                        }
+
+                        @if (ShowMetadata)
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+                                @if (!string.IsNullOrEmpty(Document.MediaType))
+                                {
+                                    <FluentBadge Appearance="Appearance.Lightweight">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Document())" Slot="start" />
+                                        @GetFileType()
+                                    </FluentBadge>
+                                }
+                            </FluentStack>
+                        }
+                    </FluentStack>
+
+                    @if (ShowActions)
+                    {
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentButton Appearance="Appearance.Accent" 
+                                          IconStart="@(new Icons.Regular.Size16.ArrowDownload())"
+                                          OnClick="@DownloadDocument">
+                                Download
+                            </FluentButton>
+                            
+                            @if (!string.IsNullOrEmpty(GetDocumentUrl()))
+                            {
+                                <FluentButton Appearance="Appearance.Lightweight" 
+                                              IconStart="@(new Icons.Regular.Size16.Open())"
+                                              OnClick="@OpenDocument">
+                                    Open
+                                </FluentButton>
+                            }
+                        </FluentStack>
+                    }
+                </FluentStack>
+
+                @if (AdditionalContent != null)
+                {
+                    <FluentDivider />
+                    @AdditionalContent(Document)
+                }
+            </FluentCard>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Document object to render.
+    /// </summary>
+    [Parameter]
+    public Document? Document { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show metadata.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show action buttons.
+    /// </summary>
+    [Parameter]
+    public bool ShowActions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to render in compact mode.
+    /// </summary>
+    [Parameter]
+    public bool IsCompact { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Document>? AdditionalContent { get; set; }
+
+    private string GetDocumentUrl()
+    {
+        if (Document?.Url?.Any() == true)
+        {
+            var url = Document.Url.First();
+            if (url is Link link && link.Href != null)
+                return link.Href.ToString();
+            return url.ToString() ?? string.Empty;
+        }
+        return string.Empty;
+    }
+
+    private string GetDocumentName()
+    {
+        if (!string.IsNullOrEmpty(Document?.Name?.FirstOrDefault()))
+            return Document.Name.First();
+        
+        var url = GetDocumentUrl();
+        if (!string.IsNullOrEmpty(url))
+        {
+            var uri = new Uri(url, UriKind.RelativeOrAbsolute);
+            if (uri.IsAbsoluteUri)
+                return Path.GetFileName(uri.LocalPath);
+        }
+        
+        return "Document";
+    }
+
+    private string GetDescription()
+    {
+        return Document?.Summary?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetFileType()
+    {
+        if (string.IsNullOrEmpty(Document?.MediaType))
+            return "File";
+
+        var parts = Document.MediaType.Split('/');
+        return parts.Length > 1 ? parts[1].ToUpper() : Document.MediaType.ToUpper();
+    }
+
+    private string GetDocumentIcon()
+    {
+        var mediaType = Document?.MediaType?.ToLower() ?? "";
+        
+        if (mediaType.Contains("pdf")) return "📄";
+        if (mediaType.Contains("word") || mediaType.Contains("msword")) return "📝";
+        if (mediaType.Contains("excel") || mediaType.Contains("spreadsheet")) return "📊";
+        if (mediaType.Contains("powerpoint") || mediaType.Contains("presentation")) return "📽️";
+        if (mediaType.Contains("zip") || mediaType.Contains("compressed")) return "🗜️";
+        if (mediaType.Contains("audio")) return "🎵";
+        if (mediaType.Contains("text")) return "📃";
+        
+        return "📎";
+    }
+
+    private Icon GetDocumentIconFluent()
+    {
+        var mediaType = Document?.MediaType?.ToLower() ?? "";
+        
+        if (mediaType.Contains("pdf")) return new Icons.Regular.Size16.DocumentPdf();
+        if (mediaType.Contains("word")) return new Icons.Regular.Size16.DocumentText();
+        if (mediaType.Contains("excel")) return new Icons.Regular.Size16.DocumentTable();
+        if (mediaType.Contains("zip")) return new Icons.Regular.Size16.FolderZip();
+        
+        return new Icons.Regular.Size16.Document();
+    }
+
+    private void OpenDocument()
+    {
+        var url = GetDocumentUrl();
+        if (!string.IsNullOrEmpty(url))
+        {
+            // This would typically open in a new tab
+            // Implementation depends on the platform
+        }
+    }
+
+    private void DownloadDocument()
+    {
+        var url = GetDocumentUrl();
+        if (!string.IsNullOrEmpty(url))
+        {
+            // This would typically trigger a download
+            // Implementation depends on the platform
+        }
+    }
+}

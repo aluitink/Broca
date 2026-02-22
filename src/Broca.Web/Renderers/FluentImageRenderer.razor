@@ -1,0 +1,159 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@inherits ComponentBase
+
+<div class="@($"fluent-image {CssClass}")">
+    @if (Image != null)
+    {
+        @if (IsCompact)
+        {
+            <img src="@GetImageUrl()" 
+                 alt="@GetImageName()"
+                 loading="lazy"
+                 style="@GetImageStyle()" />
+        }
+        else
+        {
+            <FluentCard>
+                <img src="@GetImageUrl()" 
+                     alt="@GetImageName()"
+                     loading="lazy"
+                     style="width: 100%; max-height: 600px; object-fit: contain; border-radius: 4px;" />
+                
+                @if (ShowMetadata)
+                {
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="padding: 8px;">
+                        @if (!string.IsNullOrEmpty(GetImageName()))
+                        {
+                            <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                                @GetImageName()
+                            </FluentLabel>
+                        }
+
+                        @if (!string.IsNullOrEmpty(GetDescription()))
+                        {
+                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                @GetDescription()
+                            </FluentLabel>
+                        }
+
+                        @if (!string.IsNullOrEmpty(Image.MediaType))
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                                <FluentBadge Appearance="Appearance.Lightweight">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Image())" Slot="start" />
+                                    @GetFileType()
+                                </FluentBadge>
+                                
+                                @if (ShowActions)
+                                {
+                                    <FluentButton Appearance="Appearance.Lightweight" 
+                                                  IconStart="@(new Icons.Regular.Size16.Open())"
+                                                  OnClick="@OpenImage">
+                                        Open
+                                    </FluentButton>
+                                }
+                            </FluentStack>
+                        }
+                    </FluentStack>
+                }
+
+                @if (AdditionalContent != null)
+                {
+                    @AdditionalContent(Image)
+                }
+            </FluentCard>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Image object to render.
+    /// </summary>
+    [Parameter]
+    public Image? Image { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show metadata.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show action buttons.
+    /// </summary>
+    [Parameter]
+    public bool ShowActions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to render in compact mode.
+    /// </summary>
+    [Parameter]
+    public bool IsCompact { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the maximum width in compact mode.
+    /// </summary>
+    [Parameter]
+    public string CompactMaxWidth { get; set; } = "200px";
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Image>? AdditionalContent { get; set; }
+
+    private string GetImageUrl()
+    {
+        if (Image?.Url?.Any() == true)
+        {
+            var url = Image.Url.First();
+            if (url is Link link && link.Href != null)
+                return link.Href.ToString();
+            return url.ToString() ?? string.Empty;
+        }
+        return string.Empty;
+    }
+
+    private string GetImageName()
+    {
+        return Image?.Name?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetDescription()
+    {
+        return Image?.Summary?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetFileType()
+    {
+        if (string.IsNullOrEmpty(Image?.MediaType))
+            return "Image";
+
+        var parts = Image.MediaType.Split('/');
+        return parts.Length > 1 ? parts[1].ToUpper() : Image.MediaType.ToUpper();
+    }
+
+    private string GetImageStyle()
+    {
+        return $"max-width: {CompactMaxWidth}; border-radius: 4px; object-fit: cover;";
+    }
+
+    private void OpenImage()
+    {
+        var url = GetImageUrl();
+        if (!string.IsNullOrEmpty(url))
+        {
+            // This would typically open in a new tab or lightbox
+            // For now, just navigate
+        }
+    }
+}

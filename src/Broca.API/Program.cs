@@ -11,14 +11,19 @@ var baseUrl = builder.Configuration["ActivityPub:BaseUrl"] ?? "http://localhost:
 var primaryDomain = builder.Configuration["ActivityPub:PrimaryDomain"] ?? "localhost";
 var routePrefix = builder.Configuration["ActivityPub:RoutePrefix"] ?? "ap";
 var dataPath = builder.Configuration["Persistence:DataPath"] ?? Path.Combine(Directory.GetCurrentDirectory(), "data");
+var persistenceDriver = builder.Configuration["Persistence:Driver"] ?? "InMemory";
 
 builder.Configuration["ActivityPub:BaseUrl"] = baseUrl;
 builder.Configuration["ActivityPub:PrimaryDomain"] = primaryDomain;
 builder.Configuration["ActivityPub:RoutePrefix"] = routePrefix;
 builder.Configuration["Persistence:DataPath"] = dataPath;
+builder.Configuration["Persistence:Driver"] = persistenceDriver;
 
-// Add FileSystem persistence
-builder.Services.AddFileSystemPersistence(dataPath);
+// Configure persistence layer
+if (persistenceDriver.Equals("FileSystem", StringComparison.OrdinalIgnoreCase))
+    builder.Services.AddFileSystemPersistence(dataPath);
+else
+    builder.Services.AddInMemoryPersistence();
 
 // Add Broca ActivityPub services
 builder.Services.AddActivityPubServer(builder.Configuration);

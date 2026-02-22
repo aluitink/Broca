@@ -1,0 +1,217 @@
+/* Actor View Component Styles */
+.activitypub-actor-view {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.actor-view-loading,
+.actor-view-error,
+.actor-view-empty {
+    padding: 2rem;
+    text-align: center;
+}
+
+.actor-view-error {
+    color: var(--error-color, #d32f2f);
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--accent-color, #0078d4);
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Profile Section */
+.actor-profile-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.actor-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.actor-action-button {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--neutral-stroke-rest, #ccc);
+    border-radius: var(--control-corner-radius, 4px);
+    background: var(--neutral-fill-rest, white);
+    color: var(--neutral-foreground-rest, #000);
+    cursor: pointer;
+    font-size: 0.875rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    transition: all 0.2s;
+}
+
+.actor-action-button:hover {
+    background: var(--neutral-fill-hover, #f3f3f3);
+    border-color: var(--neutral-stroke-hover, #999);
+}
+
+.actor-action-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.actor-action-button.follow {
+    background: var(--accent-fill-rest, #0078d4);
+    color: white;
+    border-color: var(--accent-fill-rest, #0078d4);
+}
+
+.actor-action-button.follow:hover {
+    background: var(--accent-fill-hover, #106ebe);
+    border-color: var(--accent-fill-hover, #106ebe);
+}
+
+.actor-action-button.following {
+    background: var(--neutral-fill-rest, white);
+    color: var(--neutral-foreground-rest, #000);
+}
+
+.actor-action-button.external-profile {
+    border-color: var(--accent-stroke-rest, #0078d4);
+    color: var(--accent-foreground-rest, #0078d4);
+}
+
+/* Tabs */
+.actor-view-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.tab-headers {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--neutral-stroke-divider-rest, #e0e0e0);
+    overflow-x: auto;
+}
+
+.tab-header {
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--neutral-foreground-hint, #666);
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.tab-header:hover {
+    color: var(--neutral-foreground-rest, #000);
+    background: var(--neutral-fill-hover, #f3f3f3);
+}
+
+.tab-header.active {
+    color: var(--accent-foreground-rest, #0078d4);
+    border-bottom-color: var(--accent-fill-rest, #0078d4);
+}
+
+.tab-content {
+    padding: 1.5rem 0;
+}
+
+.tab-panel {
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Collections List */
+.collections-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.collection-item {
+    padding: 1rem;
+    border: 1px solid var(--neutral-stroke-rest, #ccc);
+    border-radius: var(--control-corner-radius, 4px);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.collection-item:hover {
+    background: var(--neutral-fill-hover, #f3f3f3);
+    border-color: var(--accent-stroke-rest, #0078d4);
+}
+
+.collection-item h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.collection-item p {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.875rem;
+    color: var(--neutral-foreground-hint, #666);
+}
+
+.collection-meta {
+    font-size: 0.75rem;
+    color: var(--neutral-foreground-hint, #999);
+}
+
+.collection-viewer {
+    padding: 1rem;
+    border: 1px solid var(--neutral-stroke-rest, #ccc);
+    border-radius: var(--control-corner-radius, 4px);
+    background: var(--neutral-layer-1, #fafafa);
+}
+
+.collection-viewer h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.125rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .collections-list {
+        grid-template-columns: 1fr;
+    }
+
+    .tab-header {
+        padding: 0.5rem 1rem;
+        font-size: 0.8125rem;
+    }
+
+    .actor-actions {
+        flex-direction: column;
+    }
+
+    .actor-action-button {
+        width: 100%;
+        justify-content: center;
+    }
+}

@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Web.Virtualization
 @typeparam TItem
 @inject IActivityPubClient Client
+@implements IDisposable
 
 <div class="activitypub-collection-loader @CssClass">
     @if (CollectionUrl != null)
@@ -115,10 +116,14 @@
 
 @code {
     private List<TItem> items = new();
+    private HashSet<string> loadedItemIds = new();
     private bool isLoading;
     private bool hasMore = true;
     private string? error;
     private Virtualize<TItem>? virtualizeComponent;
+    private Dictionary<string, List<TItem>> cache = new();
+    private string? lastLoadedCollectionUrl;
+    private CancellationTokenSource? loadCancellation;
 
     /// <summary>
     /// Gets or sets the collection URL to load items from.
@@ -137,6 +142,12 @@
     /// </summary>
     [Parameter]
     public bool UseVirtualization { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to enable caching of loaded items.
+    /// </summary>
+    [Parameter]
+    public bool EnableCaching { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the item size for virtualization (in pixels).
@@ -188,18 +199,88 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (CollectionUrl != null && !UseVirtualization && !items.Any())
+        // Check if collection URL changed
+        if (CollectionUrl?.ToString() != lastLoadedCollectionUrl)
         {
-            await LoadInitialItemsAsync();
+            lastLoadedCollectionUrl = CollectionUrl?.ToString();
+            
+            // Cancel any ongoing loads
+            loadCancellation?.Cancel();
+            loadCancellation = new CancellationTokenSource();
+            
+            // Try to load from cache first
+            if (EnableCaching && CollectionUrl != null && cache.TryGetValue(CollectionUrl.ToString(), out var cachedItems))
+            {
+                items = new List<TItem>(cachedItems);
+                RebuildIdSet();
+                hasMore = cachedItems.Count >= PageSize;
+                StateHasChanged();
+            }
+            else if (CollectionUrl != null && !UseVirtualization)
+            {
+                await LoadInitialItemsAsync();
+            }
+        }
+    }
+
+    private void RebuildIdSet()
+    {
+        loadedItemIds.Clear();
+        foreach (var item in items)
+        {
+            var id = GetItemId(item);
+            if (!string.IsNullOrEmpty(id))
+            {
+                loadedItemIds.Add(id);
+            }
+        }
+    }
+
+    private string? GetItemId(TItem item)
+    {
+        if (item == null) return null;
+
+        // Try to get ID from common ActivityStreams properties
+        var type = item.GetType();
+        var idProperty = type.GetProperty("Id");
+        if (idProperty != null && idProperty.PropertyType == typeof(string))
+        {
+            return idProperty.GetValue(item) as string;
+        }
+
+        return null;
+    }
+
+    private bool ShouldIncludeItem(TItem item)
+    {
+        var id = GetItemId(item);
+        if (string.IsNullOrEmpty(id))
+        {
+            // If no ID, include the item (can't deduplicate)
+            return true;
+        }
+
+        return !loadedItemIds.Contains(id);
+    }
+
+    private void AddItemWithTracking(TItem item)
+    {
+        items.Add(item);
+        var id = GetItemId(item);
+        if (!string.IsNullOrEmpty(id))
+        {
+            loadedItemIds.Add(id);
         }
     }
 
     private async Task LoadInitialItemsAsync()
     {
-        if (isLoading) return;
+        if (isLoading || CollectionUrl == null) return;
 
         isLoading = true;
         error = null;
+        items.Clear();
+        loadedItemIds.Clear();
         StateHasChanged();
 
         try
@@ -207,7 +288,21 @@
             var loadedItems = new List<TItem>();
             await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, PageSize))
             {
-                loadedItems.Add(item);
+                if (loadCancellation?.Token.IsCancellationRequested == true)
+                {
+                    return;
+                }
+
+                if (ShouldIncludeItem(item))
+                {
+                    loadedItems.Add(item);
+                    var id = GetItemId(item);
+                    if (!string.IsNullOrEmpty(id))
+                    {
+                        loadedItemIds.Add(id);
+                    }
+                }
+
                 if (loadedItems.Count >= PageSize)
                 {
                     break;
@@ -217,10 +312,20 @@
             items = loadedItems;
             hasMore = loadedItems.Count >= PageSize;
 
+            // Cache the loaded items
+            if (EnableCaching && CollectionUrl != null)
+            {
+                cache[CollectionUrl.ToString()] = new List<TItem>(loadedItems);
+            }
+
             if (OnItemsLoaded.HasDelegate)
             {
                 await OnItemsLoaded.InvokeAsync(items);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Load was cancelled, this is expected
         }
         catch (Exception ex)
         {
@@ -253,7 +358,16 @@
                     continue;
                 }
 
-                loadedItems.Add(item);
+                if (ShouldIncludeItem(item))
+                {
+                    loadedItems.Add(item);
+                    var id = GetItemId(item);
+                    if (!string.IsNullOrEmpty(id))
+                    {
+                        loadedItemIds.Add(id);
+                    }
+                }
+
                 if (loadedItems.Count >= PageSize)
                 {
                     break;
@@ -315,7 +429,14 @@
     /// </summary>
     public async Task RefreshAsync()
     {
+        // Clear cache for this collection
+        if (EnableCaching && CollectionUrl != null)
+        {
+            cache.Remove(CollectionUrl.ToString());
+        }
+
         items.Clear();
+        loadedItemIds.Clear();
         hasMore = true;
         error = null;
 
@@ -327,5 +448,29 @@
         {
             await LoadInitialItemsAsync();
         }
+    }
+
+    /// <summary>
+    /// Clears all cached collections.
+    /// </summary>
+    public void ClearCache()
+    {
+        cache.Clear();
+    }
+
+    /// <summary>
+    /// Gets the current loaded items.
+    /// </summary>
+    public IReadOnlyList<TItem> GetItems() => items.AsReadOnly();
+
+    /// <summary>
+    /// Gets whether the component is currently loading.
+    /// </summary>
+    public bool IsLoading => isLoading;
+
+    public void Dispose()
+    {
+        loadCancellation?.Cancel();
+        loadCancellation?.Dispose();
     }
 }

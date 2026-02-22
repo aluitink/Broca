@@ -1,7 +1,6 @@
 using Broca.ActivityPub.Client.Extensions;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
-using Broca.ActivityPub.Persistence.InMemory;
 using Broca.ActivityPub.Server.Services;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.Extensions.Configuration;
@@ -37,23 +36,19 @@ public static class ServiceCollectionExtensions
         // Register memory cache (required for InboxController)
         services.AddMemoryCache();
 
-        // Register repositories (in-memory by default)
-        services.AddSingleton<IActorRepository, InMemoryActorRepository>();
-        services.AddSingleton<IActivityRepository, InMemoryActivityRepository>();
-        services.AddSingleton<IDeliveryQueueRepository, InMemoryDeliveryQueueRepository>();
-        services.AddSingleton<IBlobStorageService, InMemoryBlobStorageService>();
-
         // Register services
         services.AddSingleton<CryptographyService>();
         services.AddScoped<IInboxHandler, InboxProcessor>();
         services.AddScoped<OutboxProcessor>();
         services.AddScoped<ActivityDeliveryService>();
         services.AddScoped<WebFingerService>();
+        services.AddScoped<NodeInfoService>();
         services.AddSingleton<ISystemIdentityService, SystemIdentityService>();
         services.AddSingleton<IActivityBuilderFactory, ActivityBuilderFactory>();
         services.AddScoped<AdminOperationsHandler>();
         services.AddScoped<AttachmentProcessingService>();
         services.AddScoped<ICollectionService, CollectionService>();
+        services.AddScoped<ObjectEnrichmentService>();
 
         // Register background worker for activity delivery
         services.AddHostedService<ActivityDeliveryWorker>();

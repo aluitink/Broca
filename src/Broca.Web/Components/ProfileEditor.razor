@@ -1,0 +1,442 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+@inject ILogger<ProfileEditor> Logger
+
+<FluentCard Class="@($"profile-editor {CssClass}")">
+    @if (isLoading)
+    {
+        <div class="editor-loading">
+            <FluentProgressRing />
+            <p>Loading...</p>
+        </div>
+    }
+    else if (isEditing)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                <h3>
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" Color="Color.Accent" />
+                    Edit Profile
+                </h3>
+            </FluentStack>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <FluentMessageBar Title="Error" Intent="MessageIntent.Error">
+                    @errorMessage
+                </FluentMessageBar>
+            }
+
+            @if (!string.IsNullOrEmpty(successMessage))
+            {
+                <FluentMessageBar Title="Success" Intent="MessageIntent.Success">
+                    @successMessage
+                </FluentMessageBar>
+            }
+
+            <EditForm Model="@editModel" OnValidSubmit="@HandleSaveAsync">
+                <DataAnnotationsValidator />
+                
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                    <div class="form-field">
+                        <FluentTextField 
+                            @bind-Value="editModel.Username"
+                            Label="Username"
+                            Disabled="true"
+                            Style="width: 100%;">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Slot="start" Color="Color.Neutral" />
+                        </FluentTextField>
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral" Style="font-size: 0.75rem;">
+                            Username cannot be changed
+                        </FluentLabel>
+                    </div>
+
+                    <div class="form-field">
+                        <FluentTextField 
+                            @bind-Value="editModel.Name"
+                            Label="Display Name"
+                            Placeholder="Enter your display name"
+                            Style="width: 100%;">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.TextFont())" Slot="start" Color="Color.Neutral" />
+                        </FluentTextField>
+                        <ValidationMessage For="@(() => editModel.Name)" />
+                    </div>
+
+                    <div class="form-field">
+                        <FluentTextArea 
+                            @bind-Value="editModel.Summary"
+                            Label="Bio / Summary"
+                            Placeholder="Tell us about yourself..."
+                            Rows="4"
+                            Style="width: 100%;">
+                        </FluentTextArea>
+                        <ValidationMessage For="@(() => editModel.Summary)" />
+                    </div>
+
+                    <div class="form-field">
+                        <FluentTextField 
+                            @bind-Value="editModel.IconUrl"
+                            Label="Profile Picture URL"
+                            Placeholder="https://example.com/avatar.jpg"
+                            Style="width: 100%;">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Image())" Slot="start" Color="Color.Neutral" />
+                        </FluentTextField>
+                        <ValidationMessage For="@(() => editModel.IconUrl)" />
+                    </div>
+
+                    <div class="form-field">
+                        <FluentTextField 
+                            @bind-Value="editModel.ImageUrl"
+                            Label="Header/Banner Image URL"
+                            Placeholder="https://example.com/banner.jpg"
+                            Style="width: 100%;">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.ImageMultiple())" Slot="start" Color="Color.Neutral" />
+                        </FluentTextField>
+                        <ValidationMessage For="@(() => editModel.ImageUrl)" />
+                    </div>
+
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                        <FluentButton 
+                            Type="ButtonType.Submit" 
+                            Appearance="Appearance.Accent"
+                            Loading="@isSaving">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Save())" Slot="start" />
+                            Save Changes
+                        </FluentButton>
+                        <FluentButton 
+                            Appearance="Appearance.Outline"
+                            OnClick="@CancelEdit"
+                            Disabled="@isSaving">
+                            Cancel
+                        </FluentButton>
+                    </FluentStack>
+                </FluentStack>
+            </EditForm>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                <h3>Profile Information</h3>
+                <FluentButton 
+                    Appearance="Appearance.Accent"
+                    OnClick="@StartEdit">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" Slot="start" />
+                    Edit Profile
+                </FluentButton>
+            </FluentStack>
+
+            <FluentDataGrid Items="@GetDisplayData()" GridTemplateColumns="200px 1fr">
+                <PropertyColumn Property="@(p => p.Label)" Title="Field" Class="field-label" />
+                <PropertyColumn Property="@(p => p.Value)" Title="Value" Class="field-value" />
+            </FluentDataGrid>
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    [Parameter]
+    public Actor? Actor { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public EventCallback<Actor> OnProfileUpdated { get; set; }
+
+    private bool isEditing = false;
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private string? errorMessage;
+    private string? successMessage;
+    private ProfileEditModel editModel = new();
+
+    protected override void OnParametersSet()
+    {
+        if (Actor != null && !isEditing)
+        {
+            LoadActorIntoModel();
+        }
+    }
+
+    private void LoadActorIntoModel()
+    {
+        if (Actor is not Person person)
+            return;
+
+        editModel = new ProfileEditModel
+        {
+            Username = person.PreferredUsername ?? string.Empty,
+            Name = person.Name?.FirstOrDefault() ?? string.Empty,
+            Summary = person.Summary?.FirstOrDefault() ?? string.Empty,
+            IconUrl = GetIconUrl(person),
+            ImageUrl = GetImageUrl(person)
+        };
+    }
+
+    private string? GetIconUrl(Person person)
+    {
+        if (person.Icon?.FirstOrDefault() is Image iconImage && 
+            iconImage.Url?.FirstOrDefault() is Link iconLink)
+        {
+            return iconLink.Href?.ToString();
+        }
+        return null;
+    }
+
+    private string? GetImageUrl(Person person)
+    {
+        if (person.Image?.FirstOrDefault() is Image headerImage && 
+            headerImage.Url?.FirstOrDefault() is Link headerLink)
+        {
+            return headerLink.Href?.ToString();
+        }
+        return null;
+    }
+
+    private void StartEdit()
+    {
+        isEditing = true;
+        errorMessage = null;
+        successMessage = null;
+        LoadActorIntoModel();
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+        errorMessage = null;
+        successMessage = null;
+        LoadActorIntoModel();
+    }
+
+    private async Task HandleSaveAsync()
+    {
+        if (Actor == null)
+            return;
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            Logger.LogInformation("Updating actor profile for {ActorId}", Actor.Id);
+
+            // Create an Update activity with the modified actor
+            var updatedActor = await CreateUpdatedActorAsync();
+
+            // Build the Update activity
+            var updateActivity = new Activity
+            {
+                Type = new[] { "Update" },
+                Actor = new IObjectOrLink[] { new Link { Href = new Uri(Actor.Id!) } },
+                Object = new IObjectOrLink[] { updatedActor }
+            };
+
+            // Send to the actor's outbox
+            var outboxUrl = (Actor as Person)?.Outbox?.Href;
+            if (outboxUrl == null)
+            {
+                throw new InvalidOperationException("Actor does not have an outbox URL");
+            }
+
+            var response = await Client.PostAsync(outboxUrl, updateActivity);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                successMessage = "Profile updated successfully!";
+                Logger.LogInformation("Successfully updated actor profile");
+
+                // Update the local Actor object
+                UpdateLocalActor(updatedActor);
+
+                // Notify parent component
+                if (OnProfileUpdated.HasDelegate)
+                {
+                    await OnProfileUpdated.InvokeAsync(updatedActor);
+                }
+
+                // Exit edit mode after a short delay
+                await Task.Delay(2000);
+                isEditing = false;
+                successMessage = null;
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Logger.LogWarning("Failed to update actor profile: {StatusCode} - {Error}", 
+                    response.StatusCode, errorContent);
+                errorMessage = $"Failed to update profile: {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating actor profile");
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task<Person> CreateUpdatedActorAsync()
+    {
+        var person = Actor as Person;
+        if (person == null)
+            throw new InvalidOperationException("Actor is not a Person");
+
+        // Create a new Person object with only updatable fields
+        var updatedPerson = new Person
+        {
+            Type = person.Type,
+            Id = person.Id,
+            Name = !string.IsNullOrWhiteSpace(editModel.Name) 
+                ? new[] { editModel.Name } 
+                : person.Name,
+            Summary = !string.IsNullOrWhiteSpace(editModel.Summary) 
+                ? new[] { editModel.Summary } 
+                : null,
+            PreferredUsername = person.PreferredUsername, // Keep original username
+            Inbox = person.Inbox,
+            Outbox = person.Outbox,
+            Following = person.Following,
+            Followers = person.Followers
+            // Note: PublicKey will be preserved by the server from existing actor
+        };
+
+        // Update icon if provided
+        if (!string.IsNullOrWhiteSpace(editModel.IconUrl) && Uri.TryCreate(editModel.IconUrl, UriKind.Absolute, out var iconUri))
+        {
+            updatedPerson.Icon = new IImageOrLink[]
+            {
+                new Image
+                {
+                    Type = new[] { "Image" },
+                    Url = new ILink[] { new Link { Href = iconUri } }
+                }
+            };
+        }
+        else
+        {
+            updatedPerson.Icon = person.Icon;
+        }
+
+        // Update header/banner image if provided
+        if (!string.IsNullOrWhiteSpace(editModel.ImageUrl) && Uri.TryCreate(editModel.ImageUrl, UriKind.Absolute, out var imageUri))
+        {
+            updatedPerson.Image = new IImageOrLink[]
+            {
+                new Image
+                {
+                    Type = new[] { "Image" },
+                    Url = new ILink[] { new Link { Href = imageUri } }
+                }
+            };
+        }
+        else
+        {
+            updatedPerson.Image = person.Image;
+        }
+
+        return await Task.FromResult(updatedPerson);
+    }
+
+    private void UpdateLocalActor(Person updatedPerson)
+    {
+        if (Actor is Person person)
+        {
+            person.Name = updatedPerson.Name;
+            person.Summary = updatedPerson.Summary;
+            person.Icon = updatedPerson.Icon;
+            person.Image = updatedPerson.Image;
+        }
+    }
+
+    private IQueryable<DisplayDataItem> GetDisplayData()
+    {
+        var items = new List<DisplayDataItem>();
+
+        if (Actor is Person person)
+        {
+            items.Add(new DisplayDataItem 
+            { 
+                Label = "Username", 
+                Value = person.PreferredUsername ?? "N/A" 
+            });
+            items.Add(new DisplayDataItem 
+            { 
+                Label = "Display Name", 
+                Value = person.Name?.FirstOrDefault() ?? "N/A" 
+            });
+            items.Add(new DisplayDataItem 
+            { 
+                Label = "Bio / Summary", 
+                Value = person.Summary?.FirstOrDefault() ?? "Not set" 
+            });
+            items.Add(new DisplayDataItem 
+            { 
+                Label = "Profile Picture", 
+                Value = GetIconUrl(person) ?? "Not set" 
+            });
+            items.Add(new DisplayDataItem 
+            { 
+                Label = "Header Image", 
+                Value = GetImageUrl(person) ?? "Not set" 
+            });
+        }
+
+        return items.AsQueryable();
+    }
+
+    private class ProfileEditModel
+    {
+        public string Username { get; set; } = string.Empty;
+        public string? Name { get; set; }
+        public string? Summary { get; set; }
+        public string? IconUrl { get; set; }
+        public string? ImageUrl { get; set; }
+    }
+
+    private class DisplayDataItem
+    {
+        public string Label { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+    }
+}
+
+<style>
+    .profile-editor {
+        max-width: 800px;
+    }
+
+    .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .editor-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 2rem;
+    }
+
+    .field-label {
+        font-weight: 600;
+        color: var(--neutral-foreground-rest);
+    }
+
+    .field-value {
+        font-family: monospace;
+        word-break: break-all;
+    }
+</style>

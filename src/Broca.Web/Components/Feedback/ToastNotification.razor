@@ -1,0 +1,160 @@
+@* Toast notification component for transient feedback messages *@
+
+<div class="toast-container @GetPositionClass()">
+    @foreach (var toast in _toasts.Where(t => t.IsVisible))
+    {
+        <FluentCard Class="@GetToastClass(toast)" Style="@GetToastStyle(toast)">
+            <div class="toast-content">
+                <FluentIcon Value="@GetIcon(toast.Type)" Color="@GetIconColor(toast.Type)" />
+                <div class="toast-message">
+                    <strong>@toast.Title</strong>
+                    @if (!string.IsNullOrEmpty(toast.Message))
+                    {
+                        <p>@toast.Message</p>
+                    }
+                </div>
+                @if (toast.Action != null)
+                {
+                    <FluentButton Appearance="Appearance.Lightweight" OnClick="@(() => HandleAction(toast))">
+                        @toast.ActionText
+                    </FluentButton>
+                }
+                <FluentButton Appearance="Appearance.Lightweight" OnClick="@(() => Dismiss(toast.Id))">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" />
+                </FluentButton>
+            </div>
+            @if (toast.ShowProgress && toast.Duration > 0)
+            {
+                <div class="toast-progress" style="animation-duration: @(toast.Duration)ms;"></div>
+            }
+        </FluentCard>
+    }
+</div>
+
+@code {
+    [Parameter] public ToastPosition Position { get; set; } = ToastPosition.TopRight;
+    [Parameter] public int MaxToasts { get; set; } = 5;
+
+    private readonly List<ToastItem> _toasts = new();
+    private static int _nextId = 0;
+
+    public void Show(string title, string? message = null, ToastType type = ToastType.Info, int duration = 5000, Action? action = null, string? actionText = null)
+    {
+        var toast = new ToastItem
+        {
+            Id = ++_nextId,
+            Title = title,
+            Message = message,
+            Type = type,
+            Duration = duration,
+            Action = action,
+            ActionText = actionText ?? "Action",
+            IsVisible = true,
+            ShowProgress = duration > 0
+        };
+
+        _toasts.Add(toast);
+        while (_toasts.Count(t => t.IsVisible) > MaxToasts)
+        {
+            var oldest = _toasts.FirstOrDefault(t => t.IsVisible);
+            if (oldest != null) oldest.IsVisible = false;
+        }
+        StateHasChanged();
+
+        if (duration > 0)
+        {
+            _ = Task.Delay(duration).ContinueWith(_ => { Dismiss(toast.Id); });
+        }
+    }
+
+    public void Dismiss(int id)
+    {
+        var toast = _toasts.FirstOrDefault(t => t.Id == id);
+        if (toast != null)
+        {
+            toast.IsVisible = false;
+            StateHasChanged();
+            _ = Task.Delay(300).ContinueWith(_ => { _toasts.Remove(toast); });
+        }
+    }
+
+    private async Task HandleAction(ToastItem toast)
+    {
+        toast.Action?.Invoke();
+        await Task.CompletedTask;
+        Dismiss(toast.Id);
+    }
+
+    private string GetPositionClass() => Position switch
+    {
+        ToastPosition.TopLeft => "toast-position-top-left",
+        ToastPosition.TopCenter => "toast-position-top-center",
+        ToastPosition.TopRight => "toast-position-top-right",
+        ToastPosition.BottomLeft => "toast-position-bottom-left",
+        ToastPosition.BottomCenter => "toast-position-bottom-center",
+        ToastPosition.BottomRight => "toast-position-bottom-right",
+        _ => "toast-position-top-right"
+    };
+
+    private string GetToastClass(ToastItem toast) => $"toast toast-{toast.Type.ToString().ToLower()} {(toast.IsVisible ? "toast-visible" : "toast-hidden")}";
+    private string GetToastStyle(ToastItem toast) => toast.IsVisible ? "" : "display: none;";
+
+    private Icon GetIcon(ToastType type) => type switch
+    {
+        ToastType.Success => new Icons.Regular.Size20.CheckmarkCircle(),
+        ToastType.Error => new Icons.Regular.Size20.ErrorCircle(),
+        ToastType.Warning => new Icons.Regular.Size20.Warning(),
+        ToastType.Info => new Icons.Regular.Size20.Info(),
+        _ => new Icons.Regular.Size20.Info()
+    };
+
+    private Color GetIconColor(ToastType type) => type switch
+    {
+        ToastType.Success => Color.Success,
+        ToastType.Error => Color.Error,
+        ToastType.Warning => Color.Warning,
+        ToastType.Info => Color.Info,
+        _ => Color.Info
+    };
+
+    private class ToastItem
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        public string? Message { get; set; }
+        public ToastType Type { get; set; }
+        public int Duration { get; set; }
+        public Action? Action { get; set; }
+        public string ActionText { get; set; } = "";
+        public bool IsVisible { get; set; }
+        public bool ShowProgress { get; set; }
+    }
+
+    public enum ToastType { Success, Error, Warning, Info }
+    public enum ToastPosition { TopLeft, TopCenter, TopRight, BottomLeft, BottomCenter, BottomRight }
+}
+
+<style>
+    .toast-container { position: fixed; z-index: 10000; display: flex; flex-direction: column; gap: 0.75rem; max-width: 400px; pointer-events: none; }
+    .toast-position-top-right { top: 1rem; right: 1rem; }
+    .toast-position-top-left { top: 1rem; left: 1rem; }
+    .toast-position-top-center { top: 1rem; left: 50%; transform: translateX(-50%); }
+    .toast-position-bottom-right { bottom: 1rem; right: 1rem; }
+    .toast-position-bottom-left { bottom: 1rem; left: 1rem; }
+    .toast-position-bottom-center { bottom: 1rem; left: 50%; transform: translateX(-50%); }
+    .toast { pointer-events: all; min-width: 300px; box-shadow: var(--elevation-shadow-card-rest); border-radius: var(--control-corner-radius); overflow: hidden; position: relative; transition: all 0.3s ease; }
+    .toast-visible { animation: slideIn 0.3s ease; opacity: 1; }
+    .toast-hidden { animation: slideOut 0.3s ease; opacity: 0; }
+    .toast-content { display: flex; align-items: flex-start; gap: 0.75rem; padding: 1rem; }
+    .toast-message { flex: 1; display: flex; flex-direction: column; gap: 0.25rem; }
+    .toast-message strong { font-weight: 600; font-size: 0.9375rem; }
+    .toast-message p { margin: 0; font-size: 0.875rem; opacity: 0.9; }
+    .toast-progress { position: absolute; bottom: 0; left: 0; height: 3px; width: 100%; background: currentColor; opacity: 0.5; animation: progress linear; transform-origin: left; }
+    .toast-success { border-left: 4px solid var(--success); }
+    .toast-error { border-left: 4px solid var(--error); }
+    .toast-warning { border-left: 4px solid var(--warning); }
+    .toast-info { border-left: 4px solid var(--info); }
+    @@keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @@keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(120%); opacity: 0; } }
+    @@keyframes progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+</style>

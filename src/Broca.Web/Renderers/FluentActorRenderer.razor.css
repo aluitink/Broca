@@ -1,0 +1,23 @@
+/* Fluent Actor Profile Renderer Styles */
+.fluent-actor-profile {
+    max-width: 600px;
+}
+
+.profile-avatar {
+    flex-shrink: 0;
+}
+
+.profile-avatar-placeholder {
+    width: 75px;
+    height: 75px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--neutral-layer-2);
+    border-radius: 50%;
+}
+
+.profile-summary {
+    margin: 12px 0;
+    line-height: 1.6;
+}

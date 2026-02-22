@@ -1,0 +1,143 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@using KristofferStrube.ActivityStreams
+
+@* 
+    FluentInteractionBarRenderer - A Fluent UI renderer for the InteractionBar component.
+    Usage: <InteractionBar BarTemplate="FluentInteractionBarRenderer.Template" ... />
+*@
+
+<div class="fluent-interaction-bar">
+    @if (Context.ShowReply)
+    {
+        <FluentButton 
+            Appearance="@(Context.IsReplying ? Appearance.Accent : Appearance.Stealth)"
+            IconStart="@(new Icons.Regular.Size20.ChatMultiple())"
+            Disabled="@Context.IsProcessing"
+            OnClick="@Context.HandleReplyClick"
+            Title="Reply"
+            class="interaction-button">
+            @if (Context.ReplyCount > 0)
+            {
+                <span class="count">@FormatCount(Context.ReplyCount)</span>
+            }
+        </FluentButton>
+    }
+
+    @if (Context.ShowBoost)
+    {
+        <FluentButton 
+            Appearance="@(Context.IsBoosted ? Appearance.Accent : Appearance.Stealth)"
+            IconStart="@(new Icons.Regular.Size20.ArrowRepeatAll())"
+            Disabled="@(Context.IsProcessing || !Context.CanInteract)"
+            OnClick="@Context.HandleBoostClick"
+            Title="@(Context.IsBoosted ? "Unboosted" : "Boost")"
+            class="interaction-button boost-button">
+            @if (Context.BoostCount > 0)
+            {
+                <span class="count">@FormatCount(Context.BoostCount)</span>
+            }
+        </FluentButton>
+    }
+
+    @if (Context.ShowLike)
+    {
+        <FluentButton 
+            Appearance="@(Context.IsLiked ? Appearance.Accent : Appearance.Stealth)"
+            IconStart="@(Context.IsLiked ? new Icons.Filled.Size20.Heart() : new Icons.Regular.Size20.Heart())"
+            Disabled="@(Context.IsProcessing || !Context.CanInteract)"
+            OnClick="@Context.HandleLikeClick"
+            Title="@(Context.IsLiked ? "Unlike" : "Like")"
+            class="interaction-button like-button">
+            @if (Context.LikeCount > 0)
+            {
+                <span class="count">@FormatCount(Context.LikeCount)</span>
+            }
+        </FluentButton>
+    }
+
+    @if (Context.ShowBookmark)
+    {
+        <FluentButton 
+            Appearance="@(Context.IsBookmarked ? Appearance.Accent : Appearance.Stealth)"
+            IconStart="@(Context.IsBookmarked ? new Icons.Filled.Size20.Bookmark() : new Icons.Regular.Size20.Bookmark())"
+            Disabled="@(Context.IsProcessing || !Context.CanInteract)"
+            OnClick="@Context.HandleBookmarkClick"
+            Title="@(Context.IsBookmarked ? "Remove bookmark" : "Bookmark")"
+            class="interaction-button">
+        </FluentButton>
+    }
+
+    @if (Context.ShowShare)
+    {
+        <FluentButton 
+            Appearance="Appearance.Stealth"
+            IconStart="@(new Icons.Regular.Size20.Share())"
+            Disabled="@Context.IsProcessing"
+            OnClick="@Context.HandleShareClick"
+            Title="Share"
+            class="interaction-button">
+        </FluentButton>
+    }
+
+    @if (Context.ShowMore)
+    {
+        <FluentButton 
+            Appearance="Appearance.Stealth"
+            IconStart="@(new Icons.Regular.Size20.MoreHorizontal())"
+            Disabled="@Context.IsProcessing"
+            OnClick="@Context.HandleMoreClick"
+            Title="More options"
+            class="interaction-button">
+        </FluentButton>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(Context.Error))
+{
+    <FluentMessageBar Intent="MessageIntent.Error" Style="margin-top: 0.5rem;">
+        @Context.Error
+    </FluentMessageBar>
+}
+
+@if (Context.ShowReplyComposer && Context.ObjectId != null)
+{
+    <div class="reply-composer-container">
+        <PostComposer InReplyToId="@Context.ObjectId"
+                     ShowCancelButton="true"
+                     OnCancel="@Context.HandleCancelReply"
+                     OnPostCreated="@Context.HandleReplyCreated"
+                     Placeholder="Write your reply..."
+                     PostButtonText="Reply"
+                     CssClass="interaction-reply-composer"
+                     ComposerTemplate="FluentPostComposerRenderer.Template" />
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The InteractionBar context containing the component state and methods.
+    /// </summary>
+    [Parameter]
+    public InteractionBar.InteractionBarContext Context { get; set; } = null!;
+
+    /// <summary>
+    /// Template that can be passed to InteractionBar component.
+    /// </summary>
+    public static RenderFragment<InteractionBar.InteractionBarContext> Template => context => builder =>
+    {
+        builder.OpenComponent<FluentInteractionBarRenderer>(0);
+        builder.AddAttribute(1, nameof(Context), context);
+        builder.CloseComponent();
+    };
+
+    private string FormatCount(int count)
+    {
+        if (count < 1000)
+            return count.ToString();
+        if (count < 1000000)
+            return $"{count / 1000.0:F1}K";
+        return $"{count / 1000000.0:F1}M";
+    }
+}

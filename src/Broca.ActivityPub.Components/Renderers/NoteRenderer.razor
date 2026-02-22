@@ -1,55 +1,70 @@
 @using KristofferStrube.ActivityStreams
+@using Microsoft.AspNetCore.Components.Rendering
 @inherits ComponentBase
 
-<div class="activitypub-note @CssClass">
-    @if (Note != null)
-    {
-        @if (ShowActor && Note.AttributedTo?.Any() == true)
+<ObjectCard Actor="@(Note?.AttributedTo?.FirstOrDefault())"
+            ObjectType="Note"
+            Timestamp="@Note?.Published"
+            ShowActor="@ShowActor"
+            ShowType="false"
+            ShowTimestamp="true"
+            CssClass="@CssClass">
+    <ChildContent>
+        @if (Note != null)
         {
-            <div class="note-attribution">
-                <span class="note-actor">@GetActorDisplay()</span>
-            </div>
-        }
+            @if (Note.Name?.Any() == true)
+            {
+                <div class="note-name">@Note.Name.First()</div>
+            }
 
-        @if (Note.Name?.Any() == true)
-        {
-            <div class="note-name">@Note.Name.First()</div>
-        }
+            @if (Note.Content?.Any() == true)
+            {
+                <div class="note-content">
+                    @((MarkupString)(Note.Content.First() ?? string.Empty))
+                </div>
+            }
 
-        @if (Note.Content?.Any() == true)
-        {
-            <div class="note-content">
-                @((MarkupString)(Note.Content.First() ?? string.Empty))
-            </div>
-        }
-
-        @if (Note.Published.HasValue)
-        {
-            <div class="note-metadata">
-                <time datetime="@Note.Published.Value.ToString("o")">
-                    @FormatDateTime(Note.Published.Value)
-                </time>
-            </div>
-        }
-
-        @if (Note.Attachment?.Any() == true)
-        {
-            <div class="note-attachments">
-                @foreach (var attachment in Note.Attachment)
+            @if (Note.Attachment?.Any() == true)
+            {
+                @if (UseMediaGallery && HasMediaAttachments())
                 {
-                    <div class="attachment-item">
-                        @RenderAttachment(attachment)
+                    <MediaGallery Images="@GetImageAttachments()"
+                                 DisplayMode="@MediaGalleryDisplayMode"
+                                 GridColumns="@MediaGalleryColumns"
+                                 CssClass="note-media-gallery" />
+                }
+                else
+                {
+                    <div class="note-attachments">
+                        @foreach (var attachment in Note.Attachment)
+                        {
+                            <div class="attachment-item">
+                                @RenderAttachment(attachment)
+                            </div>
+                        }
                     </div>
                 }
-            </div>
-        }
+            }
 
-        @if (AdditionalContent != null)
-        {
-            @AdditionalContent(Note)
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Note)
+            }
         }
-    }
-</div>
+    </ChildContent>
+    <FooterContent>
+        @if (ShowInteractions && Note?.Id != null)
+        {
+            <InteractionBar ObjectId="@Note.Id"
+                           Object="@Note"
+                           ShowReply="@ShowReply"
+                           ShowBoost="@ShowBoost"
+                           ShowLike="@ShowLike"
+                           ShowBookmark="@ShowBookmark"
+                           CssClass="note-interactions" />
+        }
+    </FooterContent>
+</ObjectCard>
 
 @code {
     /// <summary>
@@ -65,6 +80,54 @@
     public bool ShowActor { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether to show interactions (like, boost, reply, etc.).
+    /// </summary>
+    [Parameter]
+    public bool ShowInteractions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the reply button.
+    /// </summary>
+    [Parameter]
+    public bool ShowReply { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the boost button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBoost { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the like button.
+    /// </summary>
+    [Parameter]
+    public bool ShowLike { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the bookmark button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBookmark { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to use MediaGallery for image attachments.
+    /// </summary>
+    [Parameter]
+    public bool UseMediaGallery { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the display mode for MediaGallery.
+    /// </summary>
+    [Parameter]
+    public MediaGallery.GalleryDisplayMode MediaGalleryDisplayMode { get; set; } = MediaGallery.GalleryDisplayMode.Grid;
+
+    /// <summary>
+    /// Gets or sets the number of columns for MediaGallery grid display.
+    /// </summary>
+    [Parameter]
+    public int MediaGalleryColumns { get; set; } = 2;
+
+    /// <summary>
     /// Gets or sets additional CSS classes.
     /// </summary>
     [Parameter]
@@ -76,37 +139,242 @@
     [Parameter]
     public RenderFragment<Note>? AdditionalContent { get; set; }
 
-    private string GetActorDisplay()
+    private bool HasMediaAttachments()
     {
-        var actorId = Note?.AttributedTo?.FirstOrDefault();
-        return actorId?.ToString() ?? "Unknown";
+        if (Note?.Attachment == null) return false;
+        return Note.Attachment.Any(a => a is Image);
     }
 
-    private string FormatDateTime(DateTimeOffset dateTime)
+    private IEnumerable<Image> GetImageAttachments()
     {
-        var now = DateTimeOffset.UtcNow;
-        var diff = now - dateTime;
-
-        if (diff.TotalMinutes < 1)
-            return "just now";
-        if (diff.TotalMinutes < 60)
-            return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours < 24)
-            return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 7)
-            return $"{(int)diff.TotalDays}d ago";
-        
-        return dateTime.ToString("MMM d, yyyy");
+        if (Note?.Attachment == null) return Enumerable.Empty<Image>();
+        return Note.Attachment.OfType<Image>();
     }
 
     private RenderFragment RenderAttachment(object attachment)
     {
         return builder =>
         {
-            builder.OpenElement(0, "div");
-            builder.AddAttribute(1, "class", "attachment");
-            builder.AddContent(2, attachment.GetType().Name);
+            var sequence = 0;
+            
+            // Handle Image attachments
+            if (attachment is Image image)
+            {
+                RenderImage(builder, ref sequence, image);
+                return;
+            }
+
+            // Handle Video attachments
+            if (attachment is Video video)
+            {
+                RenderVideo(builder, ref sequence, video);
+                return;
+            }
+
+            // Handle Audio attachments
+            if (attachment is Audio audio)
+            {
+                RenderAudio(builder, ref sequence, audio);
+                return;
+            }
+
+            // Handle Document attachments
+            if (attachment is Document document)
+            {
+                RenderDocument(builder, ref sequence, document);
+                return;
+            }
+
+            // Handle Link attachments
+            if (attachment is Link link)
+            {
+                RenderLink(builder, ref sequence, link);
+                return;
+            }
+
+            // Fallback for unknown types
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "attachment-unknown");
+            builder.AddContent(sequence++, $"[{attachment.GetType().Name}]");
             builder.CloseElement();
         };
+    }
+
+    private void RenderImage(RenderTreeBuilder builder, ref int sequence, Image image)
+    {
+        var imageUrl = ExtractUrl(image);
+        var imageName = image.Name?.FirstOrDefault() ?? "Image";
+        
+        if (!string.IsNullOrEmpty(imageUrl))
+        {
+            builder.OpenElement(sequence++, "figure");
+            builder.AddAttribute(sequence++, "class", "attachment-image");
+            
+            builder.OpenElement(sequence++, "img");
+            builder.AddAttribute(sequence++, "src", imageUrl);
+            builder.AddAttribute(sequence++, "alt", imageName);
+            builder.AddAttribute(sequence++, "loading", "lazy");
+            builder.CloseElement();
+            
+            if (!string.IsNullOrEmpty(imageName) && imageName != "Image")
+            {
+                builder.OpenElement(sequence++, "figcaption");
+                builder.AddContent(sequence++, imageName);
+                builder.CloseElement();
+            }
+            
+            builder.CloseElement(); // figure
+        }
+    }
+
+    private void RenderVideo(RenderTreeBuilder builder, ref int sequence, Video video)
+    {
+        var videoUrl = ExtractUrl(video);
+        var videoName = video.Name?.FirstOrDefault() ?? "Video";
+        
+        if (!string.IsNullOrEmpty(videoUrl))
+        {
+            builder.OpenElement(sequence++, "figure");
+            builder.AddAttribute(sequence++, "class", "attachment-video");
+            
+            builder.OpenElement(sequence++, "video");
+            builder.AddAttribute(sequence++, "controls", true);
+            builder.AddAttribute(sequence++, "preload", "metadata");
+            
+            builder.OpenElement(sequence++, "source");
+            builder.AddAttribute(sequence++, "src", videoUrl);
+            if (video.MediaType != null)
+            {
+                builder.AddAttribute(sequence++, "type", video.MediaType);
+            }
+            builder.CloseElement(); // source
+            
+            builder.AddContent(sequence++, "Your browser does not support the video tag.");
+            builder.CloseElement(); // video
+            
+            if (!string.IsNullOrEmpty(videoName) && videoName != "Video")
+            {
+                builder.OpenElement(sequence++, "figcaption");
+                builder.AddContent(sequence++, videoName);
+                builder.CloseElement();
+            }
+            
+            builder.CloseElement(); // figure
+        }
+    }
+
+    private void RenderAudio(RenderTreeBuilder builder, ref int sequence, Audio audio)
+    {
+        var audioUrl = ExtractUrl(audio);
+        var audioName = audio.Name?.FirstOrDefault() ?? "Audio";
+        
+        if (!string.IsNullOrEmpty(audioUrl))
+        {
+            builder.OpenElement(sequence++, "figure");
+            builder.AddAttribute(sequence++, "class", "attachment-audio");
+            
+            builder.OpenElement(sequence++, "audio");
+            builder.AddAttribute(sequence++, "controls", true);
+            builder.AddAttribute(sequence++, "preload", "metadata");
+            
+            builder.OpenElement(sequence++, "source");
+            builder.AddAttribute(sequence++, "src", audioUrl);
+            if (audio.MediaType != null)
+            {
+                builder.AddAttribute(sequence++, "type", audio.MediaType);
+            }
+            builder.CloseElement(); // source
+            
+            builder.AddContent(sequence++, "Your browser does not support the audio tag.");
+            builder.CloseElement(); // audio
+            
+            if (!string.IsNullOrEmpty(audioName) && audioName != "Audio")
+            {
+                builder.OpenElement(sequence++, "figcaption");
+                builder.AddContent(sequence++, audioName);
+                builder.CloseElement();
+            }
+            
+            builder.CloseElement(); // figure
+        }
+    }
+
+    private void RenderDocument(RenderTreeBuilder builder, ref int sequence, Document document)
+    {
+        var docUrl = ExtractUrl(document);
+        var docName = document.Name?.FirstOrDefault() ?? "Document";
+        
+        if (!string.IsNullOrEmpty(docUrl))
+        {
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "attachment-document");
+            
+            builder.OpenElement(sequence++, "a");
+            builder.AddAttribute(sequence++, "href", docUrl);
+            builder.AddAttribute(sequence++, "target", "_blank");
+            builder.AddAttribute(sequence++, "rel", "noopener noreferrer");
+            builder.AddAttribute(sequence++, "class", "document-link");
+            
+            builder.OpenElement(sequence++, "span");
+            builder.AddAttribute(sequence++, "class", "document-icon");
+            builder.AddContent(sequence++, "📄");
+            builder.CloseElement();
+            
+            builder.AddContent(sequence++, " ");
+            builder.AddContent(sequence++, docName);
+            
+            if (!string.IsNullOrEmpty(document.MediaType))
+            {
+                builder.OpenElement(sequence++, "span");
+                builder.AddAttribute(sequence++, "class", "document-type");
+                builder.AddContent(sequence++, $" ({document.MediaType})");
+                builder.CloseElement();
+            }
+            
+            builder.CloseElement(); // a
+            builder.CloseElement(); // div
+        }
+    }
+
+    private void RenderLink(RenderTreeBuilder builder, ref int sequence, Link link)
+    {
+        var linkUrl = link.Href?.ToString() ?? string.Empty;
+        var linkName = link.Name?.FirstOrDefault() ?? linkUrl;
+        
+        if (!string.IsNullOrEmpty(linkUrl))
+        {
+            builder.OpenElement(sequence++, "a");
+            builder.AddAttribute(sequence++, "href", linkUrl);
+            builder.AddAttribute(sequence++, "target", "_blank");
+            builder.AddAttribute(sequence++, "rel", "noopener noreferrer");
+            builder.AddAttribute(sequence++, "class", "attachment-link");
+            builder.AddContent(sequence++, linkName);
+            builder.CloseElement();
+        }
+    }
+
+    private string ExtractUrl(KristofferStrube.ActivityStreams.Object obj)
+    {
+        // Try to get URL from Url property
+        if (obj.Url?.Any() == true)
+        {
+            var firstUrl = obj.Url.First();
+            if (firstUrl is Link link && link.Href != null)
+            {
+                return link.Href.ToString();
+            }
+        }
+
+        // For Image/Video/Audio, also check direct Url property on those types
+        if (obj is Image image && image.Url?.Any() == true)
+        {
+            var urlLink = image.Url.FirstOrDefault();
+            if (urlLink?.Href != null)
+            {
+                return urlLink.Href.ToString();
+            }
+        }
+
+        return string.Empty;
     }
 }

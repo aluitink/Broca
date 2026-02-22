@@ -1,0 +1,160 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@inherits ComponentBase
+
+<div class="@($"fluent-video {CssClass}")">
+    @if (Video != null)
+    {
+        <FluentCard>
+            @if (!string.IsNullOrEmpty(GetVideoUrl()))
+            {
+                <video controls style="width: 100%; max-height: 600px; background: black;">
+                    <source src="@GetVideoUrl()" type="@(Video.MediaType ?? "video/mp4")" />
+                    Your browser does not support the video tag.
+                </video>
+            }
+            else
+            {
+                <div style="padding: 40px; text-align: center; background: var(--neutral-layer-2);">
+                    <FluentIcon Value="@(new Icons.Regular.Size48.Video())" Color="Color.Neutral" />
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                        Video not available
+                    </FluentLabel>
+                </div>
+            }
+
+            @if (ShowMetadata)
+            {
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="padding: 12px;">
+                    @if (!string.IsNullOrEmpty(GetVideoName()))
+                    {
+                        <FluentLabel Typo="Typography.Header" Weight="FontWeight.Bold">
+                            @GetVideoName()
+                        </FluentLabel>
+                    }
+
+                    @if (!string.IsNullOrEmpty(GetDescription()))
+                    {
+                        <FluentLabel Typo="Typography.Body">
+                            @GetDescription()
+                        </FluentLabel>
+                    }
+
+                    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8">
+                        @if (!string.IsNullOrEmpty(Video.MediaType))
+                        {
+                            <FluentBadge Appearance="Appearance.Lightweight">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Video())" Slot="start" />
+                                @GetFileType()
+                            </FluentBadge>
+                        }
+
+                        @if (Video.Duration.HasValue && Video.Duration.Value.TotalSeconds > 0)
+                        {
+                            <FluentBadge Appearance="Appearance.Lightweight">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" Slot="start" />
+                                @FormatDuration(Video.Duration.Value)
+                            </FluentBadge>
+                        }
+
+                        @if (ShowActions)
+                        {
+                            <FluentButton Appearance="Appearance.Lightweight" 
+                                          IconStart="@(new Icons.Regular.Size16.ArrowDownload())"
+                                          OnClick="@DownloadVideo">
+                                Download
+                            </FluentButton>
+                        }
+                    </FluentStack>
+                </FluentStack>
+            }
+
+            @if (AdditionalContent != null)
+            {
+                <FluentDivider />
+                @AdditionalContent(Video)
+            }
+        </FluentCard>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Video object to render.
+    /// </summary>
+    [Parameter]
+    public Video? Video { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show metadata.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show action buttons.
+    /// </summary>
+    [Parameter]
+    public bool ShowActions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Video>? AdditionalContent { get; set; }
+
+    private string GetVideoUrl()
+    {
+        if (Video?.Url?.Any() == true)
+        {
+            var url = Video.Url.First();
+            if (url is Link link && link.Href != null)
+                return link.Href.ToString();
+            return url.ToString() ?? string.Empty;
+        }
+        return string.Empty;
+    }
+
+    private string GetVideoName()
+    {
+        return Video?.Name?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetDescription()
+    {
+        return Video?.Summary?.FirstOrDefault() ?? Video?.Content?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetFileType()
+    {
+        if (string.IsNullOrEmpty(Video?.MediaType))
+            return "Video";
+
+        var parts = Video.MediaType.Split('/');
+        return parts.Length > 1 ? parts[1].ToUpper() : Video.MediaType.ToUpper();
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+            return duration.ToString(@"h\:mm\:ss");
+        return duration.ToString(@"m\:ss");
+    }
+
+    private void DownloadVideo()
+    {
+        var url = GetVideoUrl();
+        if (!string.IsNullOrEmpty(url))
+        {
+            // This would typically trigger a download
+            // Implementation would depend on the platform
+        }
+    }
+}

@@ -1,0 +1,155 @@
+@page "/notifications"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Components
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>Notifications - Broca</PageTitle>
+
+@if (!AuthState.IsAuthenticated)
+{
+    <FluentCard>
+        <h2>Authentication Required</h2>
+        <p>Please login to view your notifications.</p>
+        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/notifications")}"))">
+            Login
+        </FluentButton>
+    </FluentCard>
+}
+else
+{
+    <div class="notifications-container">
+        <FluentCard Class="notifications-header">
+            <h1>
+                <FluentIcon Value="@(new Icons.Regular.Size24.Alert())" Color="Color.Accent" />
+                Notifications
+            </h1>
+            <p>Activity that mentions you or interacts with your content</p>
+        </FluentCard>
+
+        @if (_inboxUrl != null)
+        {
+            <NotificationFeed 
+                InboxUrl="@_inboxUrl"
+                Title=""
+                PageSize="20"
+                ShowFilters="true"
+                AutoMarkAsRead="true"
+                OnNotificationClick="@HandleNotificationClick">
+                <LoadingTemplate>
+                    <FluentCard Class="loading-state">
+                        <FluentProgressRing />
+                        <p>Loading notifications...</p>
+                    </FluentCard>
+                </LoadingTemplate>
+                <EmptyTemplate>
+                    <FluentCard Class="empty-state">
+                        <FluentIcon Value="@(new Icons.Regular.Size48.Alert())" Color="Color.Neutral" />
+                        <h3>No notifications</h3>
+                        <p>When someone interacts with your content, you'll see it here.</p>
+                    </FluentCard>
+                </EmptyTemplate>
+                <ErrorTemplate Context="error">
+                    <FluentCard Class="error-state">
+                        <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
+                        <h3>Failed to load notifications</h3>
+                        <p>@error</p>
+                        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => StateHasChanged())">
+                            Retry
+                        </FluentButton>
+                    </FluentCard>
+                </ErrorTemplate>
+            </NotificationFeed>
+        }
+        else
+        {
+            <FluentCard>
+                <FluentIcon Value="@(new Icons.Regular.Size24.Warning())" Color="Color.Warning" />
+                <p>Unable to determine inbox URL for notifications.</p>
+            </FluentCard>
+        }
+    </div>
+}
+
+@code {
+    private Uri? _inboxUrl;
+
+    protected override void OnInitialized()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthStateChanged;
+        UpdateInboxUrl();
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        UpdateInboxUrl();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateInboxUrl()
+    {
+        _inboxUrl = AuthState.GetInboxUrl();
+    }
+
+    private Task HandleNotificationClick(NotificationFeed.Notification notification)
+    {
+        // Navigate to the activity or object if applicable
+        var activityObject = notification.Object;
+        if (activityObject?.Id is string objectId && !string.IsNullOrEmpty(objectId))
+        {
+            // Could navigate to a detailed view of the activity
+            // Navigation.NavigateTo($"/activity/{Uri.EscapeDataString(objectId)}");
+        }
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}
+
+<style>
+    .notifications-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .notifications-header h1 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .notifications-header p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+
+    .loading-state,
+    .empty-state,
+    .error-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 2rem;
+        text-align: center;
+        gap: 1rem;
+    }
+
+    .empty-state h3,
+    .error-state h3 {
+        margin: 0;
+    }
+
+    .empty-state p,
+    .error-state p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+</style>

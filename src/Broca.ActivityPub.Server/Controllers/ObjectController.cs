@@ -1,5 +1,6 @@
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
+using Broca.ActivityPub.Server.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -14,10 +15,11 @@ namespace Broca.ActivityPub.Server.Controllers;
 /// </summary>
 [ApiController]
 [Route("users/{username}/objects")]
-public class ObjectController : ControllerBase
+public class ObjectController : ActivityPubControllerBase
 {
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
+    private readonly ObjectEnrichmentService _enrichmentService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<ObjectController> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -25,11 +27,13 @@ public class ObjectController : ControllerBase
     public ObjectController(
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
+        ObjectEnrichmentService enrichmentService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<ObjectController> logger)
     {
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
+        _enrichmentService = enrichmentService;
         _options = options.Value;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
@@ -57,13 +61,16 @@ public class ObjectController : ControllerBase
             }
 
             // Construct the full object ID from the route
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
+
+            _logger.LogDebug("Looking for object with full ID: {FullObjectId}", fullObjectId);
 
             // Get the object/activity
             var obj = await _activityRepository.GetActivityByIdAsync(fullObjectId);
             if (obj == null)
             {
+                _logger.LogWarning("Object not found with ID: {FullObjectId}", fullObjectId);
                 return NotFound(new { error = "Object not found" });
             }
 
@@ -72,6 +79,9 @@ public class ObjectController : ControllerBase
             {
                 asObject.Id = fullObjectId;
             }
+
+            // Enrich the object with collection metadata (replies, likes, shares)
+            await _enrichmentService.EnrichActivityAsync(obj, baseUrl);
 
             return Ok(obj);
         }
@@ -100,7 +110,7 @@ public class ObjectController : ControllerBase
             }
 
             // Construct the full object ID
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
 
             // Verify object exists
@@ -179,7 +189,7 @@ public class ObjectController : ControllerBase
             }
 
             // Construct the full object ID
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
 
             // Verify object exists
@@ -258,7 +268,7 @@ public class ObjectController : ControllerBase
             }
 
             // Construct the full object ID
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             var fullObjectId = $"{baseUrl}/users/{username}/objects/{objectId}";
 
             // Verify object exists

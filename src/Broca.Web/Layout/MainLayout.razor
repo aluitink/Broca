@@ -37,7 +37,18 @@
             <FluentSpacer />
             <a href="https://learn.microsoft.com/en-us/aspnet/core/blazor" target="_blank">About Blazor</a>
         </FluentFooter>
+        <FluentDialogProvider />
     </FluentLayout>
+    
+    @if (AuthState.IsAuthenticated)
+    {
+        <AddContentButton 
+            ButtonTemplate="FluentAddContentButtonRenderer.Template"
+            Placeholder="What would you like to share?"
+            ButtonTitle="Create new post"
+            OnPostCreated="@HandlePostCreated">
+        </AddContentButton>
+    }
 </ActivityPubClientProvider>
 
 @code {
@@ -61,10 +72,16 @@
 
     private string GetUsername()
     {
-        if (AuthState.CurrentActor is Person person && !string.IsNullOrWhiteSpace(person.PreferredUsername))
-            return $"@{person.PreferredUsername}";
+        if (AuthState.CurrentActor != null && !string.IsNullOrWhiteSpace(AuthState.CurrentActor.PreferredUsername))
+            return $"@{AuthState.CurrentActor.PreferredUsername}";
         
         return "User";
+    }
+
+    private void HandlePostCreated()
+    {
+        // Post created successfully - the page will refresh if needed
+        InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()

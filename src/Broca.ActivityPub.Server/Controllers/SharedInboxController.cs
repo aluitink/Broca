@@ -21,7 +21,7 @@ namespace Broca.ActivityPub.Server.Controllers;
 /// </remarks>
 [ApiController]
 [Route("inbox")]
-public class SharedInboxController : ControllerBase
+public class SharedInboxController : ActivityPubControllerBase
 {
     private readonly IInboxHandler _inboxHandler;
     private readonly IActorRepository _actorRepository;
@@ -229,7 +229,7 @@ public class SharedInboxController : ControllerBase
     private async Task<List<string>> GetLocalRecipientsAsync(Activity activity)
     {
         var recipients = new HashSet<string>();
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        var baseUrl = GetBaseUrl();
 
         void AddRecipients(IEnumerable<IObjectOrLink>? items)
         {

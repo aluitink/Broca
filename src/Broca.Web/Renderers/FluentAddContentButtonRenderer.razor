@@ -1,0 +1,77 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@using Broca.Web.Components
+@inject IDialogService DialogService
+
+@* 
+    FluentAddContentButtonRenderer - A Fluent UI floating action button for the AddContentButton component.
+    This renderer provides a modern FAB (Floating Action Button) that floats in the bottom right corner.
+    The actual dialog is rendered by the FluentDialogProvider using the PostComposerDialog component.
+*@
+
+<div class="fluent-add-content-wrapper">
+    @if (!Context.HideButton)
+    {
+        <FluentButton 
+            Appearance="Appearance.Accent"
+            IconStart="@(new Icons.Regular.Size24.Edit())"
+            class="add-content-fab"
+            Title="@Context.ButtonTitle"
+            OnClick="HandleClick"
+            Style="@GetButtonStyle()" />
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The AddContentButton component context.
+    /// </summary>
+    [Parameter]
+    public AddContentButton Context { get; set; } = default!;
+
+    private async Task HandleClick()
+    {
+        var dialogData = new PostComposerDialogData
+        {
+            Title = string.IsNullOrWhiteSpace(Context.InReplyToId) ? Context.DialogTitle : "Reply",
+            Placeholder = Context.Placeholder,
+            MaxLength = Context.MaxLength,
+            Rows = Context.DialogRows,
+            AcceptedFileTypes = Context.AcceptedFileTypes,
+            InReplyToId = Context.InReplyToId,
+            OnPostCreated = Context.OnPostCreated
+        };
+
+        var parameters = new DialogParameters<PostComposerDialogData>()
+        {
+            Content = dialogData,
+            Title = dialogData.Title,
+            Width = "800px",
+            Height = "auto",
+            Modal = true,
+            PreventDismissOnOverlayClick = false,
+            TrapFocus = true,
+            ShowDismiss = true,
+            PrimaryAction = null,
+            SecondaryAction = null
+        };
+
+        await DialogService.ShowDialogAsync<PostComposerDialog>(dialogData, parameters);
+    }
+
+    private string GetButtonStyle()
+    {
+        return $"position: fixed; bottom: {Context.BottomPosition}px; right: {Context.RightPosition}px; z-index: 1000;";
+    }
+
+    /// <summary>
+    /// Static template for use with AddContentButton.
+    /// </summary>
+    public static RenderFragment<AddContentButton> Template => context => builder =>
+    {
+        builder.OpenComponent<FluentAddContentButtonRenderer>(0);
+        builder.AddAttribute(1, "Context", context);
+        builder.CloseComponent();
+    };
+}

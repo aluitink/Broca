@@ -1,0 +1,368 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-reply-thread @CssClass">
+    @if (isLoading && !replies.Any())
+    {
+        @if (LoadingTemplate != null)
+        {
+            @LoadingTemplate
+        }
+        else
+        {
+            <div class="thread-loading">Loading conversation...</div>
+        }
+    }
+
+    @if (error != null)
+    {
+        @if (ErrorTemplate != null)
+        {
+            @ErrorTemplate(error)
+        }
+        else
+        {
+            <div class="thread-error">@error</div>
+        }
+    }
+
+    @if (RootPost != null)
+    {
+        <div class="thread-root">
+            @if (PostTemplate != null)
+            {
+                @PostTemplate(RootPost)
+            }
+            else
+            {
+                <ObjectDisplay Object="@RootPost" />
+            }
+        </div>
+    }
+
+    @if (replies.Any())
+    {
+        <div class="thread-replies">
+            @foreach (var reply in GetTopLevelReplies())
+            {
+                <div class="reply-item @(GetReplyClass(reply))">
+                    @RenderReply(reply)
+                </div>
+            }
+        </div>
+    }
+    else if (!isLoading && ShowEmptyState)
+    {
+        @if (EmptyTemplate != null)
+        {
+            @EmptyTemplate
+        }
+        else
+        {
+            <div class="thread-empty">
+                <p>No replies yet. Be the first to reply!</p>
+            </div>
+        }
+    }
+
+    @if (ShowLoadMore && hasMore)
+    {
+        <div class="thread-load-more">
+            <button @onclick="LoadMoreAsync" disabled="@isLoading" class="load-more-button">
+                @if (isLoading)
+                {
+                    <span>Loading...</span>
+                }
+                else
+                {
+                    <span>Load more replies</span>
+                }
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private List<ReplyNode> replies = new();
+    private bool isLoading;
+    private bool hasMore;
+    private string? error;
+    private int currentPage = 0;
+
+    /// <summary>
+    /// Gets or sets the root post ID to load replies for.
+    /// </summary>
+    [Parameter]
+    public string? RootPostId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the root post object.
+    /// </summary>
+    [Parameter]
+    public KristofferStrube.ActivityStreams.Object? RootPost { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum nesting depth to display.
+    /// </summary>
+    [Parameter]
+    public int MaxDepth { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the page size for loading replies.
+    /// </summary>
+    [Parameter]
+    public int PageSize { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets whether to show the load more button.
+    /// </summary>
+    [Parameter]
+    public bool ShowLoadMore { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show empty state.
+    /// </summary>
+    [Parameter]
+    public bool ShowEmptyState { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to auto-collapse deep threads.
+    /// </summary>
+    [Parameter]
+    public bool AutoCollapseDeep { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the depth at which to auto-collapse.
+    /// </summary>
+    [Parameter]
+    public int AutoCollapseDepth { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom template for rendering posts.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? PostTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loading template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the empty state template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? EmptyTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when a reply is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<KristofferStrube.ActivityStreams.Object> OnReplyClick { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if ((RootPostId != null || RootPost != null) && !replies.Any())
+        {
+            await LoadRepliesAsync();
+        }
+    }
+
+    private async Task LoadRepliesAsync()
+    {
+        if (isLoading) return;
+
+        isLoading = true;
+        error = null;
+        StateHasChanged();
+
+        try
+        {
+            var targetPostId = RootPostId ?? RootPost?.Id;
+            if (string.IsNullOrEmpty(targetPostId)) return;
+
+            // TODO: This would need a proper API endpoint that returns replies
+            // For now, this is a placeholder implementation
+            // In a real implementation, you'd call something like:
+            // var repliesCollection = await Client.GetAsync<OrderedCollection>(
+            //     new Uri($"{targetPostId}/replies?page={currentPage}&limit={PageSize}")
+            // );
+            
+            // Placeholder: simulate loading
+            await Task.Delay(500);
+            hasMore = false;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load replies: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        currentPage++;
+        await LoadRepliesAsync();
+    }
+
+    private IEnumerable<ReplyNode> GetTopLevelReplies()
+    {
+        return replies.Where(r => r.Depth == 0);
+    }
+
+    private string GetReplyClass(ReplyNode reply)
+    {
+        var classes = new List<string>();
+        
+        classes.Add($"reply-depth-{reply.Depth}");
+        
+        if (reply.IsCollapsed)
+            classes.Add("collapsed");
+        
+        if (AutoCollapseDeep && reply.Depth >= AutoCollapseDepth)
+            classes.Add("deep-reply");
+
+        return string.Join(" ", classes);
+    }
+
+    private RenderFragment RenderReply(ReplyNode reply)
+    {
+        return builder =>
+        {
+            var sequence = 0;
+
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "reply-content");
+
+            if (reply.IsCollapsed)
+            {
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "reply-collapsed");
+                builder.OpenElement(sequence++, "button");
+                builder.AddAttribute(sequence++, "class", "expand-button");
+                builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => ExpandReply(reply)));
+                builder.AddContent(sequence++, $"[+] Show {reply.ChildCount} hidden replies");
+                builder.CloseElement();
+                builder.CloseElement();
+            }
+            else
+            {
+                // Reply header with collapse button
+                if (reply.ChildCount > 0)
+                {
+                    builder.OpenElement(sequence++, "button");
+                    builder.AddAttribute(sequence++, "class", "collapse-button");
+                    builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => CollapseReply(reply)));
+                    builder.AddAttribute(sequence++, "title", "Collapse thread");
+                    builder.AddContent(sequence++, "−");
+                    builder.CloseElement();
+                }
+
+                // Reply post content
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "reply-post");
+                
+                if (PostTemplate != null)
+                {
+                    builder.AddContent(sequence++, PostTemplate(reply.Post));
+                }
+                else
+                {
+                    builder.OpenComponent<ObjectDisplay>(sequence++);
+                    builder.AddAttribute(sequence++, "Object", reply.Post);
+                    builder.CloseComponent();
+                }
+                
+                builder.CloseElement();
+
+                // Nested replies
+                if (reply.Children.Any() && reply.Depth < MaxDepth)
+                {
+                    builder.OpenElement(sequence++, "div");
+                    builder.AddAttribute(sequence++, "class", "nested-replies");
+
+                    foreach (var child in reply.Children)
+                    {
+                        builder.OpenElement(sequence++, "div");
+                        builder.AddAttribute(sequence++, "class", $"reply-item {GetReplyClass(child)}");
+                        builder.AddContent(sequence++, RenderReply(child));
+                        builder.CloseElement();
+                    }
+
+                    builder.CloseElement();
+                }
+                else if (reply.Depth >= MaxDepth && reply.ChildCount > 0)
+                {
+                    builder.OpenElement(sequence++, "div");
+                    builder.AddAttribute(sequence++, "class", "max-depth-indicator");
+                    builder.AddContent(sequence++, $"... {reply.ChildCount} more replies");
+                    builder.CloseElement();
+                }
+            }
+
+            builder.CloseElement(); // reply-content
+        };
+    }
+
+    private void CollapseReply(ReplyNode reply)
+    {
+        reply.IsCollapsed = true;
+        StateHasChanged();
+    }
+
+    private void ExpandReply(ReplyNode reply)
+    {
+        reply.IsCollapsed = false;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Represents a node in the reply tree.
+    /// </summary>
+    private class ReplyNode
+    {
+        public KristofferStrube.ActivityStreams.Object Post { get; set; } = null!;
+        public int Depth { get; set; }
+        public List<ReplyNode> Children { get; set; } = new();
+        public bool IsCollapsed { get; set; }
+        public int ChildCount => GetTotalChildCount();
+
+        private int GetTotalChildCount()
+        {
+            var count = Children.Count;
+            foreach (var child in Children)
+            {
+                count += child.GetTotalChildCount();
+            }
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the reply thread.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        replies.Clear();
+        currentPage = 0;
+        await LoadRepliesAsync();
+    }
+}

@@ -32,15 +32,16 @@ else
                 <div class="tab-content">
                     @if (_followersUrl != null)
                     {
-                        <CollectionLoader TItem="KristofferStrube.ActivityStreams.Actor"
-                                         CollectionUrl="@_followersUrl"
-                                         PageSize="20"
-                                         UseVirtualization="true">
-                            <ItemTemplate Context="actor">
+                        <FollowersList FollowersUrl="@_followersUrl"
+                                      PageSize="20"
+                                      UseVirtualization="true"
+                                      ShowFollowButton="true"
+                                      Title="">
+                            <ActorTemplate Context="follower">
                                 <FluentCard Class="actor-card">
-                                    <ActorProfile ActorUri="@(new Uri(actor.Id ?? string.Empty))" ShowActions="false" />
+                                    <ActorProfile ActorUri="@(new Uri(follower.Id ?? string.Empty))" ShowActions="true" />
                                 </FluentCard>
-                            </ItemTemplate>
+                            </ActorTemplate>
                             <EmptyTemplate>
                                 <FluentCard Class="empty-state">
                                     <FluentIcon Value="@(new Icons.Regular.Size48.People())" Color="Color.Neutral" />
@@ -55,7 +56,7 @@ else
                                     <p>@error</p>
                                 </FluentCard>
                             </ErrorTemplate>
-                        </CollectionLoader>
+                        </FollowersList>
                     }
                     else
                     {
@@ -70,15 +71,16 @@ else
                 <div class="tab-content">
                     @if (_followingUrl != null)
                     {
-                        <CollectionLoader TItem="KristofferStrube.ActivityStreams.Actor"
-                                         CollectionUrl="@_followingUrl"
-                                         PageSize="20"
-                                         UseVirtualization="true">
-                            <ItemTemplate Context="actor">
+                        <FollowingList FollowingUrl="@_followingUrl"
+                                      PageSize="20"
+                                      UseVirtualization="true"
+                                      ShowUnfollowButton="true"
+                                      Title="">
+                            <ActorTemplate Context="following">
                                 <FluentCard Class="actor-card">
-                                    <ActorProfile ActorUri="@(new Uri(actor.Id ?? string.Empty))" ShowActions="false" />
+                                    <ActorProfile ActorUri="@(new Uri(following.Id ?? string.Empty))" ShowActions="true" />
                                 </FluentCard>
-                            </ItemTemplate>
+                            </ActorTemplate>
                             <EmptyTemplate>
                                 <FluentCard Class="empty-state">
                                     <FluentIcon Value="@(new Icons.Regular.Size48.PersonAdd())" Color="Color.Neutral" />
@@ -93,7 +95,7 @@ else
                                     <p>@error</p>
                                 </FluentCard>
                             </ErrorTemplate>
-                        </CollectionLoader>
+                        </FollowingList>
                     }
                     else
                     {

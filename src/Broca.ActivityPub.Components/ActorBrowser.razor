@@ -63,12 +63,26 @@
     private KristofferStrube.ActivityStreams.Object? currentActor;
     private bool isLoading;
     private string? error;
+    private List<string> searchHistory = new();
+    private const int MaxHistorySize = 10;
 
     /// <summary>
     /// Gets or sets the CSS class for the container.
     /// </summary>
     [Parameter]
     public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show search history.
+    /// </summary>
+    [Parameter]
+    public bool ShowSearchHistory { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to enable WebFinger lookup.
+    /// </summary>
+    [Parameter]
+    public bool EnableWebFinger { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the search input template.
@@ -118,21 +132,34 @@
 
         try
         {
-            // TODO: Implement WebFinger lookup if it's a handle (user@domain)
-            // For now, we'll try to get the actor directly if it's a URI
-            if (Uri.TryCreate(searchQuery, UriKind.Absolute, out var actorUri))
+            // Try WebFinger lookup first if enabled and looks like a handle
+            if (EnableWebFinger && searchQuery.Contains('@') && !searchQuery.StartsWith("http"))
+            {
+                currentActor = await ResolveViaWebFingerAsync(searchQuery);
+            }
+            // Try direct URI lookup
+            else if (Uri.TryCreate(searchQuery, UriKind.Absolute, out var actorUri))
             {
                 currentActor = await Client.GetActorAsync(actorUri);
             }
+            // Try as an alias/handle
             else
             {
-                // Try as an alias/handle
                 currentActor = await Client.GetActorByAliasAsync(searchQuery);
             }
 
-            if (OnActorFound.HasDelegate)
+            if (currentActor != null)
             {
-                await OnActorFound.InvokeAsync(currentActor);
+                AddToHistory(searchQuery);
+
+                if (OnActorFound.HasDelegate)
+                {
+                    await OnActorFound.InvokeAsync(currentActor);
+                }
+            }
+            else
+            {
+                error = "Actor not found";
             }
         }
         catch (Exception ex)
@@ -144,6 +171,83 @@
             isLoading = false;
             StateHasChanged();
         }
+    }
+
+    private async Task<KristofferStrube.ActivityStreams.Object?> ResolveViaWebFingerAsync(string handle)
+    {
+        try
+        {
+            // WebFinger implementation
+            // Format: user@domain.com
+            var parts = handle.Split('@', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 2)
+            {
+                throw new FormatException("Invalid handle format. Expected user@domain");
+            }
+
+            var user = parts[0];
+            var domain = parts[1];
+            var webFingerUrl = $"https://{domain}/.well-known/webfinger?resource=acct:{user}@{domain}";
+            
+            // Make WebFinger request to get actor URL
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Add("Accept", "application/jrd+json");
+            
+            var response = await httpClient.GetStringAsync(webFingerUrl);
+            
+            // Parse WebFinger response to extract actor URL
+            // This is a simplified implementation
+            // You may want to use a JSON parser for more robust handling
+            var actorUrlMatch = System.Text.RegularExpressions.Regex.Match(
+                response, 
+                @"""href""\s*:\s*""([^""]+)""[^}]*""type""\s*:\s*""application/activity\+json"""
+            );
+            
+            if (actorUrlMatch.Success && Uri.TryCreate(actorUrlMatch.Groups[1].Value, UriKind.Absolute, out var actorUri))
+            {
+                return await Client.GetActorAsync(actorUri);
+            }
+            
+            throw new Exception("Could not extract actor URL from WebFinger response");
+        }
+        catch (Exception ex)
+        {
+            // Fall back to direct lookup
+            throw new Exception($"WebFinger lookup failed: {ex.Message}", ex);
+        }
+    }
+
+    private void AddToHistory(string query)
+    {
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            searchHistory.Remove(query); // Remove if already exists
+            searchHistory.Insert(0, query);
+            
+            // Keep only the most recent items
+            if (searchHistory.Count > MaxHistorySize)
+            {
+                searchHistory.RemoveRange(MaxHistorySize, searchHistory.Count - MaxHistorySize);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Searches from history.
+    /// </summary>
+    public async Task SearchFromHistoryAsync(string query)
+    {
+        searchQuery = query;
+        await SearchAsync();
+    }
+
+    /// <summary>
+    /// Clears the search history.
+    /// </summary>
+    public void ClearHistory()
+    {
+        searchHistory.Clear();
+        StateHasChanged();
     }
 
     /// <summary>

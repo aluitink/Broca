@@ -11,11 +11,12 @@ namespace Broca.ActivityPub.Server.Controllers;
 
 [ApiController]
 [Route("users/{username}")]
-public class ActorController : ControllerBase
+public class ActorController : ActivityPubControllerBase
 {
     private readonly IActorRepository _actorRepository;
     private readonly IActivityRepository _activityRepository;
     private readonly ICollectionService _collectionService;
+    private readonly ObjectEnrichmentService _enrichmentService;
     private readonly IdentityProviderService? _identityProviderService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<ActorController> _logger;
@@ -25,6 +26,7 @@ public class ActorController : ControllerBase
         IActorRepository actorRepository,
         IActivityRepository activityRepository,
         ICollectionService collectionService,
+        ObjectEnrichmentService enrichmentService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<ActorController> logger,
         IdentityProviderService? identityProviderService = null)
@@ -32,6 +34,7 @@ public class ActorController : ControllerBase
         _actorRepository = actorRepository;
         _activityRepository = activityRepository;
         _collectionService = collectionService;
+        _enrichmentService = enrichmentService;
         _identityProviderService = identityProviderService;
         _options = options.Value;
         _logger = logger;
@@ -68,7 +71,7 @@ public class ActorController : ControllerBase
             actor = JsonSerializer.Deserialize<Actor>(actorJson, _jsonOptions)!;
 
             // Add endpoints property to advertise capabilities
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
             actor.ExtensionData ??= new Dictionary<string, JsonElement>();
             
             actor.ExtensionData["endpoints"] = JsonSerializer.SerializeToElement(new
@@ -204,7 +207,7 @@ public class ActorController : ControllerBase
             }
 
             var followers = await _actorRepository.GetFollowersAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = GetBaseUrl();
 
             var collection = new OrderedCollection
             {
@@ -239,7 +242,7 @@ public class ActorController : ControllerBase
             }
 
             var following = await _actorRepository.GetFollowingAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = GetBaseUrl();
 
             var collection = new OrderedCollection
             {
@@ -276,7 +279,10 @@ public class ActorController : ControllerBase
             var offset = page * limit;
             var liked = await _activityRepository.GetLikedByActorAsync(username, limit, offset);
             var totalCount = await _activityRepository.GetLikedByActorCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+
+            // Enrich activities with collection information
+            await _enrichmentService.EnrichActivitiesAsync(liked, baseUrl);
 
             if (page == 0 && limit == 20)
             {
@@ -340,7 +346,10 @@ public class ActorController : ControllerBase
             var offset = page * limit;
             var shared = await _activityRepository.GetSharedByActorAsync(username, limit, offset);
             var totalCount = await _activityRepository.GetSharedByActorCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+
+            // Enrich activities with collection information
+            await _enrichmentService.EnrichActivitiesAsync(shared, baseUrl);
 
             if (page == 0 && limit == 20)
             {

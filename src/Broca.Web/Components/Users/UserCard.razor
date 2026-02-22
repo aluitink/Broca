@@ -1,0 +1,121 @@
+@* Compact user card component *@
+
+<FluentCard Class="@GetCardClass()">
+    <div class="user-card-content">
+        <div class="user-avatar">
+            @if (Actor?.Icon?.FirstOrDefault() is Image icon && icon.Url?.FirstOrDefault()?.Href is Uri avatarUri)
+            {
+                var avatarUrl = avatarUri.ToString();
+                <img src="@avatarUrl" alt="@GetActorName()" class="avatar-image" />
+            }
+            else
+            {
+                <FluentIcon Value="@(new Icons.Regular.Size24.PersonCircle())" Color="Color.Neutral" />
+            }
+        </div>
+        <div class="user-info">
+            <div class="user-header">
+                <div class="user-names">
+                    <h4 class="user-name">@GetActorName()</h4>
+                    @if (!string.IsNullOrEmpty(GetActorHandle()))
+                    {
+                        <span class="user-handle">@GetActorHandle()</span>
+                    }
+                </div>
+                @if (ShowFollowButton && OnFollowClick.HasDelegate)
+                {
+                    <FluentButton Appearance="@(IsFollowing ? Appearance.Outline : Appearance.Accent)" OnClick="@HandleFollowClick" Disabled="@IsProcessing">
+                        @if (IsProcessing) { <FluentProgressRing Style="width: 14px; height: 14px;" /> }
+                        else { @(IsFollowing ? "Following" : "Follow") }
+                    </FluentButton>
+                }
+            </div>
+            @if (!Compact && !string.IsNullOrEmpty(GetBio()))
+            {
+                <p class="user-bio">@GetBio()</p>
+            }
+            @if (ShowStats)
+            {
+                <div class="user-stats">
+                    @if (FollowersCount.HasValue) { <span class="stat"><strong>@FormatCount(FollowersCount.Value)</strong> <span class="stat-label">Followers</span></span> }
+                    @if (FollowingCount.HasValue) { <span class="stat"><strong>@FormatCount(FollowingCount.Value)</strong> <span class="stat-label">Following</span></span> }
+                    @if (PostsCount.HasValue) { <span class="stat"><strong>@FormatCount(PostsCount.Value)</strong> <span class="stat-label">Posts</span></span> }
+                </div>
+            }
+        </div>
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public KristofferStrube.ActivityStreams.Object? Actor { get; set; }
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public bool ShowFollowButton { get; set; }
+    [Parameter] public bool IsFollowing { get; set; }
+    [Parameter] public bool ShowStats { get; set; }
+    [Parameter] public int? FollowersCount { get; set; }
+    [Parameter] public int? FollowingCount { get; set; }
+    [Parameter] public int? PostsCount { get; set; }
+    [Parameter] public EventCallback<bool> OnFollowClick { get; set; }
+
+    private bool IsProcessing { get; set; }
+
+    private async Task HandleFollowClick()
+    {
+        IsProcessing = true;
+        StateHasChanged();
+        try { await OnFollowClick.InvokeAsync(IsFollowing); }
+        finally { IsProcessing = false; StateHasChanged(); }
+    }
+
+    private string GetActorName()
+    {
+        if (Actor?.Name?.FirstOrDefault() is string name && !string.IsNullOrWhiteSpace(name)) return name;
+        if (Actor is Person person && !string.IsNullOrWhiteSpace(person.PreferredUsername)) return person.PreferredUsername;
+        return "Unknown User";
+    }
+
+    private string GetCardClass() => Compact ? "user-card user-card-compact" : "user-card";
+
+    private string GetActorHandle()
+    {
+        if (Actor is Person person && !string.IsNullOrWhiteSpace(person.PreferredUsername))
+        {
+            if (Actor.Id != null && Uri.TryCreate(Actor.Id, UriKind.Absolute, out var uri))
+                return $"@{person.PreferredUsername}@{uri.Host}";
+            return $"@{person.PreferredUsername}";
+        }
+        return "";
+    }
+
+    private string GetBio()
+    {
+        if (Actor?.Summary?.FirstOrDefault() is string summary && !string.IsNullOrWhiteSpace(summary))
+        {
+            var stripped = System.Text.RegularExpressions.Regex.Replace(summary, "<.*?>", string.Empty);
+            return stripped.Length > 150 ? stripped.Substring(0, 150) + "..." : stripped;
+        }
+        return "";
+    }
+
+    private string FormatCount(int count) => count >= 1000000 ? $"{count / 1000000.0:F1}M" : count >= 1000 ? $"{count / 1000.0:F1}K" : count.ToString();
+}
+
+<style>
+    .user-card { transition: all 0.2s ease; cursor: pointer; }
+    .user-card:hover { transform: translateY(-2px); box-shadow: var(--elevation-shadow-card-hover); }
+    .user-card-content { display: flex; gap: 1rem; padding: 0.75rem; }
+    .user-card-compact .user-card-content { padding: 0.5rem; gap: 0.75rem; }
+    .user-avatar { flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: var(--neutral-layer-2); display: flex; align-items: center; justify-content: center; }
+    .user-card-compact .user-avatar { width: 40px; height: 40px; }
+    .avatar-image { width: 100%; height: 100%; object-fit: cover; }
+    .user-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    .user-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+    .user-names { flex: 1; min-width: 0; }
+    .user-name { margin: 0; font-size: 1rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-handle { font-size: 0.875rem; color: var(--neutral-foreground-hint); display: block; }
+    .user-bio { margin: 0; font-size: 0.875rem; color: var(--neutral-foreground-rest); line-height: 1.5; }
+    .user-stats { display: flex; gap: 1rem; font-size: 0.875rem; }
+    .stat { display: flex; gap: 0.25rem; }
+    .stat strong { font-weight: 600; }
+    .stat-label { color: var(--neutral-foreground-hint); }
+</style>

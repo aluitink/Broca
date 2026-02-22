@@ -1,0 +1,198 @@
+@page "/explore"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Components
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>Explore - Broca</PageTitle>
+
+<div class="explore-container">
+    <FluentCard Class="explore-header">
+        <h1>
+            <FluentIcon Value="@(new Icons.Regular.Size24.Search())" Color="Color.Accent" />
+            Explore the Fediverse
+        </h1>
+        <p>Search for and discover actors across the ActivityPub network</p>
+    </FluentCard>
+
+    <FluentCard Class="search-card">
+        <ActorBrowser OnActorFound="@HandleActorFound">
+            <SearchTemplate Context="searchContext">
+                <div class="search-input-container">
+                    <FluentTextField 
+                        @bind-Value="searchContext.Query" 
+                        Placeholder="Enter actor handle (e.g., user@mastodon.social) or actor URL"
+                        Style="flex: 1;"
+                        Immediate="true">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Search())" Slot="start" />
+                    </FluentTextField>
+                    <FluentButton 
+                        Appearance="Appearance.Accent" 
+                        OnClick="@searchContext.Execute">
+                        Search
+                    </FluentButton>
+                </div>
+            </SearchTemplate>
+            <LoadingTemplate>
+                <FluentCard Class="loading-state">
+                    <FluentProgressRing />
+                    <p>Searching for actor...</p>
+                </FluentCard>
+            </LoadingTemplate>
+            <ErrorTemplate Context="error">
+                <FluentCard Class="error-state">
+                    <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
+                    <h3>Search failed</h3>
+                    <p>@error</p>
+                </FluentCard>
+            </ErrorTemplate>
+            <ProfileTemplate Context="actor">
+                <FluentCard Class="profile-result">
+                    <ActorProfile ActorUri="@(new Uri(actor.Id ?? string.Empty))" ShowActions="true" />
+                </FluentCard>
+            </ProfileTemplate>
+        </ActorBrowser>
+    </FluentCard>
+
+    @if (_recentSearches.Any())
+    {
+        <FluentCard Class="recent-searches">
+            <h3>
+                <FluentIcon Value="@(new Icons.Regular.Size20.History())" />
+                Recent Searches
+            </h3>
+            <div class="search-history">
+                @foreach (var search in _recentSearches.Take(5))
+                {
+                    <div class="history-item">
+                        <span>@search</span>
+                        <FluentButton 
+                            Appearance="Appearance.Lightweight" 
+                            OnClick="@(() => Navigation.NavigateTo($"/profile?actor={Uri.EscapeDataString(search)}"))">
+                            View
+                        </FluentButton>
+                    </div>
+                }
+            </div>
+        </FluentCard>
+    }
+
+    @if (!AuthState.IsAuthenticated)
+    {
+        <FluentMessageBar Intent="MessageIntent.Info">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Info())" Slot="start" />
+            Sign in to follow actors and interact with content
+        </FluentMessageBar>
+    }
+</div>
+
+@code {
+    private List<string> _recentSearches = new();
+
+    private Task HandleActorFound(KristofferStrube.ActivityStreams.Object actor)
+    {
+        if (actor?.Id != null && !_recentSearches.Contains(actor.Id))
+        {
+            _recentSearches.Insert(0, actor.Id);
+            if (_recentSearches.Count > 10)
+            {
+                _recentSearches.RemoveAt(_recentSearches.Count - 1);
+            }
+            StateHasChanged();
+        }
+        return Task.CompletedTask;
+    }
+}
+
+<style>
+    .explore-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .explore-header h1 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .explore-header p {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+    }
+
+    .search-card {
+        padding: 1.5rem;
+    }
+
+    .search-input-container {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .loading-state,
+    .error-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        text-align: center;
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+
+    .profile-result {
+        margin-top: 1.5rem;
+    }
+
+    .recent-searches {
+        padding: 1.5rem;
+    }
+
+    .recent-searches h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 1rem 0;
+    }
+
+    .search-history {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .history-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+        background: var(--neutral-layer-1);
+        border-radius: 4px;
+    }
+
+    .history-item span {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    @@media (max-width: 768px) {
+        .search-input-container {
+            flex-direction: column;
+        }
+
+        .history-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+    }
+</style>

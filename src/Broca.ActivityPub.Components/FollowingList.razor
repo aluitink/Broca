@@ -1,0 +1,228 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-following-list @CssClass">
+    @if (!string.IsNullOrEmpty(Title))
+    {
+        <div class="list-header">
+            <h3>@Title</h3>
+            @if (totalCount.HasValue)
+            {
+                <span class="list-count">@totalCount.Value following</span>
+            }
+        </div>
+    }
+
+    @if (FollowingUrl != null)
+    {
+        <CollectionLoader TItem="KristofferStrube.ActivityStreams.Object" 
+                         CollectionUrl="@FollowingUrl" 
+                         PageSize="@PageSize"
+                         UseVirtualization="@UseVirtualization">
+            <ItemTemplate Context="followedActor">
+                @if (ActorTemplate != null)
+                {
+                    @ActorTemplate(followedActor)
+                }
+                else
+                {
+                    <div class="following-item">
+                        <ActorRenderer Actor="@followedActor" ShowDetails="false" />
+                        
+                        @if (ShowUnfollowButton && CanUnfollow)
+                        {
+                            <div class="following-actions">
+                                <button class="unfollow-button" 
+                                        @onclick="() => HandleUnfollowClick(followedActor)"
+                                        disabled="@IsProcessing(followedActor)">
+                                    @if (IsProcessing(followedActor))
+                                    {
+                                        <span>Processing...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Unfollow</span>
+                                    }
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </ItemTemplate>
+            <LoadingTemplate>
+                @if (LoadingTemplate != null)
+                {
+                    @LoadingTemplate
+                }
+                else
+                {
+                    <div class="list-loading">Loading following...</div>
+                }
+            </LoadingTemplate>
+            <EmptyTemplate>
+                @if (EmptyTemplate != null)
+                {
+                    @EmptyTemplate
+                }
+                else
+                {
+                    <div class="list-empty">
+                        <p>Not following anyone yet</p>
+                    </div>
+                }
+            </EmptyTemplate>
+            <ErrorTemplate Context="error">
+                @if (ErrorTemplate != null)
+                {
+                    @ErrorTemplate(error)
+                }
+                else
+                {
+                    <div class="list-error">@error</div>
+                }
+            </ErrorTemplate>
+        </CollectionLoader>
+    }
+    else
+    {
+        <div class="list-error">
+            <p>No following URL specified</p>
+        </div>
+    }
+</div>
+
+@code {
+    private int? totalCount = null;
+    private HashSet<string> processingIds = new();
+
+    /// <summary>
+    /// Gets or sets the following collection URL.
+    /// </summary>
+    [Parameter]
+    public Uri? FollowingUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the actor whose following list to display.
+    /// </summary>
+    [Parameter]
+    public KristofferStrube.ActivityStreams.Object? Actor { get; set; }
+
+    /// <summary>
+    /// Gets or sets the title of the list.
+    /// </summary>
+    [Parameter]
+    public string? Title { get; set; } = "Following";
+
+    /// <summary>
+    /// Gets or sets the page size.
+    /// </summary>
+    [Parameter]
+    public int PageSize { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets whether to use virtualization.
+    /// </summary>
+    [Parameter]
+    public bool UseVirtualization { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show unfollow buttons.
+    /// </summary>
+    [Parameter]
+    public bool ShowUnfollowButton { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom template for rendering actors.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? ActorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loading template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the empty state template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? EmptyTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when an actor is unfollowed.
+    /// </summary>
+    [Parameter]
+    public EventCallback<KristofferStrube.ActivityStreams.Object> OnUnfollow { get; set; }
+
+    private bool CanUnfollow => Client.ActorId != null && Actor?.Id == Client.ActorId;
+
+    protected override Task OnParametersSetAsync()
+    {
+        if (Actor != null && FollowingUrl == null)
+        {
+            // Try to extract following URL from Actor
+            if (Actor is Person person && person.Following != null)
+            {
+                var followingLink = person.Following as Link;
+                if (followingLink?.Href != null)
+                {
+                    FollowingUrl = followingLink.Href;
+                }
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private bool IsProcessing(KristofferStrube.ActivityStreams.Object followedActor)
+    {
+        return followedActor.Id != null && processingIds.Contains(followedActor.Id);
+    }
+
+    private async Task HandleUnfollowClick(KristofferStrube.ActivityStreams.Object followedActor)
+    {
+        if (followedActor.Id == null || !CanUnfollow) return;
+
+        processingIds.Add(followedActor.Id);
+        StateHasChanged();
+
+        try
+        {
+            // TODO: Need to track the original Follow activity to create proper Undo
+            // For now, we'll create a new Follow and immediately Undo it
+            var followActivity = Client.CreateActivityBuilder().Follow(followedActor.Id);
+            var undoActivity = Client.CreateActivityBuilder().Undo(followActivity);
+            await Client.PostToOutboxAsync(undoActivity);
+
+            if (OnUnfollow.HasDelegate)
+            {
+                await OnUnfollow.InvokeAsync(followedActor);
+            }
+
+            // TODO: Refresh the list or remove the item from display
+        }
+        catch (Exception)
+        {
+            // TODO: Show error message
+        }
+        finally
+        {
+            processingIds.Remove(followedActor.Id);
+            StateHasChanged();
+        }
+    }
+}

@@ -13,7 +13,7 @@ namespace Broca.ActivityPub.Server.Controllers;
 /// </summary>
 [ApiController]
 [Route("activities")]
-public class ActivitiesController : ControllerBase
+public class ActivitiesController : ActivityPubControllerBase
 {
     private readonly IActivityRepository _activityRepository;
     private readonly ActivityPubServerOptions _options;
@@ -48,7 +48,7 @@ public class ActivitiesController : ControllerBase
         try
         {
             // Construct the full activity ID from the route parameter
-            var baseUrl = (_options.BaseUrl ?? $"{Request.Scheme}://{Request.Host}").TrimEnd('/');
+            var baseUrl = (_options.BaseUrl ?? GetBaseUrl()).TrimEnd('/');
             var routePrefix = _options.NormalizedRoutePrefix;
             var fullActivityId = $"{baseUrl}{routePrefix}/activities/{activityId}";
 

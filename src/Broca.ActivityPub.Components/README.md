@@ -41,6 +41,7 @@ The component library follows several key design patterns:
 
 #### Composite Components
 - **ActivityFeed**: Activity stream with virtualization
+- **AddContentButton**: Floating action button for creating posts
 - More to come...
 
 ## Getting Started
@@ -69,6 +70,7 @@ builder.Services.AddActivityPubComponents(options =>
 
 ```html
 <link href="_content/Broca.ActivityPub.Components/broca-activitypub-components.css" rel="stylesheet" />
+<link href="_content/Broca.ActivityPub.Components/add-content-button.css" rel="stylesheet" />
 ```
 
 3. **Add Imports** (_Imports.razor):
@@ -142,6 +144,32 @@ builder.Services.AddActivityPubComponents(options =>
         <p>No notes found</p>
     </EmptyTemplate>
 </CollectionLoader>
+```
+
+### Add Content Button (Floating Action Button)
+
+```razor
+@page "/"
+
+<!-- Simple usage - floating button in bottom-right corner -->
+<AddContentButton OnPostCreated="HandlePostCreated" />
+
+<!-- Custom positioning and icon -->
+<AddContentButton 
+    ButtonIcon="➕"
+    ButtonTitle="Compose new message"
+    BottomPosition="32"
+    RightPosition="32"
+    MaxLength="1000"
+    OnPostCreated="HandlePostCreated" />
+
+@code {
+    private async Task HandlePostCreated(Activity activity)
+    {
+        // Handle the newly created post
+        await InvokeAsync(StateHasChanged);
+    }
+}
 ```
 
 ## Customization
@@ -295,6 +323,37 @@ Polymorphic renderer that dispatches to appropriate renderer based on object typ
 - `Object` (object): Object to render
 - `CustomRenderer` (RenderFragment<object>?): Override renderer
 - `RenderEmpty` (RenderFragment?): Empty state
+
+### AddContentButton
+
+Floating action button for creating new posts with media attachments, mentions, tags, and privacy settings.
+
+**Parameters:**
+- `ButtonIcon` (string): FAB icon (default: "✏️")
+- `ButtonTitle` (string): Button tooltip (default: "Create new post")
+- `Placeholder` (string): Composer placeholder text
+- `MaxLength` (int): Maximum post length (default: 500)
+- `DialogRows` (int): Textarea rows in dialog (default: 6)
+- `HideButton` (bool): Hide the floating button (default: false)
+- `ShowDialogOnInit` (bool): Open dialog on mount (default: false)
+- `BottomPosition` (int): Distance from bottom in pixels (default: 24)
+- `RightPosition` (int): Distance from right in pixels (default: 24)
+- `AcceptedFileTypes` (string): File input accept attribute (default: "image/*,video/*")
+- `OnPostCreated` (EventCallback<Activity>): Callback when post is created
+- `CssClass` (string?): Additional CSS classes
+
+**Methods:**
+- `Open()`: Open the dialog programmatically
+- `Close()`: Close the dialog programmatically
+
+**Features:**
+- Floating action button that stays in bottom-right corner
+- Modal dialog with full post composer
+- Media attachment support with preview
+- @mention functionality
+- Hashtag support
+- Privacy/visibility selection (public, unlisted, followers, direct)
+- Integrates with existing PostComposer component
 
 ## Advanced Scenarios
 

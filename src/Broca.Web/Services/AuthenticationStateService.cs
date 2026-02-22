@@ -201,7 +201,29 @@ public class AuthenticationStateService
     {
         return CurrentActor?.Following?.Href;
     }
+    /// <summary>
+    /// Refreshes the current actor data with updated information
+    /// </summary>
+    /// <param name="updatedActor">The updated actor object</param>
+    public async Task RefreshActorAsync(Actor updatedActor)
+    {
+        if (!IsAuthenticated || CurrentActor == null)
+        {
+            _logger.LogWarning("Cannot refresh actor - not authenticated");
+            return;
+        }
 
+        _logger.LogInformation("Refreshing actor data for {ActorId}", updatedActor.Id);
+        
+        // Update the current actor
+        CurrentActor = updatedActor;
+
+        // Save to local storage
+        await SaveToLocalStorageAsync(LocalStorageActorDataKey, JsonSerializer.Serialize(CurrentActor));
+
+        // Notify listeners
+        AuthenticationStateChanged?.Invoke(this, true);
+    }
     private async Task<string?> GetFromLocalStorageAsync(string key)
     {
         try

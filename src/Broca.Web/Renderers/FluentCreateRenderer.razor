@@ -1,0 +1,115 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Broca.ActivityPub.Components
+@inherits ComponentBase
+
+@* For Create activities, we show only the created object without the activity wrapper *@
+@if (Create != null && ShowObject && Create.Object?.Any() == true)
+{
+    @foreach (var obj in Create.Object)
+    {
+        <ObjectDisplay Object="@obj" />
+    }
+}
+else if (Create != null && !ShowObject)
+{
+    @* If ShowObject is false, still show some minimal information *@
+    <FluentCard Class="@($"fluent-create-card {CssClass}")">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                @if (Create.Actor?.Any() == true)
+                {
+                    <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                        @GetActorDisplay() created something
+                    </FluentLabel>
+                }
+                else
+                {
+                    <FluentLabel Typo="Typography.Body">
+                        Created
+                    </FluentLabel>
+                }
+                
+                @if (Create.Published.HasValue)
+                {
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                        <time datetime="@Create.Published.Value.ToString("o")" title="@Create.Published.Value.ToString("f")">
+                            @FormatDateTime(Create.Published.Value)
+                        </time>
+                    </FluentLabel>
+                }
+            </FluentStack>
+
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Create)
+            }
+        </FluentStack>
+    </FluentCard>
+}
+
+@code {
+    /// <summary>
+    /// Gets or sets the Create activity to render.
+    /// </summary>
+    [Parameter]
+    public Create? Create { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the created object.
+    /// Default is true - showing only the object without the activity wrapper.
+    /// </summary>
+    [Parameter]
+    public bool ShowObject { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Create>? AdditionalContent { get; set; }
+
+    private string GetActorDisplay()
+    {
+        var actorRef = Create?.Actor?.FirstOrDefault();
+        if (actorRef == null) return "Someone";
+
+        if (actorRef is Actor actor && actor.Name?.Any() == true)
+            return actor.Name.First();
+
+        if (actorRef is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true)
+                return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id))
+                return obj.Id;
+        }
+
+        if (actorRef is Link link && link.Href != null)
+            return link.Href.ToString();
+
+        return "Someone";
+    }
+
+    private string FormatDateTime(DateTimeOffset dateTime)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - dateTime;
+
+        if (diff.TotalMinutes < 1)
+            return "just now";
+        if (diff.TotalMinutes < 60)
+            return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24)
+            return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7)
+            return $"{(int)diff.TotalDays}d ago";
+        
+        return dateTime.ToString("MMM d, yyyy");
+    }
+}

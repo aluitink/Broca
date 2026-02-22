@@ -1,0 +1,128 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+@inherits ComponentBase
+
+@if (resolvedObject != null)
+{
+    <div class="link-resolved-content @CssClass">
+        <ObjectDisplay Object="@resolvedObject" 
+                      AutoResolveLinks="false"
+                      ShowMissingRenderer="false" />
+    </div>
+}
+else if (isLoading)
+{
+    <div class="link-loading @CssClass">
+        <span class="loading-spinner"></span>
+        <span>Loading link...</span>
+    </div>
+}
+else if (Link != null)
+{
+    <div class="link-fallback @CssClass">
+        @if (Link.Name?.Any() == true)
+        {
+            var name = Link.Name.FirstOrDefault();
+            if (!string.IsNullOrEmpty(name))
+            {
+                <div class="link-name">@name</div>
+            }
+        }
+        
+        @if (Link.Href != null)
+        {
+            <a href="@Link.Href.ToString()" 
+               target="_blank" 
+               rel="noopener noreferrer"
+               class="link-url">
+                @Link.Href.ToString()
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private object? resolvedObject;
+    private bool isLoading = false;
+    
+    /// <summary>
+    /// Gets or sets the Link to render.
+    /// </summary>
+    [Parameter]
+    public Link? Link { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to automatically resolve the link.
+    /// When true, attempts to fetch the linked object using the ActivityPub client.
+    /// </summary>
+    [Parameter]
+    public bool AutoResolve { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback when the link is resolved.
+    /// </summary>
+    [Parameter]
+    public EventCallback<object> OnResolved { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback when resolution fails.
+    /// </summary>
+    [Parameter]
+    public EventCallback<Exception> OnResolutionFailed { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ResolveLink();
+    }
+
+    private async Task ResolveLink()
+    {
+        resolvedObject = null;
+        
+        if (Link == null || Link.Href == null || !AutoResolve)
+        {
+            return;
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Try to fetch the linked object using the ActivityPub client
+            var fetchedObject = await Client.GetAsync<KristofferStrube.ActivityStreams.Object>(
+                Link.Href, 
+                useCache: true, 
+                cancellationToken: default);
+            
+            if (fetchedObject != null)
+            {
+                resolvedObject = fetchedObject;
+                
+                if (OnResolved.HasDelegate)
+                {
+                    await OnResolved.InvokeAsync(fetchedObject);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Failed to resolve - will fall back to showing the link
+            if (OnResolutionFailed.HasDelegate)
+            {
+                await OnResolutionFailed.InvokeAsync(ex);
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

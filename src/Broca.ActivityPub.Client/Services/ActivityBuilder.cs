@@ -43,7 +43,43 @@ public class ActivityBuilder : IActivityBuilder
     {
         var counter = Interlocked.Increment(ref _activityCounter);
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        
+        // Extract username from actor ID (e.g., https://example.com/ap/users/admin -> admin)
+        var username = ExtractUsernameFromActorId(_actorId);
+        if (!string.IsNullOrEmpty(username))
+        {
+            return $"{_baseUrl}/users/{username}/objects/{type.ToLower()}-{timestamp}-{counter}";
+        }
+        
+        // Fallback for non-standard actor IDs
         return $"{_baseUrl}/objects/{type.ToLower()}-{timestamp}-{counter}";
+    }
+    
+    /// <summary>
+    /// Extracts the username from an actor ID URL
+    /// </summary>
+    private static string? ExtractUsernameFromActorId(string actorId)
+    {
+        try
+        {
+            var uri = new Uri(actorId);
+            var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            
+            // Look for /users/{username} pattern
+            for (int i = 0; i < segments.Length - 1; i++)
+            {
+                if (segments[i].Equals("users", StringComparison.OrdinalIgnoreCase))
+                {
+                    return segments[i + 1];
+                }
+            }
+        }
+        catch
+        {
+            // Invalid URI format, return null
+        }
+        
+        return null;
     }
 
     public INoteBuilder CreateNote(string content)

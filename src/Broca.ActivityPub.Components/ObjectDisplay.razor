@@ -1,17 +1,102 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Components.Services
+@using Broca.ActivityPub.Core.Interfaces
 @inject IObjectRendererRegistry RendererRegistry
+@inject IActivityPubClient Client
 
-@if (Object != null)
+@if (resolvedObject != null)
 {
-    @RendererRegistry.GetRenderFragment(Object)
+    @if (CustomRenderer != null)
+    {
+        <div class="activitypub-object-display @CssClass">
+            @CustomRenderer(resolvedObject)
+        </div>
+    }
+    else
+    {
+        var renderer = RendererRegistry.GetRenderer(resolvedObject.GetType());
+        if (renderer != null)
+        {
+            <div class="activitypub-object-display @CssClass">
+                @try
+                {
+                    @RendererRegistry.GetRenderFragment(resolvedObject)
+                }
+                catch (Exception ex)
+                {
+                    @if (ErrorTemplate != null)
+                    {
+                        @ErrorTemplate(ex.Message)
+                    }
+                    else
+                    {
+                        <div class="object-display-error">
+                            <span class="error-icon">⚠️</span>
+                            <span>Failed to render object: @ex.Message</span>
+                        </div>
+                    }
+                }
+            </div>
+        }
+        else if (ShowMissingRenderer)
+        {
+            <div class="activitypub-object-display @CssClass">
+                <div class="object-display-no-renderer">
+                    <span class="warning-icon">⚠️</span>
+                    <span>No renderer for @resolvedObject.GetType().Name</span>
+                </div>
+            </div>
+        }
+        @* Skip rendering if no renderer available and ShowMissingRenderer is false *@
+    }
+}
+else if (isLoading && AutoResolveLinks)
+{
+    <div class="activitypub-object-display @CssClass">
+        <div class="object-display-loading">
+            <span class="loading-spinner"></span>
+            <span>Loading...</span>
+        </div>
+    </div>
+}
+else if (loadError != null)
+{
+    @if (ErrorTemplate != null)
+    {
+        <div class="activitypub-object-display @CssClass">
+            @ErrorTemplate(loadError)
+        </div>
+    }
+    else
+    {
+        <div class="activitypub-object-display @CssClass">
+            <div class="object-display-error">
+                <span class="error-icon">⚠️</span>
+                <span>Failed to load object: @loadError</span>
+            </div>
+        </div>
+    }
 }
 else if (RenderEmpty != null)
 {
-    @RenderEmpty
+    <div class="activitypub-object-display @CssClass">
+        @RenderEmpty
+    </div>
+}
+else if (ShowEmptyState)
+{
+    <div class="activitypub-object-display @CssClass">
+        <div class="object-display-empty">
+            <p>No content to display</p>
+        </div>
+    </div>
 }
 
 @code {
+    private object? resolvedObject;
+    private bool isLoading = false;
+    private string? loadError = null;
+    
     /// <summary>
     /// Gets or sets the ActivityStreams object to display.
     /// </summary>
@@ -19,10 +104,36 @@ else if (RenderEmpty != null)
     public object? Object { get; set; }
 
     /// <summary>
+    /// Gets or sets whether to automatically resolve Link objects.
+    /// When true, Link objects will be fetched and rendered as their actual type.
+    /// </summary>
+    [Parameter]
+    public bool AutoResolveLinks { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the content to display when the object is null.
     /// </summary>
     [Parameter]
     public RenderFragment? RenderEmpty { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template for rendering errors.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show an empty state when object is null.
+    /// </summary>
+    [Parameter]
+    public bool ShowEmptyState { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show a message when no renderer is available.
+    /// When false, items without renderers are skipped entirely.
+    /// </summary>
+    [Parameter]
+    public bool ShowMissingRenderer { get; set; } = false;
 
     /// <summary>
     /// Gets or sets additional CSS classes for the container.
@@ -35,4 +146,67 @@ else if (RenderEmpty != null)
     /// </summary>
     [Parameter]
     public RenderFragment<object>? CustomRenderer { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback when the object is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<object> OnObjectClick { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ResolveObjectAsync();
+    }
+
+    private async Task ResolveObjectAsync()
+    {
+        resolvedObject = null;
+        loadError = null;
+        
+        if (Object == null)
+        {
+            return;
+        }
+
+        // Check if it's a Link that needs resolution
+        if (AutoResolveLinks && Object is Link link && link.Href != null)
+        {
+            isLoading = true;
+            StateHasChanged();
+            
+            try
+            {
+                // Try to fetch the linked object using the ActivityPub client
+                var fetchedObject = await Client.GetAsync<KristofferStrube.ActivityStreams.Object>(
+                    link.Href, 
+                    useCache: true, 
+                    cancellationToken: default);
+                
+                if (fetchedObject != null)
+                {
+                    resolvedObject = fetchedObject;
+                }
+                else
+                {
+                    // If we couldn't fetch it, show the link itself
+                    resolvedObject = Object;
+                }
+            }
+            catch (Exception ex)
+            {
+                loadError = ex.Message;
+                // Fallback to showing the link
+                resolvedObject = Object;
+            }
+            finally
+            {
+                isLoading = false;
+            }
+        }
+        else
+        {
+            // Not a link or auto-resolve disabled, use as-is
+            resolvedObject = Object;
+        }
+    }
 }

@@ -33,8 +33,10 @@ public class ActivityBuilderFactory : IActivityBuilderFactory
 
         // Extract base URL from actor ID or use configured base URL
         var baseUrl = _options.BaseUrl?.TrimEnd('/') ?? "http://localhost";
+        var routePrefix = _options.NormalizedRoutePrefix;
+        var baseUrlWithPrefix = $"{baseUrl}{routePrefix}";
 
-        return new ActivityBuilder(actorId, baseUrl, _logger);
+        return new ActivityBuilder(actorId, baseUrlWithPrefix, _logger);
     }
 
     /// <summary>
@@ -49,8 +51,9 @@ public class ActivityBuilderFactory : IActivityBuilderFactory
         var baseUrl = _options.BaseUrl?.TrimEnd('/') ?? "http://localhost";
         var routePrefix = _options.NormalizedRoutePrefix;
         var actorId = $"{baseUrl}{routePrefix}/users/{username}";
+        var baseUrlWithPrefix = $"{baseUrl}{routePrefix}";
 
-        return new ActivityBuilder(actorId, baseUrl, _logger);
+        return new ActivityBuilder(actorId, baseUrlWithPrefix, _logger);
     }
 
     /// <summary>

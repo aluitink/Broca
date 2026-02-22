@@ -1,0 +1,43 @@
+@* Bookmark button for saving content *@
+
+<FluentButton Appearance="Appearance.Lightweight" OnClick="@HandleClick" Disabled="@(IsProcessing || Disabled)" Title="@(IsBookmarked ? "Remove bookmark" : "Bookmark")" Class="@($"bookmark-button {(IsBookmarked ? "bookmarked" : "")}")">
+    @if (IsBookmarked)
+    {
+        <FluentIcon Value="@(new Icons.Filled.Size20.Bookmark())" Color="Color.Warning" />
+    }
+    else
+    {
+        <FluentIcon Value="@(new Icons.Regular.Size20.Bookmark())" Color="Color.Neutral" />
+    }
+    @if (ShowText)
+    {
+        <span>@(IsBookmarked ? "Bookmarked" : "Bookmark")</span>
+    }
+</FluentButton>
+
+@code {
+    [Parameter] public bool IsBookmarked { get; set; }
+    [Parameter] public bool ShowText { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<bool> OnBookmarkClick { get; set; }
+
+    private bool IsProcessing { get; set; }
+
+    private async Task HandleClick()
+    {
+        if (IsProcessing) return;
+        IsProcessing = true;
+        var previousState = IsBookmarked;
+        IsBookmarked = !IsBookmarked;
+        StateHasChanged();
+        try { await OnBookmarkClick.InvokeAsync(previousState); }
+        catch { IsBookmarked = previousState; throw; }
+        finally { IsProcessing = false; StateHasChanged(); }
+    }
+}
+
+<style>
+    .bookmark-button { display: inline-flex; align-items: center; gap: 0.375rem; transition: all 0.2s ease; }
+    .bookmark-button:hover:not(:disabled) { transform: translateY(-2px); }
+    .bookmark-button span { font-size: 0.875rem; font-weight: 500; }
+</style>

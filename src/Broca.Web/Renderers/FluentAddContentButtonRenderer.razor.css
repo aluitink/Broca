@@ -1,0 +1,194 @@
+/* Fluent Add Content Button Renderer Styles */
+
+.fluent-add-content-wrapper {
+    position: relative;
+}
+
+/* Floating Action Button */
+.add-content-fab {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+    cursor: pointer;
+    padding: 0 !important;
+    min-width: 56px;
+}
+
+.add-content-fab:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    transform: scale(1.05);
+}
+
+.add-content-fab:active {
+    transform: scale(0.95);
+}
+
+/* Overlay */
+.add-content-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Dialog */
+.add-content-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 600px;
+    max-height: 85vh;
+    overflow-y: auto;
+    z-index: 1000;
+    animation: slideUp 0.3s ease;
+    padding: 24px;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translate(-50%, -40%);
+        opacity: 0;
+    }
+    to {
+        transform: translate(-50%, -50%);
+        opacity: 1;
+    }
+}
+
+.dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Attachment Preview */
+.attachment-preview-section {
+    margin-top: 16px;
+}
+
+.attachment-list {
+    margin-top: 12px;
+    gap: 12px;
+}
+
+.attachment-preview-item {
+    position: relative;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.attachment-thumbnail {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.attachment-video-preview,
+.attachment-file-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+}
+
+.attachment-remove-button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+}
+
+/* Mentions Section */
+.mentions-section,
+.tags-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.mentions-list,
+.tags-list {
+    gap: 8px;
+}
+
+.mention-item,
+.tag-item {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 16px;
+}
+
+.mention-input,
+.tag-input {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.mentions-section-collapsed,
+.tags-section-collapsed {
+    margin-top: 12px;
+}
+
+/* File Input */
+.attachment-picker {
+    margin-top: 12px;
+}
+
+.file-input {
+    width: 100%;
+    padding: 8px;
+    border: 2px dashed var(--neutral-stroke-rest);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.file-input:hover {
+    border-color: var(--accent-fill-rest);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .add-content-dialog {
+        width: 95%;
+        max-height: 90vh;
+        padding: 16px;
+    }
+    
+    .add-content-fab {
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
+    }
+}

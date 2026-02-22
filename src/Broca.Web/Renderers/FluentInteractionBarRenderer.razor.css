@@ -1,0 +1,46 @@
+.fluent-interaction-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.interaction-button {
+    position: relative;
+    min-width: 60px;
+}
+
+.interaction-button .count {
+    margin-left: 0.25rem;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.interaction-button.like-button[appearance="accent"] {
+    color: var(--error-foreground, #d13438);
+}
+
+.interaction-button.boost-button[appearance="accent"] {
+    color: var(--success-foreground, #107c10);
+}
+
+.reply-composer-container {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: var(--neutral-layer-2);
+    border-radius: var(--control-corner-radius);
+}
+
+@media (max-width: 640px) {
+    .fluent-interaction-bar {
+        gap: 0.25rem;
+    }
+
+    .interaction-button {
+        min-width: 48px;
+    }
+
+    .interaction-button .count {
+        font-size: 0.75rem;
+    }
+}

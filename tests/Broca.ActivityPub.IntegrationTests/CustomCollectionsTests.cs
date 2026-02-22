@@ -449,15 +449,42 @@ public class CustomCollectionsTests : IAsyncLifetime
 
         await PostToOutboxAsync(username, addActivity);
 
-        // Get the note ID from outbox
-        var outboxResponse = await _client.GetAsync($"/users/{username}/outbox?page=0&limit=10");
-        var outboxContent = await outboxResponse.Content.ReadAsStringAsync();
-        var outboxPage = JsonSerializer.Deserialize<OrderedCollectionPage>(outboxContent, _jsonOptions);
+        // Get the note ID from the collection - it should have been stored there
+        var collectionResponse = await _client.GetAsync($"/users/{username}/collections/featured");
+        var collectionContent = await collectionResponse.Content.ReadAsStringAsync();
         
-        // Find the Note object (not the Add activity)
-        var noteId = outboxPage?.OrderedItems?
-            .OfType<IObject>()
-            .FirstOrDefault(o => o.Type?.Contains("Note") == true)?.Id;
+        // Parse to get the note ID
+        using var doc = JsonDocument.Parse(collectionContent);
+        var root = doc.RootElement;
+        
+        string? noteId = null;
+        
+        if (root.TryGetProperty("orderedItems", out var orderedItemsElement))
+        {
+            // Handle both single object and array
+            if (orderedItemsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in orderedItemsElement.EnumerateArray())
+                {
+                    if (item.TryGetProperty("type", out var typeElement) && 
+                        typeElement.GetString() == "Note" &&
+                        item.TryGetProperty("id", out var idElement))
+                    {
+                        noteId = idElement.GetString();
+                        break;
+                    }
+                }
+            }
+            else if (orderedItemsElement.ValueKind == JsonValueKind.Object)
+            {
+                if (orderedItemsElement.TryGetProperty("type", out var typeElement) && 
+                    typeElement.GetString() == "Note" &&
+                    orderedItemsElement.TryGetProperty("id", out var idElement))
+                {
+                    noteId = idElement.GetString();
+                }
+            }
+        }
         
         Assert.NotNull(noteId);
 
@@ -471,11 +498,11 @@ public class CustomCollectionsTests : IAsyncLifetime
         Assert.True(response.IsSuccessStatusCode);
 
         // Verify collection no longer contains the object
-        var collectionResponse = await _client.GetAsync($"/users/{username}/collections/featured");
-        var collectionContent = await collectionResponse.Content.ReadAsStringAsync();
+        var collectionResponseAfter = await _client.GetAsync($"/users/{username}/collections/featured");
+        var collectionContentAfter = await collectionResponseAfter.Content.ReadAsStringAsync();
         
         // The removed item should not be in the collection
-        Assert.DoesNotContain("Post to remove", collectionContent);
+        Assert.DoesNotContain("Post to remove", collectionContentAfter);
     }
 
     [Fact]

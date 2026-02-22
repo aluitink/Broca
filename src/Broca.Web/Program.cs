@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Broca.Web;
 using Broca.Web.Services;
+using Broca.Web.Renderers;
 using Broca.ActivityPub.Components.Extensions;
+using Broca.ActivityPub.Components.Services;
 using Broca.ActivityPub.Client.WebCrypto.Extensions;
 using Broca.ActivityPub.Core.Interfaces;
 
@@ -43,6 +45,10 @@ var host = builder.Build();
 // Initialize authentication state service
 var authStateService = host.Services.GetRequiredService<AuthenticationStateService>();
 await authStateService.InitializeAsync();
+
+// Register Fluent UI renderers
+var rendererRegistry = host.Services.GetRequiredService<IObjectRendererRegistry>();
+rendererRegistry.RegisterFluentRenderers();
 
 await host.RunAsync();
 

@@ -14,7 +14,7 @@ namespace Broca.ActivityPub.Server.Controllers;
 
 [ApiController]
 [Route("users/{username}/inbox")]
-public class InboxController : ControllerBase
+public class InboxController : ActivityPubControllerBase
 {
     private readonly IInboxHandler _inboxHandler;
     private readonly IActivityRepository _activityRepository;
@@ -22,6 +22,7 @@ public class InboxController : ControllerBase
     private readonly HttpSignatureService _signatureService;
     private readonly IActivityPubClient _activityPubClient;
     private readonly AttachmentProcessingService _attachmentProcessingService;
+    private readonly ObjectEnrichmentService _enrichmentService;
     private readonly IMemoryCache _cache;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<InboxController> _logger;
@@ -35,6 +36,7 @@ public class InboxController : ControllerBase
         HttpSignatureService signatureService,
         IActivityPubClient activityPubClient,
         AttachmentProcessingService attachmentProcessingService,
+        ObjectEnrichmentService enrichmentService,
         IMemoryCache cache,
         IOptions<ActivityPubServerOptions> options,
         ILogger<InboxController> logger)
@@ -45,6 +47,7 @@ public class InboxController : ControllerBase
         _signatureService = signatureService;
         _activityPubClient = activityPubClient;
         _attachmentProcessingService = attachmentProcessingService;
+        _enrichmentService = enrichmentService;
         _cache = cache;
         _options = options.Value;
         _logger = logger;
@@ -71,17 +74,21 @@ public class InboxController : ControllerBase
             var offset = page * limit;
             var activities = await _activityRepository.GetInboxActivitiesAsync(username, limit, offset);
             
-            // Rewrite attachment URLs to use local blob storage
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+            
+            // Rewrite attachment URLs and enrich with collection metadata
             foreach (var activity in activities)
             {
                 if (activity is IObject obj)
                 {
                     await _attachmentProcessingService.RewriteAttachmentUrlsAsync(obj, username);
                 }
+                
+                // Enrich activities with collection information (replies, likes, shares counts)
+                await _enrichmentService.EnrichActivityAsync(activity, baseUrl);
             }
             
             var totalCount = await _activityRepository.GetInboxCountAsync(username);
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{_options.NormalizedRoutePrefix}";
 
             if (page == 0 && limit == 20)
             {

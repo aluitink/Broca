@@ -290,17 +290,14 @@ public class CollectionService : ICollectionService
     {
         var items = new List<IObjectOrLink>();
         
-        // Get all outbox activities for the user
-        var allActivities = await _activityRepository.GetOutboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
-        
-        // Filter to only the requested IDs and unwrap Create activities
-        foreach (var activity in allActivities)
+        // Fetch each item by ID directly from the repository
+        foreach (var itemId in itemIds)
         {
-            var id = (activity as IObject)?.Id;
-            if (id != null && itemIds.Contains(id))
+            var item = await _activityRepository.GetActivityByIdAsync(itemId, cancellationToken);
+            if (item != null)
             {
                 // Unwrap Create activities to get the underlying object
-                if (activity is Create createActivity)
+                if (item is Create createActivity)
                 {
                     var obj = createActivity.Object?.FirstOrDefault();
                     if (obj != null)
@@ -310,8 +307,8 @@ public class CollectionService : ICollectionService
                 }
                 else
                 {
-                    // For non-Create activities, add as-is
-                    items.Add(activity);
+                    // For non-Create activities and bare objects, add as-is
+                    items.Add(item);
                 }
             }
         }

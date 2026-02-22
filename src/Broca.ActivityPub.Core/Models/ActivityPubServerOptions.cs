@@ -21,9 +21,14 @@ public class ActivityPubServerOptions
     public string PrimaryDomain { get; set; } = "localhost";
 
     /// <summary>
-    /// Server name for display purposes
+    /// Server name for display purposes and NodeInfo metadata
     /// </summary>
     public string ServerName { get; set; } = "Broca ActivityPub Server";
+
+    /// <summary>
+    /// Server description for NodeInfo metadata
+    /// </summary>
+    public string? ServerDescription { get; set; }
 
     /// <summary>
     /// System actor username (default: sys)
