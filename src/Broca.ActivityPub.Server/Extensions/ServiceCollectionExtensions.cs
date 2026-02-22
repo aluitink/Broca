@@ -1,7 +1,6 @@
 using Broca.ActivityPub.Client.Extensions;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
-using Broca.ActivityPub.Persistence.InMemory;
 using Broca.ActivityPub.Server.Services;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.Extensions.Configuration;
@@ -36,12 +35,6 @@ public static class ServiceCollectionExtensions
 
         // Register memory cache (required for InboxController)
         services.AddMemoryCache();
-
-        // Register repositories (in-memory by default)
-        services.AddSingleton<IActorRepository, InMemoryActorRepository>();
-        services.AddSingleton<IActivityRepository, InMemoryActivityRepository>();
-        services.AddSingleton<IDeliveryQueueRepository, InMemoryDeliveryQueueRepository>();
-        services.AddSingleton<IBlobStorageService, InMemoryBlobStorageService>();
 
         // Register services
         services.AddSingleton<CryptographyService>();

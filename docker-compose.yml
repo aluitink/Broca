@@ -12,6 +12,7 @@ services:
       - ActivityPub__ServerName=Broca ActivityPub Server
       - ActivityPub__SystemActorUsername=sys
       - ActivityPub__RoutePrefix=ap
+      - Persistence__Driver=InMemory
       - Persistence__DataPath=/app/data
       - IdentityProvider__SimpleIdentity__Username=admin
       - IdentityProvider__SimpleIdentity__DisplayName=Administrator
