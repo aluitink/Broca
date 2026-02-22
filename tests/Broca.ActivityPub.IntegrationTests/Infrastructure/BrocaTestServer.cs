@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Broca.ActivityPub.Core.Interfaces;
+using Broca.ActivityPub.Persistence.Extensions;
 using Broca.ActivityPub.Persistence.InMemory;
 
 namespace Broca.ActivityPub.IntegrationTests.Infrastructure;
@@ -74,6 +75,8 @@ public class BrocaTestServer : WebApplicationFactory<Broca.API.Program>, IAsyncD
 
         builder.ConfigureServices(services =>
         {
+            services.AddInMemoryPersistence();
+
             // If routing is configured, replace the HttpClientFactory
             if (_routingHandler != null)
             {

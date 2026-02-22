@@ -121,6 +121,9 @@ appsettings.local.json
 *.key
 *.pem
 
+# Local data directory
+data/
+
 # Exclude local Docker override file
 docker-compose.override.yml
 
