@@ -21,3 +21,34 @@ When developing UI components:
 - The project is in early development and changes frequently; keep implementations simple and avoid over-engineering.
 - If an opportunity to simplify or refactor existing code is noticed, ask the user before making those changes.
 
+## ActivityStreams `IObjectOrLink` Type Evaluation
+
+Properties typed as `IEnumerable<IObjectOrLink>` (e.g. `Actor`, `Object`, `AttributedTo`, `InReplyTo`, `To`, etc.) can hold a mix of inline objects and unresolved references. The concrete runtime type is determined by the JSON:
+
+| JSON value | Runtime type | Meaning |
+|---|---|---|
+| Plain string (`"https://..."`) | `ILink` (Href set, `Type=["Link"]`) | Unresolved IRI reference |
+| `{"type":"Link",...}` or `{"type":"Mention",...}` | `ILink` | Qualified link |
+| `{"type":"Note",...}` (or any known type) | `IObject` (concrete subtype) | Inline object |
+| Object with no `type` | `ObjectOrLink` | Anonymous object |
+
+**Always check `ILink` first** — a plain URL string is the most common form of an unresolved actor/object reference:
+
+```csharp
+var ref = activity.Actor?.FirstOrDefault();
+if (ref is ILink link)
+    actorId = link.Href?.ToString();      // unresolved — fetch if needed
+else if (ref is Actor actor)
+    actorId = actor.Id;                   // already inline
+```
+
+**`ILink` serializes back to a plain string** when `Href` is the only property set — so `is ILink` (not `is Link`) is the correct check for "unresolved reference".
+
+**`IEnumerable<ILink>`** (e.g. `Object.Url`) always contains links — no need to type-check.
+
+**`IImageOrLink`** (used for `Icon`/`Image`) only ever holds `Image` or `Link`.
+
+**To dereference:** use `IActivityPubClient.GetAsync<T>(link.Href)`. Never assume an `IObjectOrLink` is a full object without checking `is IObject` first.
+
+## 3rd Party Libraries
+- If we need details for Kristoffer Strube's ActivityStreams .NET library, refer to the official GitHub repository: https://github.com/KristofferStrube/ActivityStreams

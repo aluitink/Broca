@@ -90,9 +90,13 @@ public class InboxController : ActivityPubControllerBase
             
             var totalCount = await _activityRepository.GetInboxCountAsync(username);
 
-            if (page == 0 && limit == 20)
+            // Check if pagination parameters were explicitly provided
+            var hasPageParam = Request.Query.ContainsKey("page");
+            var hasLimitParam = Request.Query.ContainsKey("limit");
+
+            if (!hasPageParam && !hasLimitParam)
             {
-                // Return the collection wrapper when no pagination params or default
+                // Return the collection wrapper when no pagination params provided
                 var collection = new OrderedCollection
                 {
                     JsonLDContext = new List<ITermDefinition> 

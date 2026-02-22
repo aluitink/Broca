@@ -173,7 +173,7 @@
     [Parameter]
     public EventCallback<(KristofferStrube.ActivityStreams.Object Actor, bool IsFollowing)> OnFollowStateChanged { get; set; }
 
-    protected override Task OnParametersSetAsync()
+    protected override async Task OnParametersSetAsync()
     {
         if (Actor != null && FollowersUrl == null)
         {
@@ -188,10 +188,34 @@
             }
         }
 
-        // TODO: Load the current user's following list to check who they follow
-        // This would require an API call to get the authenticated user's following collection
+        await LoadFollowingIdsAsync();
+    }
 
-        return Task.CompletedTask;
+    private async Task LoadFollowingIdsAsync()
+    {
+        if (string.IsNullOrEmpty(Client.ActorId)) return;
+
+        try
+        {
+            var self = await Client.GetSelfAsync();
+            if (self?.Following?.Href == null) return;
+
+            followingIds.Clear();
+            await foreach (var item in Client.GetCollectionAsync<IObjectOrLink>(self.Following.Href))
+            {
+                var itemId = item switch
+                {
+                    ILink link => link.Href?.ToString(),
+                    KristofferStrube.ActivityStreams.Object obj => obj.Id,
+                    _ => null
+                };
+                if (itemId != null) followingIds.Add(itemId);
+            }
+        }
+        catch
+        {
+            // Silently fail - follow buttons will default to showing "Follow Back"
+        }
     }
 
     private bool IsFollowing(KristofferStrube.ActivityStreams.Object follower)

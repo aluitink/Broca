@@ -43,7 +43,7 @@ public class FileSystemActivityRepository : IActivityRepository
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
-            var json = JsonSerializer.Serialize(activity, activity.GetType(), _jsonOptions);
+            var json = JsonSerializer.Serialize(activity, typeof(IObjectOrLink), _jsonOptions);
             await File.WriteAllTextAsync(activityPath, json, cancellationToken);
             _logger.LogInformation("Saved inbox activity {ActivityId} for {Username}", activityId, username);
         }
@@ -63,7 +63,7 @@ public class FileSystemActivityRepository : IActivityRepository
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
-            var json = JsonSerializer.Serialize(activity, activity.GetType(), _jsonOptions);
+            var json = JsonSerializer.Serialize(activity, typeof(IObjectOrLink), _jsonOptions);
             await File.WriteAllTextAsync(activityPath, json, cancellationToken);
             _logger.LogInformation("Saved outbox activity {ActivityId} for {Username}", activityId, username);
         }

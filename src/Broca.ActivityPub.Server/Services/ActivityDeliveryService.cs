@@ -90,12 +90,7 @@ public class ActivityDeliveryService
                 return;
             }
 
-            var inboxUrl = targetActor.Inbox switch
-            {
-                Link link => link.Href?.ToString(),
-                KristofferStrube.ActivityStreams.Object obj => obj.Id,
-                _ => null
-            };
+            var inboxUrl = targetActor.Inbox?.Href?.ToString();
 
             if (string.IsNullOrEmpty(inboxUrl))
             {
@@ -183,12 +178,7 @@ public class ActivityDeliveryService
                         continue;
                     }
 
-                    var inboxUrl = followerActor.Inbox switch
-                    {
-                        Link link => link.Href?.ToString(),
-                        KristofferStrube.ActivityStreams.Object obj => obj.Id,
-                        _ => null
-                    };
+                    var inboxUrl = followerActor.Inbox?.Href?.ToString();
 
                     if (string.IsNullOrEmpty(inboxUrl))
                     {
@@ -284,35 +274,15 @@ public class ActivityDeliveryService
                     string? inboxUrl = null;
 
                     // Check for endpoints.sharedInbox
-                    if (recipientActor.Endpoints != null)
+                    if (recipientActor.Endpoints is Endpoints endpoints)
                     {
-                        var sharedInbox = recipientActor.Endpoints switch
-                        {
-                            KristofferStrube.ActivityStreams.Object obj when obj.ExtensionData?.ContainsKey("sharedInbox") == true => 
-                                obj.ExtensionData["sharedInbox"] switch
-                                {
-                                    JsonElement jsonElement when jsonElement.ValueKind == JsonValueKind.String => 
-                                        jsonElement.GetString(),
-                                    _ => null
-                                },
-                            _ => null
-                        };
-
-                        if (!string.IsNullOrEmpty(sharedInbox))
-                        {
-                            inboxUrl = sharedInbox;
-                        }
+                        inboxUrl = endpoints.SharedInbox?.ToString();
                     }
 
                     // Fall back to individual inbox
-                    if (string.IsNullOrEmpty(inboxUrl) && recipientActor.Inbox != null)
+                    if (string.IsNullOrEmpty(inboxUrl))
                     {
-                        inboxUrl = recipientActor.Inbox switch
-                        {
-                            Link link => link.Href?.ToString(),
-                            KristofferStrube.ActivityStreams.Object obj => obj.Id,
-                            _ => null
-                        };
+                        inboxUrl = recipientActor.Inbox?.Href?.ToString();
                     }
 
                     if (string.IsNullOrEmpty(inboxUrl))

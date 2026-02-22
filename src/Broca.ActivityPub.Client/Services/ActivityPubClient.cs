@@ -303,122 +303,109 @@ public class ActivityPubClient : IActivityPubClient
 
     /// <inheritdoc/>
     public async IAsyncEnumerable<T> GetCollectionAsync<T>(
-        Uri collectionUri, 
-        int? limit = null, 
+        Uri collectionUri,
+        int? limit = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(collectionUri);
 
         _logger.LogInformation("Fetching collection: {CollectionUri} (limit: {Limit})", collectionUri, limit);
 
-        var currentUri = collectionUri;
+        Uri? currentUri = collectionUri;
         var itemCount = 0;
 
         while (currentUri != null)
         {
-            var page = await GetAsync<JsonElement>(currentUri, useCache: true, cancellationToken);
-            
-            if (page.ValueKind == JsonValueKind.Undefined || page.ValueKind == JsonValueKind.Null)
-            {
-                yield break;
-            }
+            var page = await GetAsync<IObjectOrLink>(currentUri, useCache: true, cancellationToken);
 
-            // Handle both Collection and OrderedCollection
-            JsonElement items;
-            if (page.TryGetProperty("orderedItems", out var orderedItems))
+            if (page is not Collection collection)
+                yield break;
+
+            // Top-level collection with no inline items: navigate to first page
+            if (collection is not CollectionPage && collection.Items == null && collection.OrderedItems == null)
             {
-                items = orderedItems;
-            }
-            else if (page.TryGetProperty("items", out var regularItems))
-            {
-                items = regularItems;
-            }
-            else if (page.TryGetProperty("first", out var first))
-            {
-                // This is a collection, navigate to first page
-                if (first.ValueKind == JsonValueKind.String)
+                if (collection.First is CollectionPage inlineFirstPage)
                 {
-                    currentUri = new Uri(first.GetString()!);
-                    continue;
-                }
-                else if (first.ValueKind == JsonValueKind.Object)
-                {
-                    items = first;
+                    collection = inlineFirstPage;
                 }
                 else
                 {
-                    yield break;
+                    currentUri = GetCollectionPageUri(collection.First);
+                    continue;
                 }
             }
-            else
-            {
-                yield break;
-            }
 
-            // Extract items from the page
-            if (items.ValueKind == JsonValueKind.Array)
+            var items = collection.OrderedItems ?? collection.Items;
+            if (items != null)
             {
-                foreach (var item in items.EnumerateArray())
+                foreach (var item in items)
                 {
                     if (limit.HasValue && itemCount >= limit.Value)
-                    {
                         yield break;
-                    }
 
-                    T? deserializedItem = default;
-                    try
+                    var resolved = await ResolveCollectionItemAsync<T>(item, cancellationToken);
+                    if (resolved != null)
                     {
-                        deserializedItem = JsonSerializer.Deserialize<T>(item.GetRawText(), _jsonOptions);
-                    }
-                    catch (JsonException ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to deserialize collection item");
-                        continue;
-                    }
-
-                    if (deserializedItem != null)
-                    {
-                        yield return deserializedItem;
+                        yield return resolved;
                         itemCount++;
                     }
                 }
             }
-            else if (items.ValueKind == JsonValueKind.Object)
-            {
-                // Handle malformed response where orderedItems/items is a single object instead of array
-                _logger.LogWarning("Collection returned a single object instead of an array. This is non-standard but will be handled.");
-                
-                if (limit.HasValue && itemCount >= limit.Value)
-                {
-                    yield break;
-                }
 
-                T? deserializedItem = default;
+            currentUri = collection is CollectionPage collectionPage
+                ? GetCollectionPageUri(collectionPage.Next)
+                : null;
+        }
+    }
+
+    private static Uri? GetCollectionPageUri(ICollectionPageOrLink? pageOrLink) =>
+        pageOrLink switch
+        {
+            ILink link when link.Href != null => link.Href,
+            CollectionPage page when page.Id != null => new Uri(page.Id),
+            _ => null
+        };
+
+    private async Task<T?> ResolveCollectionItemAsync<T>(IObjectOrLink item, CancellationToken cancellationToken)
+    {
+        if (item is T typed)
+            return typed;
+
+        // IRI reference — dereference to get the full object.
+        // LinkConverter.Read always sets Type=["Link"] for plain string URIs, so we cannot
+        // rely on a missing/empty Type to detect them. Any Link with a Href that hasn't
+        // already matched T above should be fetched rather than round-tripped through JSON
+        // (LinkConverter.Write serializes Href-only Links back to a plain string, which
+        // ObjectDefaultConverter cannot then deserialize as a concrete Object type).
+        if (item is ILink link && link.Href != null)
+        {
+            var fetched = await GetAsync<IObjectOrLink>(link.Href, useCache: true, cancellationToken);
+            if (fetched is T typedFetched)
+                return typedFetched;
+            if (fetched != null)
+            {
                 try
                 {
-                    deserializedItem = JsonSerializer.Deserialize<T>(items.GetRawText(), _jsonOptions);
+                    var fetchedJson = JsonSerializer.Serialize(fetched, typeof(IObjectOrLink), _jsonOptions);
+                    return JsonSerializer.Deserialize<T>(fetchedJson, _jsonOptions);
                 }
                 catch (JsonException ex)
                 {
-                    _logger.LogWarning(ex, "Failed to deserialize collection item");
-                }
-
-                if (deserializedItem != null)
-                {
-                    yield return deserializedItem;
-                    itemCount++;
+                    _logger.LogWarning(ex, "Failed to convert fetched item to {Type}", typeof(T).Name);
                 }
             }
+            return default;
+        }
 
-            // Check for next page
-            if (page.TryGetProperty("next", out var next) && next.ValueKind == JsonValueKind.String)
-            {
-                currentUri = new Uri(next.GetString()!);
-            }
-            else
-            {
-                currentUri = null;
-            }
+        try
+        {
+            var json = JsonSerializer.Serialize(item, typeof(IObjectOrLink), _jsonOptions);
+            return JsonSerializer.Deserialize<T>(json, _jsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Failed to convert collection item to {Type}", typeof(T).Name);
+            return default;
         }
     }
 

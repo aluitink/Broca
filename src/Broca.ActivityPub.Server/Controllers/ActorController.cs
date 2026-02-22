@@ -284,7 +284,10 @@ public class ActorController : ActivityPubControllerBase
             // Enrich activities with collection information
             await _enrichmentService.EnrichActivitiesAsync(liked, baseUrl);
 
-            if (page == 0 && limit == 20)
+            var hasPageParam = Request.Query.ContainsKey("page");
+            var hasLimitParam = Request.Query.ContainsKey("limit");
+
+            if (!hasPageParam && !hasLimitParam)
             {
                 // Return the collection wrapper
                 var collection = new OrderedCollection
@@ -351,7 +354,10 @@ public class ActorController : ActivityPubControllerBase
             // Enrich activities with collection information
             await _enrichmentService.EnrichActivitiesAsync(shared, baseUrl);
 
-            if (page == 0 && limit == 20)
+            var hasPageParam = Request.Query.ContainsKey("page");
+            var hasLimitParam = Request.Query.ContainsKey("limit");
+
+            if (!hasPageParam && !hasLimitParam)
             {
                 // Return the collection wrapper
                 var collection = new OrderedCollection
