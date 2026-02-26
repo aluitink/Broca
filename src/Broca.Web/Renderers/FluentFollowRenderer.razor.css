@@ -1,0 +1,16 @@
+.fluent-follow-card {
+    margin-bottom: 16px;
+    border-left: 3px solid var(--accent-fill-rest);
+}
+
+.follow-header {
+    align-items: center;
+}
+
+.follow-timestamp {
+    white-space: nowrap;
+}
+
+.actor-info-clickable:hover {
+    opacity: 0.8;
+}
