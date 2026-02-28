@@ -1,0 +1,282 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@using Broca.ActivityPub.Components.Services
+@using Broca.ActivityPub.Core.Interfaces
+@inject ActorResolutionService ActorResolver
+@inject NavigationManager Navigation
+@inject IActivityPubClient? ActivityPubClient
+@inherits ComponentBase
+
+<FluentCard Class="@($"fluent-follow-card {CssClass}")">
+    @if (Follow != null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="follow-header">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    @if (Follow.Actor?.Any() == true)
+                    {
+                        <div class="actor-info-clickable" @onclick="NavigateToActor" style="cursor: pointer;">
+                            <FluentPersona Name="@GetActorDisplay()"
+                                           Image="@GetActorImageUrl()"
+                                           ImageSize="32px"
+                                           TextPosition="@TextPosition.End">
+                                @if (!string.IsNullOrEmpty(GetActorHandle()))
+                                {
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                        @GetActorHandle()
+                                    </FluentLabel>
+                                }
+                            </FluentPersona>
+                        </div>
+                    }
+
+                    <FluentBadge Appearance="Appearance.Accent">
+                        👤 Follow request
+                    </FluentBadge>
+                </FluentStack>
+
+                @if (Follow.Published.HasValue)
+                {
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="follow-timestamp">
+                        <time datetime="@Follow.Published.Value.ToString("o")" title="@Follow.Published.Value.ToString("f")">
+                            @FormatDateTime(Follow.Published.Value)
+                        </time>
+                    </FluentLabel>
+                }
+            </FluentStack>
+
+            @if (actionState == FollowActionState.None && ActivityPubClient != null)
+            {
+                <FluentDivider Style="margin: 0;" />
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                    <FluentButton Appearance="Appearance.Accent"
+                                  IconStart="@(new Icons.Regular.Size16.Checkmark())"
+                                  Loading="@(pendingAction == FollowActionState.Accepted)"
+                                  Disabled="@(pendingAction != FollowActionState.None)"
+                                  OnClick="AcceptAsync">
+                        Accept
+                    </FluentButton>
+                    <FluentButton Appearance="Appearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                  Loading="@(pendingAction == FollowActionState.Rejected)"
+                                  Disabled="@(pendingAction != FollowActionState.None)"
+                                  OnClick="RejectAsync">
+                        Reject
+                    </FluentButton>
+                    <FluentButton Appearance="Appearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size16.Prohibited())"
+                                  Loading="@(pendingAction == FollowActionState.Blocked)"
+                                  Disabled="@(pendingAction != FollowActionState.None)"
+                                  OnClick="BlockAsync">
+                        Block
+                    </FluentButton>
+                </FluentStack>
+            }
+            else if (actionState == FollowActionState.Accepted)
+            {
+                <FluentDivider Style="margin: 0;" />
+                <FluentBadge Appearance="Appearance.Accent" BackgroundColor="var(--success)">
+                    ✅ Accepted
+                </FluentBadge>
+            }
+            else if (actionState == FollowActionState.Rejected)
+            {
+                <FluentDivider Style="margin: 0;" />
+                <FluentBadge Appearance="Appearance.Accent" BackgroundColor="var(--error)">
+                    ❌ Rejected
+                </FluentBadge>
+            }
+            else if (actionState == FollowActionState.Blocked)
+            {
+                <FluentDivider Style="margin: 0;" />
+                <FluentBadge Appearance="Appearance.Neutral">
+                    🚫 Blocked
+                </FluentBadge>
+            }
+
+            @if (!string.IsNullOrEmpty(actionError))
+            {
+                <FluentMessageBar Intent="MessageIntent.Error" AllowDismiss="true">
+                    @actionError
+                </FluentMessageBar>
+            }
+
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Follow)
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    private ActorInfo? actorInfo;
+    private FollowActionState actionState = FollowActionState.None;
+    private FollowActionState pendingAction = FollowActionState.None;
+    private string? actionError;
+
+    private enum FollowActionState { None, Accepted, Rejected, Blocked }
+
+    [Parameter]
+    public Follow? Follow { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public RenderFragment<Follow>? AdditionalContent { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadActorInfo();
+    }
+
+    private async Task LoadActorInfo()
+    {
+        if (Follow?.Actor?.Any() != true)
+            return;
+
+        var actorRef = Follow.Actor.First();
+        string? actorId = null;
+
+        if (actorRef is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
+            actorId = actorObj.Id;
+        else if (actorRef is ILink link && link.Href != null)
+            actorId = link.Href.ToString();
+
+        if (!string.IsNullOrEmpty(actorId))
+        {
+            try
+            {
+                actorInfo = await ActorResolver.ResolveActorAsync(new Link { Href = new Uri(actorId) });
+            }
+            catch
+            {
+                // Actor resolution failure is non-fatal; fall back to raw values
+            }
+        }
+    }
+
+    private async Task AcceptAsync()
+    {
+        await DispatchActionAsync(FollowActionState.Accepted, async client =>
+        {
+            var accept = client.CreateActivityBuilder().Accept(Follow!);
+            await client.PostToOutboxAsync(accept);
+        });
+    }
+
+    private async Task RejectAsync()
+    {
+        await DispatchActionAsync(FollowActionState.Rejected, async client =>
+        {
+            var reject = client.CreateActivityBuilder().Reject(Follow!);
+            await client.PostToOutboxAsync(reject);
+        });
+    }
+
+    private async Task BlockAsync()
+    {
+        var actorId = GetActorId();
+        if (string.IsNullOrEmpty(actorId))
+            return;
+
+        await DispatchActionAsync(FollowActionState.Blocked, async client =>
+        {
+            var block = client.CreateActivityBuilder().Block(actorId);
+            await client.PostToOutboxAsync(block);
+        });
+    }
+
+    private async Task DispatchActionAsync(FollowActionState target, Func<IActivityPubClient, Task> action)
+    {
+        if (ActivityPubClient == null || Follow == null)
+            return;
+
+        actionError = null;
+        pendingAction = target;
+        StateHasChanged();
+
+        try
+        {
+            await action(ActivityPubClient);
+            actionState = target;
+        }
+        catch (Exception ex)
+        {
+            actionError = $"Action failed: {ex.Message}";
+        }
+        finally
+        {
+            pendingAction = FollowActionState.None;
+            StateHasChanged();
+        }
+    }
+
+    private string GetActorId()
+    {
+        var actorRef = Follow?.Actor?.FirstOrDefault();
+        if (actorRef == null) return string.Empty;
+        if (actorInfo != null) return actorInfo.Id;
+        if (actorRef is IObject obj && !string.IsNullOrEmpty(obj.Id)) return obj.Id;
+        if (actorRef is ILink link && link.Href != null) return link.Href.ToString();
+        return string.Empty;
+    }
+
+    private string GetActorDisplay()
+    {
+        if (actorInfo != null) return actorInfo.Name;
+
+        var actorRef = Follow?.Actor?.FirstOrDefault();
+        if (actorRef == null) return "Unknown";
+        if (actorRef is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
+            return obj.Name.First();
+        if (actorRef is ILink link && link.Href != null)
+            return link.Href.ToString();
+        return "Unknown";
+    }
+
+    private string GetActorHandle()
+    {
+        if (actorInfo != null) return actorInfo.Handle;
+        return string.Empty;
+    }
+
+    private string GetActorImageUrl()
+    {
+        if (actorInfo?.IconUrl != null) return actorInfo.IconUrl;
+
+        var actorRef = Follow?.Actor?.FirstOrDefault();
+        if (actorRef is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                if (url.Href != null) return url.Href.ToString();
+            }
+        }
+        return string.Empty;
+    }
+
+    private void NavigateToActor()
+    {
+        var id = GetActorId();
+        if (!string.IsNullOrEmpty(id))
+            Navigation.NavigateTo($"/actor?id={Uri.EscapeDataString(id)}");
+    }
+
+    private string FormatDateTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (timeSpan.TotalMinutes < 1) return "just now";
+        if (timeSpan.TotalMinutes < 60) return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24) return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7) return $"{(int)timeSpan.TotalDays}d ago";
+
+        return dateTime.ToString("MMM d, yyyy");
+    }
+}

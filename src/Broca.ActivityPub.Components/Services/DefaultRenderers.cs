@@ -101,6 +101,22 @@ internal class DefaultActorRendererProxy : ObjectRendererBase<KristofferStrube.A
 }
 
 /// <summary>
+/// Default proxy renderer for Follow activities.
+/// </summary>
+internal class DefaultFollowRendererProxy : ObjectRendererBase<Follow>
+{
+    protected override RenderFragment Render(Follow obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FollowRenderer>(0);
+            builder.AddAttribute(1, "Follow", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
 /// Default proxy renderer for Activity objects.
 /// </summary>
 internal class DefaultActivityRendererProxy : ObjectRendererBase<Activity>

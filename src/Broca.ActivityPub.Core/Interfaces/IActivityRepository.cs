@@ -96,4 +96,9 @@ public interface IActivityRepository
     /// Gets the total count of objects shared by an actor
     /// </summary>
     Task<int> GetSharedByActorCountAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks an object as deleted by replacing it with a Tombstone
+    /// </summary>
+    Task MarkObjectAsDeletedAsync(string objectId, CancellationToken cancellationToken = default);
 }

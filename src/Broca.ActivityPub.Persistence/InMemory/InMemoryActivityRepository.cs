@@ -1,13 +1,14 @@
 using System.Collections.Concurrent;
 using Broca.ActivityPub.Core.Interfaces;
 using KristofferStrube.ActivityStreams;
+using Microsoft.Extensions.Logging;
 
 namespace Broca.ActivityPub.Persistence.InMemory;
 
 /// <summary>
 /// In-memory implementation of activity repository for testing and development
 /// </summary>
-public class InMemoryActivityRepository : IActivityRepository
+public class InMemoryActivityRepository : IActivityRepository, IActivityStatistics
 {
     private readonly ConcurrentDictionary<string, List<(string Id, IObjectOrLink Activity, DateTime Timestamp)>> _inboxes = new();
     private readonly ConcurrentDictionary<string, List<(string Id, IObjectOrLink Activity, DateTime Timestamp)>> _outboxes = new();
@@ -21,11 +22,21 @@ public class InMemoryActivityRepository : IActivityRepository
     
     // Index for tracking replies: objectId -> list of reply activities
     private readonly ConcurrentDictionary<string, List<(string ActivityId, DateTime Timestamp)>> _replies = new();
+    
+    private readonly ILogger<InMemoryActivityRepository>? _logger;
+
+    public InMemoryActivityRepository(ILogger<InMemoryActivityRepository>? logger = null)
+    {
+        _logger = logger;
+    }
 
     public Task SaveInboxActivityAsync(string username, string activityId, IObjectOrLink activity, CancellationToken cancellationToken = default)
     {
         var key = username.ToLowerInvariant();
         var inbox = _inboxes.GetOrAdd(key, _ => new List<(string, IObjectOrLink, DateTime)>());
+        
+        _logger?.LogDebug("SaveInboxActivityAsync: Saving activity to {Username}'s inbox. ActivityId={ActivityId}, ConcreteType={ConcreteType}",
+            username, activityId, activity.GetType().Name);
         
         lock (inbox)
         {
@@ -71,9 +82,15 @@ public class InMemoryActivityRepository : IActivityRepository
                     .Take(limit)
                     .Select(x => x.Activity)
                     .ToList();
+                
+                _logger?.LogDebug("GetInboxActivitiesAsync: Retrieved {Count} activities from {Username}'s inbox. Types: {Types}",
+                    activities.Count, username, string.Join(", ", activities.Select(a => a.GetType().Name)));
+                
                 return Task.FromResult<IEnumerable<IObjectOrLink>>(activities);
             }
         }
+        
+        _logger?.LogDebug("GetInboxActivitiesAsync: No inbox found for {Username}", username);
         return Task.FromResult<IEnumerable<IObjectOrLink>>(Array.Empty<IObjectOrLink>());
     }
 
@@ -352,6 +369,19 @@ public class InMemoryActivityRepository : IActivityRepository
         return Task.FromResult(count);
     }
 
+    public Task MarkObjectAsDeletedAsync(string objectId, CancellationToken cancellationToken = default)
+    {
+        var tombstone = new Tombstone
+        {
+            Id = objectId,
+            Type = new[] { "Tombstone" },
+            Deleted = DateTime.UtcNow
+        };
+        
+        _activities[objectId] = tombstone;
+        return Task.CompletedTask;
+    }
+
     /// <summary>
     /// Indexes an activity for efficient querying
     /// </summary>
@@ -589,6 +619,56 @@ public class InMemoryActivityRepository : IActivityRepository
         _likes.Clear();
         _shares.Clear();
         _replies.Clear();
+    }
+
+    public Task<int> CountCreateActivitiesSinceAsync(DateTime since, CancellationToken cancellationToken = default)
+    {
+        var count = 0;
+        foreach (var outbox in _outboxes.Values)
+        {
+            lock (outbox)
+            {
+                count += outbox.Count(entry =>
+                {
+                    if (entry.Activity is not Create createActivity)
+                        return false;
+                    
+                    // Use Published date if available, otherwise fall back to storage timestamp
+                    var activityDate = createActivity.Published ?? entry.Timestamp;
+                    return activityDate >= since;
+                });
+            }
+        }
+        return Task.FromResult(count);
+    }
+
+    public Task<int> CountActiveActorsSinceAsync(DateTime since, CancellationToken cancellationToken = default)
+    {
+        var activeUsernames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in _outboxes)
+        {
+            var username = kvp.Key;
+            var outbox = kvp.Value;
+            
+            lock (outbox)
+            {
+                var hasCreateActivity = outbox.Any(entry =>
+                {
+                    if (entry.Activity is not Create createActivity)
+                        return false;
+                    
+                    // Use Published date if available, otherwise fall back to storage timestamp
+                    var activityDate = createActivity.Published ?? entry.Timestamp;
+                    return activityDate >= since;
+                });
+                
+                if (hasCreateActivity)
+                {
+                    activeUsernames.Add(username);
+                }
+            }
+        }
+        return Task.FromResult(activeUsernames.Count);
     }
 }
 

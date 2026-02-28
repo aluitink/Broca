@@ -23,6 +23,7 @@ public static class FluentRendererExtensions
         registry.RegisterRenderer(typeof(Create), new FluentCreateRendererProxy());
         registry.RegisterRenderer(typeof(Like), new FluentLikeRendererProxy());
         registry.RegisterRenderer(typeof(Announce), new FluentAnnounceRendererProxy());
+        registry.RegisterRenderer(typeof(Follow), new FluentFollowRendererProxy());
         registry.RegisterRenderer(typeof(Activity), new FluentActivityRendererProxy());
         registry.RegisterRenderer(typeof(Image), new FluentImageRendererProxy());
         registry.RegisterRenderer(typeof(Video), new FluentVideoRendererProxy());
@@ -74,6 +75,22 @@ internal class FluentActorRendererProxy : ObjectRendererBase<KristofferStrube.Ac
         {
             builder.OpenComponent<FluentActorRenderer>(0);
             builder.AddAttribute(1, "Actor", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Follow activities using FluentFollowRenderer.
+/// </summary>
+internal class FluentFollowRendererProxy : ObjectRendererBase<Follow>
+{
+    protected override RenderFragment Render(Follow obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentFollowRenderer>(0);
+            builder.AddAttribute(1, "Follow", obj);
             builder.CloseComponent();
         };
     }

@@ -92,7 +92,7 @@ public class OutboxProcessor
         {
             var typedActivity = (Activity)activity;
             // Extract target actor ID from the activity's object
-            var targetActorId = ExtractTargetActorId(typedActivity);
+            var targetActorId = await ExtractTargetActorIdAsync(typedActivity, cancellationToken);
             if (!string.IsNullOrEmpty(targetActorId))
             {
                 await _deliveryService.QueueActivityToTargetAsync(username, activityId, activity, targetActorId, cancellationToken);
@@ -132,7 +132,7 @@ public class OutboxProcessor
             {
                 string? recipientId = item switch
                 {
-                    Link link => link.Href?.ToString(),
+                    ILink link => link.Href?.ToString(),
                     IObject obj => obj.Id,
                     _ => null
                 };
@@ -153,20 +153,88 @@ public class OutboxProcessor
         return recipients.ToList();
     }
 
-    private string? ExtractTargetActorId(Activity activity)
+    private async Task<string?> ExtractTargetActorIdAsync(Activity activity, CancellationToken cancellationToken)
     {
-        // For most activities, the target is in the 'object' property
         var targetObject = activity.Object?.FirstOrDefault();
-        
-        // For Undo, we need to look at the wrapped activity's object
-        if (activity.Type?.Contains("Undo") == true && targetObject is Activity wrappedActivity)
+        Activity? effectiveActivity = activity;
+
+        // For Undo, look at the wrapped activity's object (the thing being undone)
+        if (activity.Type?.Contains("Undo") == true && targetObject is Activity wrappedUndoActivity)
         {
-            targetObject = wrappedActivity.Object?.FirstOrDefault();
+            effectiveActivity = wrappedUndoActivity;
+            targetObject = wrappedUndoActivity.Object?.FirstOrDefault();
         }
-        
+
+        // For Accept/Reject, deliver to the actor of the wrapped activity (e.g., the Follow sender)
+        if ((activity.Type?.Contains("Accept") == true || activity.Type?.Contains("Reject") == true)
+            && targetObject is Activity wrappedActivity)
+        {
+            var wrappedActor = wrappedActivity.Actor?.FirstOrDefault();
+            return wrappedActor switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+        }
+
+        // For Like and Announce (and Undo of Like/Announce), we need to deliver to the owner of the object being liked/announced
+        if (effectiveActivity.Type?.Contains("Like") == true || effectiveActivity.Type?.Contains("Announce") == true)
+        {
+            var objectId = targetObject switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+
+            if (!string.IsNullOrEmpty(objectId))
+            {
+                // First, try to get the object from the local repository
+                try
+                {
+                    var obj = await _activityRepository.GetActivityByIdAsync(objectId, cancellationToken);
+                    if (obj is IObject objectWithAttribution)
+                    {
+                        var attributedTo = objectWithAttribution.AttributedTo?.FirstOrDefault();
+                        var actorId = attributedTo switch
+                        {
+                            ILink link => link.Href?.ToString(),
+                            IObject attrObj => attrObj.Id,
+                            _ => null
+                        };
+
+                        if (!string.IsNullOrEmpty(actorId))
+                        {
+                            return actorId;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Object {ObjectId} not found locally, attempting to extract owner from URL", objectId);
+                }
+
+                // If object not found locally (remote object), try to extract the actor from the URL pattern
+                // Typical pattern: https://server.example/users/{username}/objects/{id}
+                var match = System.Text.RegularExpressions.Regex.Match(objectId, @"^(https?://[^/]+)(?:/[^/]+)?/users/([^/]+)/");
+                if (match.Success)
+                {
+                    var baseUrl = match.Groups[1].Value;
+                    var username = match.Groups[2].Value;
+                    var actorId = $"{baseUrl}/users/{username}";
+                    _logger.LogDebug("Extracted actor {ActorId} from object URL {ObjectId}", actorId, objectId);
+                    return actorId;
+                }
+                
+                _logger.LogWarning("Could not extract actor ID from remote object URL: {ObjectId}", objectId);
+            }
+        }
+
+        // Default: return the object ID (works for Follow, where object is an Actor)
         return targetObject switch
         {
-            Link link => link.Href?.ToString(),
+            ILink link => link.Href?.ToString(),
             IObject obj => obj.Id,
             _ => null
         };
@@ -215,6 +283,12 @@ public class OutboxProcessor
             case Follow followActivity:
                 await HandleOutgoingFollowAsync(username, followActivity, cancellationToken);
                 break;
+            case Accept acceptActivity:
+                await HandleOutgoingAcceptAsync(username, acceptActivity, cancellationToken);
+                break;
+            case Reject rejectActivity:
+                await HandleOutgoingRejectAsync(username, rejectActivity, cancellationToken);
+                break;
             case Undo undoActivity:
                 await HandleOutgoingUndoAsync(username, undoActivity, cancellationToken);
                 break;
@@ -237,7 +311,7 @@ public class OutboxProcessor
             var followTarget = followActivity.Object.FirstOrDefault();
             var followingActorId = followTarget switch
             {
-                Link link => link.Href?.ToString(),
+                ILink link => link.Href?.ToString(),
                 IObject obj => obj.Id,
                 _ => null
             };
@@ -247,6 +321,69 @@ public class OutboxProcessor
                 await _actorRepository.AddFollowingAsync(username, followingActorId, cancellationToken);
                 _logger.LogInformation("User {Username} now following {FollowingActorId}", username, followingActorId);
             }
+        }
+    }
+
+    private async Task HandleOutgoingAcceptAsync(string username, Accept acceptActivity, CancellationToken cancellationToken)
+    {
+        if (acceptActivity.Object == null)
+        {
+            return;
+        }
+
+        var acceptedObject = acceptActivity.Object.FirstOrDefault();
+        if (acceptedObject is not Activity followActivity || followActivity.Type?.Contains("Follow") != true)
+        {
+            return;
+        }
+
+        var followerActorId = followActivity.Actor?.FirstOrDefault() switch
+        {
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (followerActorId != null)
+        {
+            await _actorRepository.RemovePendingFollowerAsync(username, followerActorId, cancellationToken);
+            await _actorRepository.AddFollowerAsync(username, followerActorId, cancellationToken);
+            _logger.LogInformation("Accepted pending follow from {FollowerActorId} for {Username}", followerActorId, username);
+        }
+    }
+
+    private async Task HandleOutgoingRejectAsync(string username, Reject rejectActivity, CancellationToken cancellationToken)
+    {
+        if (rejectActivity.Object == null)
+        {
+            return;
+        }
+
+        var rejectedObject = rejectActivity.Object.FirstOrDefault();
+
+        if (rejectedObject is ILink rejectLink && rejectLink.Href != null)
+        {
+            var resolved = await _activityRepository.GetActivityByIdAsync(rejectLink.Href.ToString(), cancellationToken);
+            if (resolved is IObject resolvedObj)
+                rejectedObject = resolvedObj;
+        }
+
+        if (rejectedObject is not Activity followActivity || followActivity.Type?.Contains("Follow") != true)
+        {
+            return;
+        }
+
+        var followerActorId = followActivity.Actor?.FirstOrDefault() switch
+        {
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (followerActorId != null)
+        {
+            await _actorRepository.RemovePendingFollowerAsync(username, followerActorId, cancellationToken);
+            _logger.LogInformation("Rejected pending follow from {FollowerActorId} for {Username}", followerActorId, username);
         }
     }
 
@@ -420,14 +557,26 @@ public class OutboxProcessor
         }
 
         var undoObject = undoActivity.Object.FirstOrDefault();
-        
+
+        if (undoObject is ILink undoLink && undoLink.Href != null)
+        {
+            var resolved = await _activityRepository.GetActivityByIdAsync(undoLink.Href.ToString(), cancellationToken);
+            if (resolved is IObject resolvedObj)
+                undoObject = resolvedObj;
+            else
+            {
+                _logger.LogWarning("Could not resolve linked activity {ActivityId} for outgoing Undo", undoLink.Href);
+                return;
+            }
+        }
+
         // Handle Undo Follow
         if (undoObject is Follow followActivity && followActivity.Object != null)
         {
             var followTarget = followActivity.Object.FirstOrDefault();
             var followingActorId = followTarget switch
             {
-                Link link => link.Href?.ToString(),
+                ILink link => link.Href?.ToString(),
                 IObject obj => obj.Id,
                 _ => null
             };
@@ -452,7 +601,7 @@ public class OutboxProcessor
         var targetRef = addActivity.Target.FirstOrDefault();
         var collectionUrl = targetRef switch
         {
-            Link link => link.Href?.ToString(),
+            ILink link => link.Href?.ToString(),
             IObject targetObj => targetObj.Id,
             _ => null
         };
@@ -498,7 +647,7 @@ public class OutboxProcessor
             await _activityRepository.SaveOutboxActivityAsync(username, objectId, obj, cancellationToken);
             _logger.LogInformation("Stored object {ObjectId} for user {Username}", objectId, username);
         }
-        else if (objectRef is Link link)
+        else if (objectRef is ILink link)
         {
             // Link reference - use the href as the object ID
             objectId = link.Href?.ToString();
@@ -536,7 +685,7 @@ public class OutboxProcessor
         var targetRef = removeActivity.Target.FirstOrDefault();
         var collectionUrl = targetRef switch
         {
-            Link link => link.Href?.ToString(),
+            ILink link => link.Href?.ToString(),
             IObject obj => obj.Id,
             _ => null
         };
@@ -558,7 +707,7 @@ public class OutboxProcessor
         var objectRef = removeActivity.Object.FirstOrDefault();
         var objectId = objectRef switch
         {
-            Link link => link.Href?.ToString(),
+            ILink link => link.Href?.ToString(),
             IObject obj => obj.Id,
             _ => null
         };

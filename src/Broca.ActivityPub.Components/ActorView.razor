@@ -388,10 +388,41 @@
 
     private async Task CheckFollowStatusAsync()
     {
-        // TODO: Implement checking if current user follows this actor
-        // This would require querying the current user's following collection
-        isFollowing = false;
-        await Task.CompletedTask;
+        if (currentActor?.Id == null || string.IsNullOrEmpty(Client.ActorId))
+        {
+            isFollowing = false;
+            return;
+        }
+
+        try
+        {
+            var self = await Client.GetSelfAsync();
+            if (self?.Following?.Href == null)
+            {
+                isFollowing = false;
+                return;
+            }
+
+            await foreach (var item in Client.GetCollectionAsync<IObjectOrLink>(self.Following.Href))
+            {
+                var itemId = item switch
+                {
+                    ILink link => link.Href?.ToString(),
+                    KristofferStrube.ActivityStreams.Object obj => obj.Id,
+                    _ => null
+                };
+                if (itemId == currentActor.Id)
+                {
+                    isFollowing = true;
+                    return;
+                }
+            }
+            isFollowing = false;
+        }
+        catch
+        {
+            isFollowing = false;
+        }
     }
 
     private async Task HandleFollowAsync()

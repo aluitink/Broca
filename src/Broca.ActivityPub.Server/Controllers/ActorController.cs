@@ -93,7 +93,18 @@ public class ActorController : ActivityPubControllerBase
                         $"{baseUrl}/users/{username}/collections",
                         _jsonOptions);
                     
-                    // Add individual collection links with broca: prefix
+                    // Special case: "featured" is a de facto standard across the fediverse (Mastodon, Pleroma, etc.)
+                    // for pinned posts. Expose it at root level for interoperability.
+                    // This is a one-off exception - all other collections use broca: prefix.
+                    var featuredCollection = publicCollections.FirstOrDefault(c => c.Id == "featured");
+                    if (featuredCollection != null)
+                    {
+                        actor.ExtensionData["featured"] = JsonSerializer.SerializeToElement(
+                            $"{baseUrl}/users/{username}/collections/featured",
+                            _jsonOptions);
+                    }
+                    
+                    // Add individual collection links with broca: prefix (for Broca-specific extensions)
                     foreach (var collection in publicCollections)
                     {
                         actor.ExtensionData[$"broca:{collection.Id}"] = JsonSerializer.SerializeToElement(
@@ -284,7 +295,10 @@ public class ActorController : ActivityPubControllerBase
             // Enrich activities with collection information
             await _enrichmentService.EnrichActivitiesAsync(liked, baseUrl);
 
-            if (page == 0 && limit == 20)
+            var hasPageParam = Request.Query.ContainsKey("page");
+            var hasLimitParam = Request.Query.ContainsKey("limit");
+
+            if (!hasPageParam && !hasLimitParam)
             {
                 // Return the collection wrapper
                 var collection = new OrderedCollection
@@ -351,7 +365,10 @@ public class ActorController : ActivityPubControllerBase
             // Enrich activities with collection information
             await _enrichmentService.EnrichActivitiesAsync(shared, baseUrl);
 
-            if (page == 0 && limit == 20)
+            var hasPageParam = Request.Query.ContainsKey("page");
+            var hasLimitParam = Request.Query.ContainsKey("limit");
+
+            if (!hasPageParam && !hasLimitParam)
             {
                 // Return the collection wrapper
                 var collection = new OrderedCollection

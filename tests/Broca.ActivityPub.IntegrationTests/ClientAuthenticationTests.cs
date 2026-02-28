@@ -134,26 +134,10 @@ public class ClientAuthenticationTests : IAsyncLifetime
         // Initialize the client
         await client.InitializeAsync();
 
-        // Act - Create and post an activity to the outbox
-        var note = new Note
-        {
-            JsonLDContext = new List<ITermDefinition>
-            {
-                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
-            },
-            Content = new[] { "Hello from API key authenticated client!" },
-            AttributedTo = new[] { new Link { Href = new Uri(actorId) } }
-        };
-
-        var createActivity = new Create
-        {
-            JsonLDContext = new List<ITermDefinition>
-            {
-                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
-            },
-            Actor = new[] { new Link { Href = new Uri(actorId) } },
-            Object = new[] { note }
-        };
+        // Act - Create and post an activity to the outbox using ActivityBuilder
+        var builder = client.CreateActivityBuilder();
+        var createActivity = builder.CreateNote("Hello from API key authenticated client!")
+            .Build();
 
         var response = await client.PostToOutboxAsync(createActivity);
 

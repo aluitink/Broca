@@ -1,0 +1,44 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-follow @CssClass">
+    @if (Follow != null)
+    {
+        <div class="follow-header">
+            @{
+                var actorRef = Follow.Actor?.FirstOrDefault();
+            }
+            <span class="follow-actor">
+                @if (actorRef is IObject actorObj && actorObj.Name?.Any() == true)
+                {
+                    @actorObj.Name.First()
+                }
+                else if (actorRef is ILink link)
+                {
+                    @link.Href?.ToString()
+                }
+                else if (actorRef != null)
+                {
+                    @actorRef.ToString()
+                }
+            </span>
+            <span class="follow-action"> wants to follow you</span>
+        </div>
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Follow)
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Follow? Follow { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public RenderFragment<Follow>? AdditionalContent { get; set; }
+}

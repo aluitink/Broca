@@ -31,8 +31,8 @@ public class ProxyService
         {
             _logger.LogInformation("Attempting to fetch {Uri} via proxy", targetUri);
 
-            // Build proxy URL - assumes the server has a /api/proxy endpoint
-            var proxyUrl = $"/api/proxy?url={Uri.EscapeDataString(targetUri.ToString())}";
+            // Build proxy URL - uses the ActivityPub route prefix path
+            var proxyUrl = $"/ap/proxy?url={Uri.EscapeDataString(targetUri.ToString())}";
             
             var response = await _httpClient.GetAsync(proxyUrl, cancellationToken);
             
@@ -71,7 +71,7 @@ public class ProxyService
             _logger.LogInformation("Attempting to post to {Uri} via proxy", targetUri);
 
             // Build proxy URL
-            var proxyUrl = $"/api/proxy?url={Uri.EscapeDataString(targetUri.ToString())}";
+            var proxyUrl = $"/ap/proxy?url={Uri.EscapeDataString(targetUri.ToString())}";
             
             var response = await _httpClient.PostAsJsonAsync(proxyUrl, data, cancellationToken);
             

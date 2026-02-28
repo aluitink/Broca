@@ -74,6 +74,13 @@ public class ObjectController : ActivityPubControllerBase
                 return NotFound(new { error = "Object not found" });
             }
 
+            // Check if the object is a Tombstone (deleted)
+            if (obj is Tombstone)
+            {
+                _logger.LogInformation("Object {FullObjectId} has been deleted", fullObjectId);
+                return StatusCode(410, new { error = "Object has been deleted" });
+            }
+
             // Ensure the object has the correct ID set
             if (obj is KristofferStrube.ActivityStreams.Object asObject && string.IsNullOrEmpty(asObject.Id))
             {
@@ -124,7 +131,10 @@ public class ObjectController : ActivityPubControllerBase
             var replies = await _activityRepository.GetRepliesAsync(fullObjectId, limit, offset);
             var totalCount = await _activityRepository.GetRepliesCountAsync(fullObjectId);
 
-            if (page == 0 && limit == 20)
+            var hasPageParam = Request.Query.ContainsKey("page");
+            var hasLimitParam = Request.Query.ContainsKey("limit");
+
+            if (!hasPageParam && !hasLimitParam)
             {
                 // Return the collection wrapper
                 var collection = new OrderedCollection
@@ -203,7 +213,10 @@ public class ObjectController : ActivityPubControllerBase
             var likes = await _activityRepository.GetLikesAsync(fullObjectId, limit, offset);
             var totalCount = await _activityRepository.GetLikesCountAsync(fullObjectId);
 
-            if (page == 0 && limit == 20)
+            var hasPageParam = Request.Query.ContainsKey("page");
+            var hasLimitParam = Request.Query.ContainsKey("limit");
+
+            if (!hasPageParam && !hasLimitParam)
             {
                 // Return the collection wrapper
                 var collection = new OrderedCollection
@@ -282,7 +295,10 @@ public class ObjectController : ActivityPubControllerBase
             var shares = await _activityRepository.GetSharesAsync(fullObjectId, limit, offset);
             var totalCount = await _activityRepository.GetSharesCountAsync(fullObjectId);
 
-            if (page == 0 && limit == 20)
+            var hasPageParam = Request.Query.ContainsKey("page");
+            var hasLimitParam = Request.Query.ContainsKey("limit");
+
+            if (!hasPageParam && !hasLimitParam)
             {
                 // Return the collection wrapper
                 var collection = new OrderedCollection

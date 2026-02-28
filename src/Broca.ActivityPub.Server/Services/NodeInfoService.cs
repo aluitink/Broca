@@ -179,24 +179,51 @@ public class NodeInfoService
         };
     }
 
-    private Task<InstanceStats> GetInstanceStatsAsync(CancellationToken cancellationToken)
+    private async Task<InstanceStats> GetInstanceStatsAsync(CancellationToken cancellationToken)
     {
         try
         {
-            // TODO: Add methods to IActorRepository and IActivityRepository to get counts
-            // For now, return minimal stats
-            return Task.FromResult(new InstanceStats
+            var now = DateTime.UtcNow;
+            var monthAgo = now.AddDays(-30);
+            var halfYearAgo = now.AddDays(-180);
+
+            var stats = new InstanceStats();
+
+            // Use statistics interfaces if available (optional)
+            if (_actorRepository is IActorStatistics actorStats)
+            {
+                stats.TotalUsers = await actorStats.CountLocalActorsAsync(cancellationToken);
+            }
+            else
+            {
+                stats.TotalUsers = 1;
+            }
+
+            if (_activityRepository is IActivityStatistics activityStats)
+            {
+                stats.ActiveUsersMonth = await activityStats.CountActiveActorsSinceAsync(monthAgo, cancellationToken);
+                stats.ActiveUsersHalfYear = await activityStats.CountActiveActorsSinceAsync(halfYearAgo, cancellationToken);
+                stats.LocalPosts = await activityStats.CountCreateActivitiesSinceAsync(DateTime.MinValue, cancellationToken);
+            }
+            else
+            {
+                stats.ActiveUsersMonth = 1;
+                stats.ActiveUsersHalfYear = 1;
+                stats.LocalPosts = 0;
+            }
+
+            return stats;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting instance stats");
+            return new InstanceStats
             {
                 TotalUsers = 1,
                 ActiveUsersMonth = 1,
                 ActiveUsersHalfYear = 1,
                 LocalPosts = 0
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting instance stats");
-            return Task.FromResult(new InstanceStats());
+            };
         }
     }
 

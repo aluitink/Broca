@@ -111,21 +111,15 @@ public static class TestDataSeeder
         IEnumerable<Document> attachments,
         string? noteId = null)
     {
-        noteId ??= $"{actorId}/notes/{Guid.NewGuid()}";
+        var builder = CreateBuilderForActor(actorId);
+        var noteBuilder = builder.CreateNote(content);
 
-        return new Activity
+        foreach (var attachment in attachments)
         {
-            JsonLDContext = new List<ITermDefinition>
-            {
-                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
-            },
-            Id = noteId,
-            Type = new[] { "Note" },
-            AttributedTo = new IObjectOrLink[] { new Actor { Id = actorId } },
-            Content = new[] { content },
-            Attachment = attachments.Cast<IObjectOrLink>().ToList(),
-            Published = DateTime.UtcNow
-        };
+            noteBuilder.WithAttachment(attachment);
+        }
+
+        return noteBuilder.Build();
     }
 
     /// <summary>
@@ -227,6 +221,24 @@ public static class TestDataSeeder
     {
         var builder = CreateBuilderForActor(actorId);
         return builder.Undo(activityToUndo);
+    }
+
+    /// <summary>
+    /// Creates an Undo activity where the object is a bare IRI reference (ILink), as Mastodon sends.
+    /// </summary>
+    public static Undo CreateUndoByReference(string actorId, string activityIri)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.UndoByReference(activityIri);
+    }
+
+    /// <summary>
+    /// Creates a Reject activity where the object is a bare IRI reference (ILink), as Mastodon sends.
+    /// </summary>
+    public static Reject CreateRejectByReference(string actorId, string activityIri)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.RejectByReference(activityIri);
     }
 
     /// <summary>

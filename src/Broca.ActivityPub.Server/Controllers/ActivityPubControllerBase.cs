@@ -1,3 +1,5 @@
+using System.Globalization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Broca.ActivityPub.Server.Controllers;
@@ -25,5 +27,28 @@ public abstract class ActivityPubControllerBase : ControllerBase
         }
         
         return baseUrl;
+    }
+
+    protected static void ValidateRequestClockSkew(HttpRequest request)
+    {
+        var dateHeaderValue = request.Headers.TryGetValue("Date", out var dateValues)
+            ? dateValues.ToString()
+            : request.Headers.TryGetValue("Created", out var createdValues)
+                ? createdValues.ToString()
+                : null;
+
+        if (string.IsNullOrEmpty(dateHeaderValue))
+            throw new InvalidOperationException("Request is missing a Date or Created header");
+
+        if (!DateTimeOffset.TryParse(dateHeaderValue, CultureInfo.InvariantCulture, DateTimeStyles.None, out var requestDate))
+            throw new InvalidOperationException($"Request Date header is not a valid date/time: '{dateHeaderValue}'");
+
+        var now = DateTimeOffset.UtcNow;
+
+        if (now - requestDate > TimeSpan.FromHours(12))
+            throw new InvalidOperationException("Request date is too old (clock skew exceeds 12 hours)");
+
+        if (requestDate - now > TimeSpan.FromMinutes(5))
+            throw new InvalidOperationException("Request date is too far in the future (clock skew exceeds 5 minutes)");
     }
 }

@@ -216,11 +216,30 @@
     private async Task LoadActorAsync()
     {
         isLoading = true;
+        error = null;
+        StateHasChanged();
 
-        // Load statistics if available
-        if (actor != null)
+        try
         {
-            await LoadStatisticsAsync();
+            if (ActorUri != null)
+                actor = await Client.GetActorAsync(ActorUri);
+            else if (!string.IsNullOrEmpty(ActorHandle))
+                actor = await Client.GetActorByAliasAsync(ActorHandle);
+
+            if (actor != null)
+            {
+                await LoadStatisticsAsync();
+                await CheckFollowStatusAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
         }
     }
 
@@ -240,6 +259,45 @@
         }
 
         return Task.CompletedTask;
+    }
+
+    private async Task CheckFollowStatusAsync()
+    {
+        if (actor?.Id == null || string.IsNullOrEmpty(Client.ActorId))
+        {
+            isFollowing = false;
+            return;
+        }
+
+        try
+        {
+            var self = await Client.GetSelfAsync();
+            if (self?.Following?.Href == null)
+            {
+                isFollowing = false;
+                return;
+            }
+
+            await foreach (var item in Client.GetCollectionAsync<IObjectOrLink>(self.Following.Href))
+            {
+                var itemId = item switch
+                {
+                    ILink link => link.Href?.ToString(),
+                    KristofferStrube.ActivityStreams.Object obj => obj.Id,
+                    _ => null
+                };
+                if (itemId == actor.Id)
+                {
+                    isFollowing = true;
+                    return;
+                }
+            }
+            isFollowing = false;
+        }
+        catch
+        {
+            isFollowing = false;
+        }
     }
 
     private bool CanShowFollowButton()

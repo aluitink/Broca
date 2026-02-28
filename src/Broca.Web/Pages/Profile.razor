@@ -68,7 +68,7 @@ else if (AuthState.CurrentActorId != null)
         {
             items.Add(new ProfileDataItem { Label = "Actor ID", Value = AuthState.CurrentActorId ?? "N/A" });
             items.Add(new ProfileDataItem { Label = "Name", Value = AuthState.CurrentActor.Name?.FirstOrDefault() ?? "N/A" });
-            items.Add(new ProfileDataItem { Label = "Preferred Username", Value = (AuthState.CurrentActor as Person)?.PreferredUsername ?? "N/A" });
+            items.Add(new ProfileDataItem { Label = "Preferred Username", Value = AuthState.CurrentActor?.PreferredUsername ?? "N/A" });
             items.Add(new ProfileDataItem { Label = "Type", Value = GetActorType() });
             items.Add(new ProfileDataItem { Label = "Inbox", Value = AuthState.GetInboxUrl()?.ToString() ?? "N/A" });
             items.Add(new ProfileDataItem { Label = "Outbox", Value = AuthState.GetOutboxUrl()?.ToString() ?? "N/A" });
