@@ -45,6 +45,7 @@ public class FileSystemActivityRepository : IActivityRepository
         {
             var json = JsonSerializer.Serialize(activity, typeof(IObjectOrLink), _jsonOptions);
             await File.WriteAllTextAsync(activityPath, json, cancellationToken);
+            await IndexActivityUnsafeAsync(activity, activityId);
             _logger.LogInformation("Saved inbox activity {ActivityId} for {Username}", activityId, username);
         }
         finally
@@ -65,6 +66,7 @@ public class FileSystemActivityRepository : IActivityRepository
         {
             var json = JsonSerializer.Serialize(activity, typeof(IObjectOrLink), _jsonOptions);
             await File.WriteAllTextAsync(activityPath, json, cancellationToken);
+            await IndexActivityUnsafeAsync(activity, activityId);
             _logger.LogInformation("Saved outbox activity {ActivityId} for {Username}", activityId, username);
         }
         finally
@@ -132,6 +134,9 @@ public class FileSystemActivityRepository : IActivityRepository
             return;
         }
 
+        // Read activity before acquiring the lock so we know which indexes to update
+        var activity = await GetActivityByIdAsync(activityId, cancellationToken);
+
         var sanitizedId = SanitizeFileName(activityId);
         await _writeLock.WaitAsync(cancellationToken);
         try
@@ -149,6 +154,9 @@ public class FileSystemActivityRepository : IActivityRepository
                     }
                 }
             }
+
+            if (activity != null)
+                await RemoveFromIndexUnsafeAsync(activity, activityId);
         }
         finally
         {
@@ -220,6 +228,45 @@ public class FileSystemActivityRepository : IActivityRepository
     public async Task<int> GetSharedByActorCountAsync(string username, CancellationToken cancellationToken = default)
     {
         return await GetUserMetadataCountAsync(username, "shared", cancellationToken);
+    }
+
+    public async Task MarkObjectAsDeletedAsync(string objectId, CancellationToken cancellationToken = default)
+    {
+        var tombstone = new Tombstone
+        {
+            Id = objectId,
+            Type = new[] { "Tombstone" },
+            Deleted = DateTime.UtcNow
+        };
+
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            var sanitizedId = SanitizeFileName(objectId);
+            var activitiesDir = Path.Combine(_dataPath, "activities");
+            
+            if (Directory.Exists(activitiesDir))
+            {
+                var json = JsonSerializer.Serialize<IObjectOrLink>(tombstone, _jsonOptions);
+                
+                foreach (var userDir in Directory.GetDirectories(activitiesDir))
+                {
+                    foreach (var boxType in new[] { "inbox", "outbox" })
+                    {
+                        var boxDir = Path.Combine(userDir, boxType);
+                        var activityPath = Path.Combine(boxDir, $"{sanitizedId}.json");
+                        if (File.Exists(activityPath))
+                        {
+                            await File.WriteAllTextAsync(activityPath, json, cancellationToken);
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
     }
 
     // Helper methods
@@ -458,6 +505,119 @@ public class FileSystemActivityRepository : IActivityRepository
             _logger.LogError(ex, "Error reading metadata count for {Username}/{MetadataType}", username, metadataType);
             return 0;
         }
+    }
+
+    private async Task IndexActivityUnsafeAsync(IObjectOrLink activity, string activityId)
+    {
+        if (activity is not IObject obj || obj.Type == null)
+            return;
+
+        if (obj.Type.Contains("Like"))
+        {
+            var objectId = ExtractObjectId(obj);
+            if (!string.IsNullOrEmpty(objectId))
+                await AppendToFileListUnsafeAsync(GetObjectMetadataPath(objectId, "likes"), activityId);
+        }
+        else if (obj.Type.Contains("Announce"))
+        {
+            var objectId = ExtractObjectId(obj);
+            if (!string.IsNullOrEmpty(objectId))
+                await AppendToFileListUnsafeAsync(GetObjectMetadataPath(objectId, "shares"), activityId);
+        }
+        else if (TryGetInReplyTo(obj, out var inReplyTo))
+        {
+            await AppendToFileListUnsafeAsync(GetObjectMetadataPath(inReplyTo, "replies"), activityId);
+        }
+    }
+
+    private async Task RemoveFromIndexUnsafeAsync(IObjectOrLink activity, string activityId)
+    {
+        if (activity is not IObject obj || obj.Type == null)
+            return;
+
+        if (obj.Type.Contains("Like"))
+        {
+            var objectId = ExtractObjectId(obj);
+            if (!string.IsNullOrEmpty(objectId))
+                await RemoveFromFileListUnsafeAsync(GetObjectMetadataPath(objectId, "likes"), activityId);
+        }
+        else if (obj.Type.Contains("Announce"))
+        {
+            var objectId = ExtractObjectId(obj);
+            if (!string.IsNullOrEmpty(objectId))
+                await RemoveFromFileListUnsafeAsync(GetObjectMetadataPath(objectId, "shares"), activityId);
+        }
+        else if (TryGetInReplyTo(obj, out var inReplyTo))
+        {
+            await RemoveFromFileListUnsafeAsync(GetObjectMetadataPath(inReplyTo, "replies"), activityId);
+        }
+    }
+
+    private async Task AppendToFileListUnsafeAsync(string listFilePath, string activityId)
+    {
+        List<string> list;
+        if (File.Exists(listFilePath))
+        {
+            var json = await File.ReadAllTextAsync(listFilePath);
+            list = JsonSerializer.Deserialize<List<string>>(json, _jsonOptions) ?? new List<string>();
+        }
+        else
+        {
+            list = new List<string>();
+        }
+
+        if (!list.Contains(activityId))
+        {
+            list.Add(activityId);
+            await File.WriteAllTextAsync(listFilePath, JsonSerializer.Serialize(list, _jsonOptions));
+        }
+    }
+
+    private async Task RemoveFromFileListUnsafeAsync(string listFilePath, string activityId)
+    {
+        if (!File.Exists(listFilePath))
+            return;
+
+        var json = await File.ReadAllTextAsync(listFilePath);
+        var list = JsonSerializer.Deserialize<List<string>>(json, _jsonOptions) ?? new List<string>();
+        if (list.Remove(activityId))
+            await File.WriteAllTextAsync(listFilePath, JsonSerializer.Serialize(list, _jsonOptions));
+    }
+
+    private static string? ExtractObjectId(IObject obj)
+    {
+        var objectProperty = obj.GetType().GetProperty("Object");
+        if (objectProperty?.GetValue(obj) is IEnumerable<IObjectOrLink?> objects)
+        {
+            var first = objects.FirstOrDefault();
+            return first switch
+            {
+                IObject o when !string.IsNullOrEmpty(o.Id) => o.Id,
+                ILink l when l.Href != null => l.Href.ToString(),
+                _ => null
+            };
+        }
+        return null;
+    }
+
+    private static bool TryGetInReplyTo(IObject obj, out string inReplyTo)
+    {
+        inReplyTo = string.Empty;
+        var inReplyToProperty = obj.GetType().GetProperty("InReplyTo");
+        if (inReplyToProperty?.GetValue(obj) is IEnumerable<IObjectOrLink?> replyToObjects)
+        {
+            var first = replyToObjects.FirstOrDefault();
+            switch (first)
+            {
+                case IObject o when !string.IsNullOrEmpty(o.Id):
+                    inReplyTo = o.Id;
+                    return true;
+                case ILink l when l.Href != null:
+                    inReplyTo = l.Href.ToString()!;
+                    return true;
+            }
+        }
+        return false;
     }
 
     private void EnsureDirectoryExists(string path)

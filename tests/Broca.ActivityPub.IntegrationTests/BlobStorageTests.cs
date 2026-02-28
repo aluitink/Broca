@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Xunit.Abstractions;
 
 namespace Broca.ActivityPub.IntegrationTests;
 
@@ -21,6 +22,12 @@ namespace Broca.ActivityPub.IntegrationTests;
 /// </summary>
 public class BlobStorageTests : TwoServerFixture
 {
+    private readonly ITestOutputHelper _output;
+
+    public BlobStorageTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
     [Fact]
     public async Task BlobStorage_RetrieveThroughMediaEndpoint_ReturnsCorrectContentType()
     {
@@ -126,95 +133,7 @@ public class BlobStorageTests : TwoServerFixture
         Assert.Contains(blobUrl, attachment.Url?.First()?.Href?.ToString() ?? "");
     }
 
-    [Fact]
-    public async Task BlobStorage_DeliveredActivityWithAttachment_UriIsAccessible()
-    {
-        // Arrange - Seed users on different servers
-        using var scopeA = ServerA.Services.CreateScope();
-        using var scopeB = ServerB.Services.CreateScope();
-        
-        var actorRepoA = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
-        var actorRepoB = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
-        var blobStorageA = scopeA.ServiceProvider.GetRequiredService<IBlobStorageService>();
-
-        var (alice, alicePrivateKey) = await TestDataSeeder.SeedActorAsync(
-            actorRepoA,
-            "alice",
-            ServerA.BaseUrl);
-
-        var (bob, bobPrivateKey) = await TestDataSeeder.SeedActorAsync(
-            actorRepoB,
-            "bob",
-            ServerB.BaseUrl);
-
-        // Alice stores an image
-        var blobId = $"shared-image-{Guid.NewGuid()}.png";
-        var testImageData = CreateTestImageData();
-        
-        using var blobStream = new MemoryStream(testImageData);
-        var blobUrl = await blobStorageA.StoreBlobAsync(
-            "alice",
-            blobId,
-            blobStream,
-            "image/png");
-
-        // Alice creates a Create activity with the image
-        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
-            () => ServerA.CreateClient(),
-            alice.Id!,
-            alicePrivateKey);
-
-        var c2sHelper = new ClientToServerHelper(aliceClient, alice.Id!, ClientA);
-
-        // Create activity addressed to Bob
-        var createActivity = TestDataSeeder.CreateCreateActivityWithAttachmentToRecipient(
-            alice.Id!,
-            bob.Id!,
-            "Sharing this with you!",
-            blobUrl,
-            "image/png");
-
-        await c2sHelper.PostToOutboxAsync(createActivity);
-
-        // Act - Wait for delivery to Bob's inbox on Server B
-        var s2sHelper = new ServerToServerHelper(ServerB, sendingServer: ServerA);
-        var deliveredActivity = await s2sHelper.WaitForInboxActivityByTypeAsync(
-            "bob",
-            "Create",
-            TimeSpan.FromSeconds(15));
-
-        // Assert - Verify the delivered activity has the attachment
-        Assert.NotNull(deliveredActivity);
-        var create = deliveredActivity as Create;
-        Assert.NotNull(create);
-        Assert.NotNull(create.Object);
-        
-        // Get the Note object - it might be in a list
-        var objectList = create.Object as IEnumerable<IObjectOrLink>;
-        var note = objectList?.FirstOrDefault() as Note;
-        
-        Assert.NotNull(note);
-        Assert.NotNull(note.Attachment);
-        
-        var attachment = note.Attachment.FirstOrDefault() as Document;
-        Assert.NotNull(attachment);
-        Assert.NotNull(attachment.Url);
-        
-        var attachmentUrl = attachment.Url.First()?.Href?.ToString();
-        Assert.NotNull(attachmentUrl);
-        Assert.Contains(ServerA.BaseUrl, attachmentUrl);
-        Assert.Contains("media", attachmentUrl);
-
-        // Verify the blob can be retrieved from Alice's server
-        // In a real federated scenario, remote servers would fetch directly from the origin
-        var retrieveResponse = await ClientA.GetAsync(attachmentUrl);
-        
-        Assert.Equal(HttpStatusCode.OK, retrieveResponse.StatusCode);
-        Assert.Equal("image/png", retrieveResponse.Content.Headers.ContentType?.MediaType);
-        
-        var retrievedData = await retrieveResponse.Content.ReadAsByteArrayAsync();
-        Assert.Equal(testImageData.Length, retrievedData.Length);
-    }
+   
 
     [Fact]
     public async Task BlobStorage_NonExistentBlob_Returns404()
@@ -227,6 +146,103 @@ public class BlobStorageTests : TwoServerFixture
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BlobStorage_DeliveredActivityWithAttachment_UriIsAccessible()
+    {
+        // Arrange - Seed Bob on Server B
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await TestDataSeeder.SeedActorAsync(actorRepo, "bob", ServerB.BaseUrl);
+        }
+
+        // Seed Alice on Server A and store a blob
+        string alicePrivateKey;
+        string blobUrl;
+        string aliceId;
+        
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var blobStorage = scopeA.ServiceProvider.GetRequiredService<IBlobStorageService>();
+
+            var (alice, privateKey) = await TestDataSeeder.SeedActorAsync(
+                actorRepo,
+                "alice",
+                ServerA.BaseUrl);
+            alicePrivateKey = privateKey;
+            aliceId = alice.Id!;
+
+            // Store a blob for Alice
+            var blobId = $"photo-{Guid.NewGuid()}.png";
+            var testImageData = CreateTestImageData();
+            
+            using var blobStream = new MemoryStream(testImageData);
+            blobUrl = await blobStorage.StoreBlobAsync(
+                "alice",
+                blobId,
+                blobStream,
+                "image/png");
+        }
+
+        var bobId = $"{ServerB.BaseUrl}/users/bob";
+
+        // Create authenticated client for Alice
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => ServerA.CreateClient(),
+            aliceId,
+            alicePrivateKey);
+
+        var c2sHelper = new ClientToServerHelper(aliceClient, aliceId, ClientA);
+
+        // Create a Note with attachment addressed to Bob
+        var noteActivity = TestDataSeeder.CreateCreateActivityWithAttachmentToRecipient(
+            aliceId,
+            bobId,
+            "Check out this photo, Bob!",
+            blobUrl,
+            "image/png");
+
+        // Act - Post activity to Alice's outbox, which will trigger delivery to Bob
+        var response = await c2sHelper.PostToOutboxAsync(noteActivity);
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Wait for delivery to Bob on Server B
+        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
+        
+        var deliveredActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("bob", "Create", TimeSpan.FromSeconds(10));
+        Assert.NotNull(deliveredActivity);
+        
+        // Extract the attachment URL from the delivered activity
+        var createActivity = deliveredActivity as Create;
+        Assert.NotNull(createActivity);
+        
+        var objectList = createActivity.Object as IEnumerable<IObjectOrLink>;
+        var note = objectList?.FirstOrDefault() as Note;
+        Assert.NotNull(note);
+        Assert.NotNull(note.Attachment);
+        
+        var attachment = note.Attachment.FirstOrDefault() as Document;
+        Assert.NotNull(attachment);
+        Assert.NotNull(attachment.Url);
+        
+        var attachmentUrl = attachment.Url?.First()?.Href?.ToString();
+        Assert.NotNull(attachmentUrl);
+
+        // Assert - Verify that the attachment URL is accessible cross-server
+        // The blob is hosted on Server A, so we use a routing client to simulate
+        // Server B (or any other server) fetching the blob from Server A
+        var routingClient = CreateRoutingClient();
+        var blobResponse = await routingClient.GetAsync(attachmentUrl);
+        
+        Assert.Equal(HttpStatusCode.OK, blobResponse.StatusCode);
+        Assert.Equal("image/png", blobResponse.Content.Headers.ContentType?.MediaType);
+        
+        var blobContent = await blobResponse.Content.ReadAsByteArrayAsync();
+        var expectedData = CreateTestImageData();
+        Assert.Equal(expectedData.Length, blobContent.Length);
     }
 
     /// <summary>

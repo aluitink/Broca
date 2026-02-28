@@ -1,8 +1,10 @@
 using System.Text.Json;
+using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Broca.ActivityPub.Server.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using KristofferStrube.ActivityStreams;
 using KristofferStrube.ActivityStreams.JsonLD;
@@ -18,9 +20,12 @@ public class OutboxController : ActivityPubControllerBase
     private readonly OutboxProcessor _outboxProcessor;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ObjectEnrichmentService _enrichmentService;
+    private readonly HttpSignatureService _signatureService;
+    private readonly IMemoryCache _cache;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<OutboxController> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
+    private static readonly TimeSpan PublicKeyCacheDuration = TimeSpan.FromHours(1);
 
     public OutboxController(
         IActivityRepository activityRepository,
@@ -28,6 +33,8 @@ public class OutboxController : ActivityPubControllerBase
         OutboxProcessor outboxProcessor,
         AttachmentProcessingService attachmentProcessingService,
         ObjectEnrichmentService enrichmentService,
+        HttpSignatureService signatureService,
+        IMemoryCache cache,
         IOptions<ActivityPubServerOptions> options,
         ILogger<OutboxController> logger)
     {
@@ -36,6 +43,8 @@ public class OutboxController : ActivityPubControllerBase
         _outboxProcessor = outboxProcessor;
         _attachmentProcessingService = attachmentProcessingService;
         _enrichmentService = enrichmentService;
+        _signatureService = signatureService;
+        _cache = cache;
         _options = options.Value;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
@@ -166,6 +175,21 @@ public class OutboxController : ActivityPubControllerBase
                 return BadRequest(new { error = "Failed to parse activity" });
             }
 
+            if (_options.RequireHttpSignatures)
+            {
+                try
+                {
+                    var authError = await VerifyCallerSignatureAsync(body, actor, HttpContext.RequestAborted);
+                    if (authError != null)
+                        return authError;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Signature verification failed for outbox POST by {Username}", username);
+                    return Unauthorized(new { error = "Signature verification failed", detail = ex.Message });
+                }
+            }
+
             // Process the activity
             var activityId = await _outboxProcessor.ProcessActivityAsync(username, activity, HttpContext.RequestAborted);
 
@@ -176,5 +200,78 @@ public class OutboxController : ActivityPubControllerBase
             _logger.LogError(ex, "Error processing outbox POST for {Username}", username);
             return StatusCode(500, new { error = "Internal server error" });
         }
+    }
+
+    private async Task<IActionResult?> VerifyCallerSignatureAsync(string body, Actor localActor, CancellationToken cancellationToken)
+    {
+        if (!Request.Headers.TryGetValue("Signature", out var signatureHeader) || string.IsNullOrEmpty(signatureHeader))
+            return Unauthorized(new { error = "Signature header is missing" });
+
+        var keyId = _signatureService.GetSignatureKeyId(signatureHeader!);
+
+        ValidateRequestClockSkew(Request);
+
+        var publicKeyPem = await FetchLocalActorPublicKeyAsync(keyId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(publicKeyPem))
+            return Unauthorized(new { error = $"Could not retrieve public key for keyId: {keyId}" });
+
+        var headers = new Dictionary<string, string>
+        {
+            ["signature"] = signatureHeader!,
+            ["(request-target)"] = $"{Request.Method.ToLower()} {Request.Path}"
+        };
+
+        foreach (var header in Request.Headers)
+        {
+            var name = header.Key.ToLower();
+            if (name != "signature")
+                headers[name] = header.Value.ToString();
+        }
+
+        if (Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase)
+            && Request.Headers.TryGetValue("Digest", out var digestHeader))
+        {
+            var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
+            var expectedDigest = _signatureService.ComputeContentDigestHash(bodyBytes);
+            var digestValue = digestHeader.ToString();
+            if (digestValue.StartsWith("SHA-256=") && digestValue.Substring(8) != expectedDigest)
+                throw new InvalidOperationException("Digest header does not match request body");
+        }
+
+        var isValid = await _signatureService.VerifyHttpSignatureAsync(headers, publicKeyPem, cancellationToken);
+        if (!isValid)
+            return Unauthorized(new { error = "Invalid signature" });
+
+        var callerActorUrl = keyId.Split('#')[0];
+        if (!string.Equals(callerActorUrl, localActor.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Outbox POST rejected: signature keyId actor {CallerActor} does not match outbox owner {OwnerActor}",
+                callerActorUrl, localActor.Id);
+            return StatusCode(403, new { error = "Forbidden: signature does not belong to this actor" });
+        }
+
+        return null;
+    }
+
+    private async Task<string?> FetchLocalActorPublicKeyAsync(string keyId, CancellationToken cancellationToken)
+    {
+        var cacheKey = $"outbox-publickey:{keyId}";
+        if (_cache.TryGetValue<string>(cacheKey, out var cached))
+            return cached;
+
+        var actorUrl = keyId.Split('#')[0];
+        var actor = await _actorRepository.GetActorByIdAsync(actorUrl, cancellationToken);
+
+        if (actor?.ExtensionData == null || !actor.ExtensionData.TryGetValue("publicKey", out var publicKeyObj))
+            return null;
+
+        string? pem = null;
+        if (publicKeyObj is JsonElement je && je.TryGetProperty("publicKeyPem", out var pemEl))
+            pem = pemEl.GetString();
+
+        if (!string.IsNullOrWhiteSpace(pem))
+            _cache.Set(cacheKey, pem, PublicKeyCacheDuration);
+
+        return pem;
     }
 }

@@ -74,6 +74,13 @@ public class ObjectController : ActivityPubControllerBase
                 return NotFound(new { error = "Object not found" });
             }
 
+            // Check if the object is a Tombstone (deleted)
+            if (obj is Tombstone)
+            {
+                _logger.LogInformation("Object {FullObjectId} has been deleted", fullObjectId);
+                return StatusCode(410, new { error = "Object has been deleted" });
+            }
+
             // Ensure the object has the correct ID set
             if (obj is KristofferStrube.ActivityStreams.Object asObject && string.IsNullOrEmpty(asObject.Id))
             {

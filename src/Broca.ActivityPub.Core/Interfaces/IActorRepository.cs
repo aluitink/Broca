@@ -89,4 +89,26 @@ public interface IActorRepository
     /// Removes an item from a manual collection
     /// </summary>
     Task RemoveFromCollectionAsync(string username, string collectionId, string itemId, CancellationToken cancellationToken = default);
+
+    // Pending Followers (for manuallyApprovesFollowers = true)
+
+    /// <summary>
+    /// Gets all pending follower requests for an actor awaiting manual approval
+    /// </summary>
+    Task<IEnumerable<string>> GetPendingFollowersAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds a follower request to the pending list
+    /// </summary>
+    Task AddPendingFollowerAsync(string username, string followerActorId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes a follower request from the pending list
+    /// </summary>
+    Task RemovePendingFollowerAsync(string username, string followerActorId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets all local usernames
+    /// </summary>
+    Task<IEnumerable<string>> GetAllLocalUsernamesAsync(CancellationToken cancellationToken = default);
 }

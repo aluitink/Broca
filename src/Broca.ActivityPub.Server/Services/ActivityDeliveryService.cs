@@ -162,41 +162,42 @@ public class ActivityDeliveryService
             _logger.LogInformation("Queueing activity {ActivityId} for delivery to {FollowerCount} followers", 
                 activityId, followers.Count());
 
-            // Create delivery items for each follower's inbox
-            var deliveryItems = new List<DeliveryQueueItem>();
-            
+            // key: shared inbox URL (or personal inbox if no shared inbox); value: list of (followerId, personalInbox)
+            var inboxGroups = new Dictionary<string, List<(string FollowerId, string PersonalInbox)>>();
+
             foreach (var followerActorId in followers)
             {
                 try
                 {
-                    // Fetch the follower's actor to get their inbox
                     var followerActor = await _activityPubClient.GetActorAsync(new Uri(followerActorId), cancellationToken);
-                    
-                    if (followerActor?.Inbox == null)
+
+                    if (followerActor == null)
                     {
-                        _logger.LogWarning("Follower {FollowerActorId} has no inbox. Skipping.", followerActorId);
+                        _logger.LogWarning("Follower {FollowerActorId} could not be fetched. Skipping.", followerActorId);
                         continue;
                     }
 
-                    var inboxUrl = followerActor.Inbox?.Href?.ToString();
+                    var personalInbox = followerActor.Inbox?.Href?.ToString();
 
-                    if (string.IsNullOrEmpty(inboxUrl))
+                    if (string.IsNullOrEmpty(personalInbox))
                     {
                         _logger.LogWarning("Could not determine inbox URL for follower {FollowerActorId}. Skipping.", followerActorId);
                         continue;
                     }
 
-                    var deliveryItem = new DeliveryQueueItem
+                    string? sharedInbox = null;
+                    if (followerActor.Endpoints is Endpoints endpoints)
                     {
-                        Activity = activity,
-                        InboxUrl = inboxUrl,
-                        SenderActorId = senderActorId,
-                        SenderUsername = senderUsername,
-                        Status = DeliveryStatus.Pending,
-                        MaxRetries = 5
-                    };
+                        sharedInbox = endpoints.SharedInbox?.ToString();
+                    }
 
-                    deliveryItems.Add(deliveryItem);
+                    var groupKey = sharedInbox ?? personalInbox;
+
+                    if (!inboxGroups.ContainsKey(groupKey))
+                    {
+                        inboxGroups[groupKey] = new List<(string, string)>();
+                    }
+                    inboxGroups[groupKey].Add((followerActorId, personalInbox));
                 }
                 catch (Exception ex)
                 {
@@ -204,11 +205,39 @@ public class ActivityDeliveryService
                 }
             }
 
-            // Batch enqueue all delivery items
+            var deliveryItems = new List<DeliveryQueueItem>();
+
+            foreach (var (groupKey, groupedFollowers) in inboxGroups)
+            {
+                // Use the shared inbox when multiple followers are grouped under it.
+                // For a single follower, use their personal inbox so the remote server can
+                // always identify the recipient without relying on activity addressing.
+                string inboxUrl = groupedFollowers.Count > 1
+                    ? groupKey
+                    : groupedFollowers[0].PersonalInbox;
+
+                deliveryItems.Add(new DeliveryQueueItem
+                {
+                    Activity = activity,
+                    InboxUrl = inboxUrl,
+                    SenderActorId = senderActorId,
+                    SenderUsername = senderUsername,
+                    Status = DeliveryStatus.Pending,
+                    MaxRetries = 5
+                });
+
+                if (groupedFollowers.Count > 1)
+                {
+                    _logger.LogInformation("Using shared inbox {InboxUrl} for {FollowerCount} followers",
+                        groupKey, groupedFollowers.Count);
+                }
+            }
+
             if (deliveryItems.Any())
             {
                 await _deliveryQueue.EnqueueBatchAsync(deliveryItems, cancellationToken);
-                _logger.LogInformation("Queued {Count} deliveries for activity {ActivityId}", deliveryItems.Count, activityId);
+                _logger.LogInformation("Queued {Count} deliveries for activity {ActivityId} to {InboxCount} inboxes",
+                    deliveryItems.Count, activityId, deliveryItems.Count);
             }
         }
         catch (Exception ex)
@@ -254,10 +283,37 @@ public class ActivityDeliveryService
             _logger.LogInformation("Queueing activity {ActivityId} for delivery to {RecipientCount} recipients",
                 activityId, recipientIds.Count());
 
+            // Filter out special addressing URIs that shouldn't be delivered to
+            const string PublicAddress = "https://www.w3.org/ns/activitystreams#Public";
+            var actualRecipients = recipientIds.Where(id =>
+            {
+                // Skip as:Public addressing
+                if (id == PublicAddress)
+                {
+                    _logger.LogDebug("Skipping as:Public in recipient list - not a deliverable actor");
+                    return false;
+                }
+
+                // Skip followers collection URLs (e.g., .../users/alice/followers)
+                if (id.EndsWith("/followers") || id.EndsWith("/following"))
+                {
+                    _logger.LogDebug("Skipping followers/following collection URL {RecipientId} - not a deliverable actor", id);
+                    return false;
+                }
+
+                return true;
+            }).ToList();
+
+            if (!actualRecipients.Any())
+            {
+                _logger.LogDebug("No actual recipients to deliver to after filtering special URIs");
+                return;
+            }
+
             // Group recipients by their server's shared inbox
             var inboxGroups = new Dictionary<string, List<string>>();
 
-            foreach (var recipientId in recipientIds)
+            foreach (var recipientId in actualRecipients)
             {
                 try
                 {

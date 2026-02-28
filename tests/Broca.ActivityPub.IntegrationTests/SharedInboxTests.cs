@@ -1,8 +1,10 @@
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.IntegrationTests.Infrastructure;
+using Broca.ActivityPub.Server.Services;
 using KristofferStrube.ActivityStreams;
 using KristofferStrube.ActivityStreams.JsonLD;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit.Abstractions;
 
 namespace Broca.ActivityPub.IntegrationTests;
 
@@ -13,6 +15,12 @@ namespace Broca.ActivityPub.IntegrationTests;
 /// </summary>
 public class SharedInboxTests : TwoServerFixture
 {
+    private readonly ITestOutputHelper _output;
+
+    public SharedInboxTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
     [Fact]
     public async Task SharedInbox_ActivityToMultipleLocalUsers_DeliveredToAllRecipients()
     {
@@ -283,7 +291,7 @@ public class SharedInboxTests : TwoServerFixture
 
         // Create client with wrong key - this will cause signature validation to fail
         var senderClient = TestClientFactory.CreateAuthenticatedClient(
-            () => ServerA.CreateClient(),
+            () => CreateRoutingClient(),
             senderId,
             wrongPrivateKey);
 
@@ -360,5 +368,345 @@ public class SharedInboxTests : TwoServerFixture
 
         Assert.NotNull(followInInbox);
         Assert.Equal("Follow", followInInbox.Type?.FirstOrDefault());
+    }
+
+    [Fact]
+    public async Task SharedInbox_ActivityWithPublicAddressing_DeliveredToAllLocalUsers()
+    {
+        // Arrange - Create multiple users on Server B
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await TestDataSeeder.SeedActorAsync(actorRepo, "user1", ServerB.BaseUrl);
+            await TestDataSeeder.SeedActorAsync(actorRepo, "user2", ServerB.BaseUrl);
+            await TestDataSeeder.SeedActorAsync(actorRepo, "user3", ServerB.BaseUrl);
+        }
+
+        // Create sender on Server A
+        string senderPrivateKey;
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (sender, privateKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "sender_public", ServerA.BaseUrl);
+            senderPrivateKey = privateKey;
+        }
+
+        var senderId = $"{ServerA.BaseUrl}/users/sender_public";
+
+        // Create authenticated client with routing so the request reaches ServerB
+        var senderClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            senderId,
+            senderPrivateKey);
+
+        // Create activity with as:Public addressing - post directly to shared inbox
+        var noteActivity = new Activity
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Id = $"{senderId}/activities/{Guid.NewGuid()}",
+            Type = new[] { "Create" },
+            Actor = new IObjectOrLink[] { new Link { Href = new Uri(senderId) } },
+            To = new IObjectOrLink[] { new Link { Href = new Uri("https://www.w3.org/ns/activitystreams#Public") } },
+            Object = new IObjectOrLink[]
+            {
+                new Note
+                {
+                    Type = new[] { "Note" },
+                    Content = new[] { "Public post for everyone!" },
+                    AttributedTo = new IObjectOrLink[] { new Link { Href = new Uri(senderId) } }
+                }
+            },
+            Published = DateTime.UtcNow
+        };
+
+        // Act - Post directly to shared inbox
+        var response = await senderClient.PostAsync(
+            new Uri($"{ServerB.BaseUrl}/inbox"),
+            noteActivity);
+
+        // Assert
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Wait a bit for async inbox processing
+        await Task.Delay(1000);
+
+        // Verify all local users received it
+        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
+
+        var user1Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("user1", "Create", TimeSpan.FromSeconds(5));
+        var user2Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("user2", "Create", TimeSpan.FromSeconds(5));
+        var user3Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("user3", "Create", TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(user1Activity);
+        Assert.NotNull(user2Activity);
+        Assert.NotNull(user3Activity);
+        Assert.Equal("Create", user1Activity.Type?.FirstOrDefault());
+    }
+
+    [Fact]
+    public async Task SharedInbox_ActivityToFollowersCollection_DeliveredToLocalFollowers()
+    {
+        // Arrange - Create sender on Server A and followers on Server B
+        string senderPrivateKey;
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (sender, privateKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "sender_followers", ServerA.BaseUrl);
+            senderPrivateKey = privateKey;
+
+            // Add followers (mix of local on A and remote on B)
+            await actorRepo.AddFollowerAsync("sender_followers", $"{ServerB.BaseUrl}/users/remote_follower1");
+            await actorRepo.AddFollowerAsync("sender_followers", $"{ServerB.BaseUrl}/users/remote_follower2");
+            await actorRepo.AddFollowerAsync("sender_followers", $"{ServerA.BaseUrl}/users/local_follower");
+        }
+
+        // Create the actual follower users on Server B and set up following relationships
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await TestDataSeeder.SeedActorAsync(actorRepo, "remote_follower1", ServerB.BaseUrl);
+            await TestDataSeeder.SeedActorAsync(actorRepo, "remote_follower2", ServerB.BaseUrl);
+            await TestDataSeeder.SeedActorAsync(actorRepo, "non_follower", ServerB.BaseUrl);  // This user should NOT receive it
+
+            // Set up the "following" side on ServerB (as would happen via Follow/Accept exchange)
+            await actorRepo.AddFollowingAsync("remote_follower1", $"{ServerA.BaseUrl}/users/sender_followers");
+            await actorRepo.AddFollowingAsync("remote_follower2", $"{ServerA.BaseUrl}/users/sender_followers");
+        }
+
+        var senderId = $"{ServerA.BaseUrl}/users/sender_followers";
+        var followersUrl = $"{senderId}/followers";
+
+        var senderClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            senderId,
+            senderPrivateKey);
+
+        // Create activity addressed to followers collection
+        var noteActivity = new Activity
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Id = $"{senderId}/activities/{Guid.NewGuid()}",
+            Type = new[] { "Create" },
+            Actor = new IObjectOrLink[] { new Link { Href = new Uri(senderId) } },
+            To = new IObjectOrLink[] { new Link { Href = new Uri(followersUrl) } },
+            Object = new IObjectOrLink[]
+            {
+                new Note
+                {
+                    Type = new[] { "Note" },
+                    Content = new[] { "Message to my followers!" },
+                    AttributedTo = new IObjectOrLink[] { new Link { Href = new Uri(senderId) } }
+                }
+            },
+            Published = DateTime.UtcNow
+        };
+
+        // Act - Post directly to shared inbox
+        var response = await senderClient.PostAsync(
+            new Uri($"{ServerB.BaseUrl}/inbox"),
+            noteActivity);
+
+        // Assert
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Wait a bit for async inbox processing
+        await Task.Delay(1000);
+
+        // Verify only the followers received it
+        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
+
+        var follower1Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("remote_follower1", "Create", TimeSpan.FromSeconds(5));
+        var follower2Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("remote_follower2", "Create", TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(follower1Activity);
+        Assert.NotNull(follower2Activity);
+        Assert.Equal("Create", follower1Activity.Type?.FirstOrDefault());
+
+        // Verify non-follower did NOT receive it
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var activityRepo = scopeB.ServiceProvider.GetRequiredService<IActivityRepository>();
+            var nonFollowerInbox = await activityRepo.GetInboxActivitiesAsync("non_follower", 10, 0);
+            Assert.Empty(nonFollowerInbox);
+        }
+    }
+
+    [Fact]
+    public async Task SharedInbox_PublicActivityWithFollowersCc_DeliveredToAll()
+    {
+        // Arrange - Create sender on Server A
+        string senderPrivateKey;
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (sender, privateKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "sender_mixed", ServerA.BaseUrl);
+            senderPrivateKey = privateKey;
+
+            // Add one follower on Server B
+            await actorRepo.AddFollowerAsync("sender_mixed", $"{ServerB.BaseUrl}/users/follower_user");
+        }
+
+        // Create users on Server B - follower and non-follower
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await TestDataSeeder.SeedActorAsync(actorRepo, "follower_user", ServerB.BaseUrl);
+            await TestDataSeeder.SeedActorAsync(actorRepo, "nonfollower_user", ServerB.BaseUrl);
+
+            // Set up the "following" side on ServerB (as would happen via Follow/Accept exchange)
+            await actorRepo.AddFollowingAsync("follower_user", $"{ServerA.BaseUrl}/users/sender_mixed");
+        }
+
+        var senderId = $"{ServerA.BaseUrl}/users/sender_mixed";
+        var followersUrl = $"{senderId}/followers";
+
+        var senderClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            senderId,
+            senderPrivateKey);
+
+        // Create activity with public addressing and followers in Cc
+        var noteActivity = new Activity
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Id = $"{senderId}/activities/{Guid.NewGuid()}",
+            Type = new[] { "Create" },
+            Actor = new IObjectOrLink[] { new Link { Href = new Uri(senderId) } },
+            To = new IObjectOrLink[] { new Link { Href = new Uri("https://www.w3.org/ns/activitystreams#Public") } },
+            Cc = new IObjectOrLink[] { new Link { Href = new Uri(followersUrl) } },
+            Object = new IObjectOrLink[]
+            {
+                new Note
+                {
+                    Type = new[] { "Note" },
+                    Content = new[] { "Public post with followers notification!" },
+                    AttributedTo = new IObjectOrLink[] { new Link { Href = new Uri(senderId) } }
+                }
+            },
+            Published = DateTime.UtcNow
+        };
+
+        // Act - Post directly to shared inbox
+        var response = await senderClient.PostAsync(
+            new Uri($"{ServerB.BaseUrl}/inbox"),
+            noteActivity);
+
+        // Assert
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Wait a bit for async inbox processing
+        await Task.Delay(1000);
+
+        // Wait for delivery - both users should receive it (public + follower expansion)
+        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
+
+        var followerActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("follower_user", "Create", TimeSpan.FromSeconds(5));
+        var nonFollowerActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("nonfollower_user", "Create", TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(followerActivity);
+        Assert.NotNull(nonFollowerActivity);
+        Assert.Equal("Create", followerActivity.Type?.FirstOrDefault());
+        Assert.Equal("Create", nonFollowerActivity.Type?.FirstOrDefault());
+    }
+
+    [Fact]
+    public async Task FollowerFanOut_MultipleFollowersSameServer_UsesSharedInbox()
+    {
+        // Arrange - Alice on Server A; Bob and Carol both on Server B, both following Alice
+        var aliceId = $"{ServerA.BaseUrl}/users/alice_fanout";
+        string alicePrivateKey;
+
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (_, privateKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice_fanout", ServerA.BaseUrl);
+            alicePrivateKey = privateKey;
+
+            await actorRepo.AddFollowerAsync("alice_fanout", $"{ServerB.BaseUrl}/users/bob_fanout");
+            await actorRepo.AddFollowerAsync("alice_fanout", $"{ServerB.BaseUrl}/users/carol_fanout");
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await TestDataSeeder.SeedActorAsync(actorRepo, "bob_fanout", ServerB.BaseUrl);
+            await TestDataSeeder.SeedActorAsync(actorRepo, "carol_fanout", ServerB.BaseUrl);
+
+            await actorRepo.AddFollowingAsync("bob_fanout", aliceId);
+            await actorRepo.AddFollowingAsync("carol_fanout", aliceId);
+        }
+
+        var followersUrl = $"{aliceId}/followers";
+
+        var activity = new Activity
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Id = $"{aliceId}/activities/{Guid.NewGuid()}",
+            Type = new[] { "Create" },
+            Actor = new IObjectOrLink[] { new Link { Href = new Uri(aliceId) } },
+            Cc = new IObjectOrLink[] { new Link { Href = new Uri(followersUrl) } },
+            Object = new IObjectOrLink[]
+            {
+                new Note
+                {
+                    Type = new[] { "Note" },
+                    Content = new[] { "Hello followers!" },
+                    AttributedTo = new IObjectOrLink[] { new Link { Href = new Uri(aliceId) } }
+                }
+            },
+            Published = DateTime.UtcNow
+        };
+
+        // Part 1: Verify shared-inbox grouping — two followers on the same server must produce
+        // exactly ONE delivery item targeting the shared inbox, not two individual items
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var deliveryService = scopeA.ServiceProvider.GetRequiredService<ActivityDeliveryService>();
+            await deliveryService.QueueActivityForDeliveryAsync("alice_fanout", activity.Id!, activity);
+        }
+
+        var s2sHelperA = new ServerToServerHelper(ServerA, TimeSpan.FromSeconds(5));
+        var pendingDeliveries = (await s2sHelperA.GetPendingDeliveriesAsync()).ToList();
+
+        var deliveriesToServerB = pendingDeliveries
+            .Where(d => d.InboxUrl?.StartsWith(ServerB.BaseUrl) == true)
+            .ToList();
+
+        Assert.Single(deliveriesToServerB);
+        Assert.Equal($"{ServerB.BaseUrl}/inbox", deliveriesToServerB[0].InboxUrl);
+
+        // Part 2: Verify end-to-end shared-inbox routing — posting directly to the shared inbox
+        // (as the delivery service would) routes to both followers
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            aliceId,
+            alicePrivateKey);
+
+        var response = await aliceClient.PostAsync(
+            new Uri($"{ServerB.BaseUrl}/inbox"),
+            activity);
+
+        Assert.True(response.IsSuccessStatusCode);
+
+        await Task.Delay(500);
+
+        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
+        var bobActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("bob_fanout", "Create", TimeSpan.FromSeconds(5));
+        var carolActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("carol_fanout", "Create", TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(bobActivity);
+        Assert.NotNull(carolActivity);
     }
 }

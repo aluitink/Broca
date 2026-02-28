@@ -78,7 +78,7 @@ public class SharedInboxController : ActivityPubControllerBase
                 }
             }
 
-            // Deserialize the activity
+            // Deserialize the activity - use IObjectOrLink to preserve concrete types
             IObjectOrLink? activity;
             try
             {
@@ -95,28 +95,53 @@ public class SharedInboxController : ActivityPubControllerBase
                 return BadRequest(new { error = "Failed to parse activity" });
             }
 
-            _logger.LogInformation("Shared inbox received activity");
+            var activityObj = activity as IObject;
+            var activityId = activityObj?.Id;
+            var activityType = activityObj?.Type?.FirstOrDefault();
+            var activityActor = activityObj is Activity act ? act.Actor?.FirstOrDefault() : null;
+            
+            _logger.LogInformation("Shared inbox received activity: Type={Type}, Id={Id}, Actor={Actor}, ConcreteType={ConcreteType}",
+                activityType,
+                activityId,
+                activityActor is ILink actorLink ? actorLink.Href?.ToString() : "unknown",
+                activity.GetType().Name);
+
+            if (activity is Activity actForAddressing)
+            {
+                _logger.LogDebug("Activity addressing - To: {To}, Cc: {Cc}, Bcc: {Bcc}",
+                    string.Join(", ", actForAddressing.To?.Select(t => t is ILink l ? l.Href?.ToString() : "?") ?? Array.Empty<string>()),
+                    string.Join(", ", actForAddressing.Cc?.Select(t => t is ILink l ? l.Href?.ToString() : "?") ?? Array.Empty<string>()),
+                    string.Join(", ", actForAddressing.Bcc?.Select(t => t is ILink l ? l.Href?.ToString() : "?") ?? Array.Empty<string>()));
+            }
 
             // Determine local recipients from addressing
-            var localRecipients = activity is Activity act ? 
-                await GetLocalRecipientsAsync(act) : 
-                new List<string>();
+            if (activity is not Activity activityWithAddressing)
+            {
+                _logger.LogWarning("Activity is not an Activity type, cannot determine recipients (Type={Type})",
+                    activity.GetType().Name);
+                return Accepted(); // Not an error, just not processable for delivery
+            }
+            
+            var localRecipients = await GetLocalRecipientsAsync(activityWithAddressing);
             
             if (!localRecipients.Any())
             {
-                _logger.LogWarning("No local recipients found for shared inbox activity");
+                _logger.LogWarning("No local recipients found for shared inbox activity (Type={Type}, Id={Id})",
+                    activity.Type?.FirstOrDefault(), activity.Id);
                 return Accepted(); // Accept but don't process
             }
 
-            _logger.LogInformation("Delivering to {Count} local recipients", localRecipients.Count);
+            _logger.LogInformation("Delivering to {Count} local recipients: {Recipients}",
+                localRecipients.Count, string.Join(", ", localRecipients));
 
             // Process for each local recipient
             var tasks = localRecipients.Select(async username =>
             {
                 try
                 {
+                    _logger.LogDebug("Processing activity for recipient: {Username}", username);
                     await _inboxHandler.HandleActivityAsync(username, activity, false, CancellationToken.None);
-                    _logger.LogDebug("Delivered to {Username}", username);
+                    _logger.LogInformation("Successfully delivered to {Username}", username);
                 }
                 catch (Exception ex)
                 {
@@ -125,6 +150,7 @@ public class SharedInboxController : ActivityPubControllerBase
             });
 
             await Task.WhenAll(tasks);
+            _logger.LogInformation("Shared inbox processing complete for {Count} recipients", localRecipients.Count);
             return Accepted();
         }
         catch (Exception ex)
@@ -148,6 +174,35 @@ public class SharedInboxController : ActivityPubControllerBase
             if (string.IsNullOrEmpty(keyId))
             {
                 return false;
+            }
+
+            ValidateRequestClockSkew(Request);
+
+            // Validate Digest header for POST requests
+            if (Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!Request.Headers.TryGetValue("Digest", out var digestHeader))
+                {
+                    _logger.LogWarning("Shared inbox POST request missing Digest header");
+                }
+                else
+                {
+                    var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
+                    var expectedDigest = _signatureService.ComputeContentDigestHash(bodyBytes);
+                    var digestValue = digestHeader.ToString();
+                    
+                    if (digestValue.StartsWith("SHA-256=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var providedDigest = digestValue.Substring(8);
+                        if (providedDigest != expectedDigest)
+                        {
+                            _logger.LogWarning("Shared inbox Digest mismatch. Expected: {Expected}, Got: {Got}", 
+                                expectedDigest, providedDigest);
+                            return false;
+                        }
+                        _logger.LogDebug("Shared inbox Digest header validated successfully");
+                    }
+                }
             }
 
             // Fetch public key
@@ -235,43 +290,100 @@ public class SharedInboxController : ActivityPubControllerBase
     private async Task<List<string>> GetLocalRecipientsAsync(Activity activity)
     {
         var recipients = new HashSet<string>();
-        var baseUrl = GetBaseUrl();
+        const string PublicAddress = "https://www.w3.org/ns/activitystreams#Public";
+        var hasPublicAddressing = false;
 
-        void AddRecipients(IEnumerable<IObjectOrLink>? items)
+        async Task AddRecipientsAsync(IEnumerable<IObjectOrLink>? items, string fieldName)
         {
             if (items == null) return;
             
             foreach (var item in items)
             {
-                if (item is Link { Href: Uri href })
+                if (item is ILink link && link.Href != null)
                 {
-                    var url = href.ToString();
-                    if (url.StartsWith(baseUrl))
+                    var url = link.Href.ToString();
+                    _logger.LogDebug("Processing {Field} recipient: {Url}", fieldName, url);
+                    
+                    if (url == PublicAddress)
                     {
-                        var parts = url.Split('/');
-                        if (parts.Length >= 2 && parts[^2] == "users")
+                        _logger.LogDebug("Found public addressing in {Field}", fieldName);
+                        hasPublicAddressing = true;
+                        continue;
+                    }
+                    
+                    if (url.EndsWith("/followers"))
+                    {
+                        var actorId = url.Substring(0, url.Length - "/followers".Length);
+                        _logger.LogDebug("Processing followers collection for actor: {ActorId}", actorId);
+                        var actor = await _actorRepository.GetActorByIdAsync(actorId);
+                        
+                        if (actor?.PreferredUsername != null)
                         {
-                            recipients.Add(parts[^1]);
+                            var followers = await _actorRepository.GetFollowersAsync(actor.PreferredUsername);
+                            _logger.LogDebug("Found {Count} followers for {Username}", followers.Count(), actor.PreferredUsername);
+                            foreach (var followerUrl in followers)
+                            {
+                                var followerActor = await _actorRepository.GetActorByIdAsync(followerUrl);
+                                if (followerActor?.PreferredUsername != null)
+                                {
+                                    _logger.LogDebug("Adding follower to recipients: {Username}", followerActor.PreferredUsername);
+                                    recipients.Add(followerActor.PreferredUsername);
+                                }
+                                else
+                                {
+                                    _logger.LogDebug("Follower not found locally: {FollowerUrl}", followerUrl);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogDebug("Actor not found locally for followers collection: {ActorId}, checking local users' following lists", actorId);
+                            var allLocalUsers = await _actorRepository.GetAllLocalUsernamesAsync();
+                            foreach (var username in allLocalUsers)
+                            {
+                                var following = await _actorRepository.GetFollowingAsync(username);
+                                if (following.Contains(actorId))
+                                {
+                                    _logger.LogDebug("Local user {Username} follows {ActorId}, adding as recipient", username, actorId);
+                                    recipients.Add(username);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var actor = await _actorRepository.GetActorByIdAsync(url);
+                        if (actor?.PreferredUsername != null)
+                        {
+                            _logger.LogDebug("Adding direct recipient: {Username}", actor.PreferredUsername);
+                            recipients.Add(actor.PreferredUsername);
+                        }
+                        else
+                        {
+                            _logger.LogDebug("Actor not found locally: {Url}", url);
                         }
                     }
                 }
             }
         }
 
-        AddRecipients(activity.To);
-        AddRecipients(activity.Cc);
-        AddRecipients(activity.Bcc);
+        await AddRecipientsAsync(activity.To, "To");
+        await AddRecipientsAsync(activity.Cc, "Cc");
+        await AddRecipientsAsync(activity.Bcc, "Bcc");
 
-        // Verify users exist
-        var validRecipients = new List<string>();
-        foreach (var username in recipients)
+        if (hasPublicAddressing)
         {
-            if (await _actorRepository.GetActorByUsernameAsync(username) != null)
+            _logger.LogDebug("Fetching all local usernames for public addressing");
+            var allLocalUsers = await _actorRepository.GetAllLocalUsernamesAsync();
+            _logger.LogInformation("GetAllLocalUsernamesAsync returned {Count} users: [{Users}]. Repository instance: {RepositoryId}", 
+                allLocalUsers.Count(), string.Join(", ", allLocalUsers), _actorRepository.GetHashCode());
+            foreach (var username in allLocalUsers)
             {
-                validRecipients.Add(username);
+                recipients.Add(username);
             }
         }
 
-        return validRecipients;
+        _logger.LogDebug("Total unique recipients resolved: {Count}", recipients.Count);
+        return recipients.ToList();
     }
 }

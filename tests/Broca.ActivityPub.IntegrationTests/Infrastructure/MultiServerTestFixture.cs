@@ -80,6 +80,15 @@ public abstract class MultiServerTestFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Creates an HttpClient that routes requests to the correct test server based on hostname.
+    /// Use this instead of server.CreateClient() when the request URL targets a different server.
+    /// </summary>
+    protected HttpClient CreateRoutingClient()
+    {
+        return new HttpClient(_routingHandler!, disposeHandler: false);
+    }
+
+    /// <summary>
     /// Clears all data from all servers
     /// </summary>
     protected void ClearAllData()

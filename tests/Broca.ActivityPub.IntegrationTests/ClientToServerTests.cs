@@ -1,5 +1,6 @@
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.IntegrationTests.Infrastructure;
+using KristofferStrube.ActivityStreams;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Broca.ActivityPub.IntegrationTests;
@@ -239,5 +240,78 @@ public class ClientToServerTests : TwoServerFixture
         // Verify Alice's following collection was updated (Bob removed)
         var followingAfterUndo = await actorRepo.GetFollowingAsync("alice");
         Assert.DoesNotContain(bob.Id!, followingAfterUndo);
+    }
+
+    [Fact]
+    public async Task C2S_UndoFollowByIriReference_FollowingRemoved()
+    {
+        // Arrange - Seed Alice and Bob on Server A
+        using var scope = ServerA.Services.CreateScope();
+        var actorRepo = scope.ServiceProvider.GetRequiredService<IActorRepository>();
+
+        var (alice, alicePrivateKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice", ServerA.BaseUrl);
+        var (bob, _) = await TestDataSeeder.SeedActorAsync(actorRepo, "bob", ServerA.BaseUrl);
+
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => ServerA.CreateClient(),
+            alice.Id!,
+            alicePrivateKey);
+        var c2sHelper = new ClientToServerHelper(aliceClient, alice.Id!, ClientA);
+
+        // Alice follows Bob — stored in the activity repo with a server-assigned ID
+        var followActivity = TestDataSeeder.CreateFollow(alice.Id!, bob.Id!);
+        await c2sHelper.PostToOutboxAsync(followActivity);
+
+        var s2sHelper = new ServerToServerHelper(ServerA);
+        var outboxActivities = await s2sHelper.GetOutboxActivitiesAsync("alice");
+        var storedFollow = outboxActivities.FirstOrDefault(a => a.Type?.Contains("Follow") == true) as IObject;
+        Assert.NotNull(storedFollow);
+        var followId = storedFollow.Id!;
+
+        Assert.Contains(bob.Id!, await actorRepo.GetFollowingAsync("alice"));
+
+        // Act - Alice undoes the follow by referencing only the Follow's IRI (ILink / bare string)
+        var undoByRef = TestDataSeeder.CreateUndoByReference(alice.Id!, followId);
+        var response = await c2sHelper.PostToOutboxAsync(undoByRef);
+
+        // Assert
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.DoesNotContain(bob.Id!, await actorRepo.GetFollowingAsync("alice"));
+    }
+
+    [Fact]
+    public async Task C2S_RejectFollowByIriReference_PendingFollowerRemoved()
+    {
+        // Arrange - Seed Bob (manual approvals) and Alice on Server A
+        using var scope = ServerA.Services.CreateScope();
+        var actorRepo = scope.ServiceProvider.GetRequiredService<IActorRepository>();
+        var activityRepo = scope.ServiceProvider.GetRequiredService<IActivityRepository>();
+
+        var (bob, bobPrivateKey) = await TestDataSeeder.SeedActorAsync(
+            actorRepo, "bob", ServerA.BaseUrl, manuallyApprovesFollowers: true);
+        var (alice, _) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice", ServerA.BaseUrl);
+
+        // Simulate Alice's Follow arriving in Bob's inbox (as S2S delivery would do)
+        var followId = $"{alice.Id!}/activities/follow-{Guid.NewGuid()}";
+        var aliceFollow = TestDataSeeder.CreateFollow(alice.Id!, bob.Id!);
+        aliceFollow.Id = followId;
+        await activityRepo.SaveInboxActivityAsync("bob", followId, aliceFollow);
+        await actorRepo.AddPendingFollowerAsync("bob", alice.Id!, CancellationToken.None);
+
+        Assert.Contains(alice.Id!, await actorRepo.GetPendingFollowersAsync("bob"));
+
+        // Act - Bob rejects Alice's follow referencing only the Follow's IRI (ILink / bare string)
+        var bobClient = TestClientFactory.CreateAuthenticatedClient(
+            () => ServerA.CreateClient(),
+            bob.Id!,
+            bobPrivateKey);
+        var c2sHelper = new ClientToServerHelper(bobClient, bob.Id!, ClientA);
+
+        var rejectByRef = TestDataSeeder.CreateRejectByReference(bob.Id!, followId);
+        var response = await c2sHelper.PostToOutboxAsync(rejectByRef);
+
+        // Assert
+        Assert.True(response.IsSuccessStatusCode);
+        Assert.DoesNotContain(alice.Id!, await actorRepo.GetPendingFollowersAsync("bob"));
     }
 }

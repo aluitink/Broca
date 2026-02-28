@@ -20,6 +20,7 @@ When developing UI components:
 - Do not add code comments that explain what code does — write self-explanatory code instead.
 - The project is in early development and changes frequently; keep implementations simple and avoid over-engineering.
 - If an opportunity to simplify or refactor existing code is noticed, ask the user before making those changes.
+- Be targeted with your test execution.
 
 ## ActivityStreams `IObjectOrLink` Type Evaluation
 

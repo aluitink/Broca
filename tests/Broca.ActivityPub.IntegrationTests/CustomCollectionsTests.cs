@@ -600,10 +600,20 @@ public class CustomCollectionsTests : IAsyncLifetime
 
     private async Task<HttpResponseMessage> PostToOutboxAsync(string username, Activity activity)
     {
-        var json = JsonSerializer.Serialize<IObjectOrLink>(activity, _jsonOptions);
-        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/activity+json");
-        
-        return await _client.PostAsync($"/users/{username}/outbox", content);
+        using var scope = _server.Services.CreateScope();
+        var actorRepo = scope.ServiceProvider.GetRequiredService<IActorRepository>();
+        var actor = await actorRepo.GetActorByUsernameAsync(username);
+        Assert.NotNull(actor);
+
+        var privateKey = actor.ExtensionData!["privateKeyPem"].GetString()!;
+        var client = TestClientFactory.CreateAuthenticatedClient(
+            () => _server.CreateClient(),
+            actor.Id!,
+            privateKey);
+
+        return await client.PostAsync<Activity>(
+            new Uri($"{_server.BaseUrl}/users/{username}/outbox"),
+            activity);
     }
 
     private async Task<HttpResponseMessage> PostToSystemInboxAsync(Activity activity)

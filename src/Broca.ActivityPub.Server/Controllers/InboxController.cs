@@ -261,6 +261,8 @@ public class InboxController : ActivityPubControllerBase
         // Extract keyId from signature
         var keyId = _signatureService.GetSignatureKeyId(signatureHeader!);
         _logger.LogInformation("Extracted keyId from signature: {KeyId}", keyId);
+
+        ValidateRequestClockSkew(Request);
         
         // Fetch the actor's public key
         var publicKeyPem = await FetchActorPublicKeyAsync(keyId, cancellationToken);

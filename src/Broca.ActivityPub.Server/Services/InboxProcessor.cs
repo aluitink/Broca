@@ -18,6 +18,7 @@ public class InboxProcessor : IInboxHandler
     private readonly HttpSignatureService _signatureService;
     private readonly AdminOperationsHandler _adminOperationsHandler;
     private readonly AttachmentProcessingService _attachmentProcessingService;
+    private readonly ActivityDeliveryService _deliveryService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<InboxProcessor> _logger;
 
@@ -28,6 +29,7 @@ public class InboxProcessor : IInboxHandler
         HttpSignatureService signatureService,
         AdminOperationsHandler adminOperationsHandler,
         AttachmentProcessingService attachmentProcessingService,
+        ActivityDeliveryService deliveryService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<InboxProcessor> logger)
     {
@@ -37,6 +39,7 @@ public class InboxProcessor : IInboxHandler
         _signatureService = signatureService;
         _adminOperationsHandler = adminOperationsHandler;
         _attachmentProcessingService = attachmentProcessingService;
+        _deliveryService = deliveryService;
         _options = options.Value;
         _logger = logger;
     }
@@ -73,8 +76,8 @@ public class InboxProcessor : IInboxHandler
 
             var activityId = (activity as IObject)?.Id ?? Guid.NewGuid().ToString();
 
-            _logger.LogInformation("Processing {ActivityType} activity {ActivityId} for user {Username}",
-                activityType, activityId, username);
+            _logger.LogInformation("Processing {ActivityType} activity {ActivityId} for user {Username}. ConcreteType={ConcreteType}",
+                activityType, activityId, username, activity.GetType().Name);
 
             // Process attachments in the activity if it's an object with attachments
             if (activity is IObject activityObject)
@@ -91,12 +94,14 @@ public class InboxProcessor : IInboxHandler
                 "Follow" => await HandleFollowAsync(username, activity as IObject, cancellationToken),
                 "Undo" => await HandleUndoAsync(username, activity as IObject, cancellationToken),
                 "Accept" => await HandleAcceptAsync(username, activity as IObject, cancellationToken),
+                "Reject" => await HandleRejectAsync(username, activity as IObject, cancellationToken),
                 "Create" => await HandleCreateAsync(username, activity as IObject, cancellationToken),
                 "Delete" => await HandleDeleteAsync(username, activity as IObject, cancellationToken),
                 "Like" => await HandleLikeAsync(username, activity as IObject, cancellationToken),
                 "Announce" => await HandleAnnounceAsync(username, activity as IObject, cancellationToken),
                 "Add" => await HandleAddAsync(username, activity as IObject, cancellationToken),
                 "Remove" => await HandleRemoveAsync(username, activity as IObject, cancellationToken),
+                "Update" => await HandleIncomingUpdateAsync(username, activity as IObject, cancellationToken),
                 _ => true // Unknown types are accepted but not processed
             };
 
@@ -127,7 +132,7 @@ public class InboxProcessor : IInboxHandler
 
         var followerActorId = followActivity.Actor.FirstOrDefault() switch
         {
-            Link link => link.Href?.ToString(),
+            ILink link => link.Href?.ToString(),
             IObject obj => obj.Id,
             _ => null
         };
@@ -137,13 +142,23 @@ public class InboxProcessor : IInboxHandler
             return false;
         }
 
-        // Add follower
-        await _actorRepository.AddFollowerAsync(username, followerActorId, cancellationToken);
+        var actor = await _actorRepository.GetActorByUsernameAsync(username, cancellationToken);
+        var manuallyApprovesFollowers = actor?.ExtensionData?.TryGetValue("manuallyApprovesFollowers", out var flagElement) == true
+            && flagElement.ValueKind == System.Text.Json.JsonValueKind.True;
 
-        _logger.LogInformation("Added follower {FollowerActorId} to {Username}", followerActorId, username);
+        if (manuallyApprovesFollowers)
+        {
+            await _actorRepository.AddPendingFollowerAsync(username, followerActorId, cancellationToken);
+            _logger.LogInformation("Follow from {FollowerActorId} for {Username} added to pending - awaiting manual approval",
+                followerActorId, username);
+        }
+        else
+        {
+            await _actorRepository.AddFollowerAsync(username, followerActorId, cancellationToken);
+            _logger.LogInformation("Auto-accepted follow from {FollowerActorId} for {Username}", followerActorId, username);
 
-        // TODO: Send Accept activity back to the follower
-        // This would typically be done by posting to the outbox
+            await SendAcceptActivityAsync(username, followActivity, followerActorId, cancellationToken);
+        }
 
         return true;
     }
@@ -161,15 +176,36 @@ public class InboxProcessor : IInboxHandler
             return false;
         }
 
+        // Handle ILink references (plain IRI strings or Link objects)
+        if (objectToUndo is ILink link && link.Href != null)
+        {
+            var activityId = link.Href.ToString();
+            var originalActivity = await _activityRepository.GetActivityByIdAsync(activityId, cancellationToken);
+            if (originalActivity is IObject linkedObj)
+            {
+                objectToUndo = linkedObj;
+            }
+            else
+            {
+                _logger.LogWarning("Could not resolve linked activity {ActivityId} for Undo", activityId);
+                return false;
+            }
+        }
+
+        if (objectToUndo is not IObject obj || obj.Type == null)
+        {
+            return false;
+        }
+
         // Check if it's an Undo Follow
-        if (objectToUndo is IObject obj && obj.Type?.Contains("Follow") == true)
+        if (obj.Type.Contains("Follow"))
         {
             var originalFollow = obj as Activity;
             if (originalFollow?.Actor != null)
             {
                 var followerActorId = originalFollow.Actor.FirstOrDefault() switch
                 {
-                    Link link => link.Href?.ToString(),
+                    ILink actorLink => actorLink.Href?.ToString(),
                     IObject actorObj => actorObj.Id,
                     _ => null
                 };
@@ -182,15 +218,90 @@ public class InboxProcessor : IInboxHandler
                 }
             }
         }
+        // Check if it's an Undo Like
+        else if (obj.Type.Contains("Like"))
+        {
+            var originalLike = obj as Activity;
+            if (originalLike?.Id != null)
+            {
+                // Delete the Like activity - the repository will automatically update indexes
+                await _activityRepository.DeleteActivityAsync(originalLike.Id, cancellationToken);
+                _logger.LogInformation("Removed Like {LikeId} from {Username}'s inbox", originalLike.Id, username);
+                return true;
+            }
+        }
+        // Check if it's an Undo Announce
+        else if (obj.Type.Contains("Announce"))
+        {
+            var originalAnnounce = obj as Activity;
+            if (originalAnnounce?.Id != null)
+            {
+                // Delete the Announce activity - the repository will automatically update indexes
+                await _activityRepository.DeleteActivityAsync(originalAnnounce.Id, cancellationToken);
+                _logger.LogInformation("Removed Announce {AnnounceId} from {Username}'s inbox", originalAnnounce.Id, username);
+                return true;
+            }
+        }
 
         return false;
     }
 
     private Task<bool> HandleAcceptAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {
-        // Accept activities are informational
-        // The follower has accepted our follow request
+        // A remote actor accepted our Follow request.
+        // The following collection is updated optimistically when the Follow is sent (in OutboxProcessor),
+        // so no further action is required here beyond acknowledging receipt.
+        if (activity is Activity acceptActivity)
+        {
+            var acceptingActorId = acceptActivity.Actor?.FirstOrDefault() switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+            _logger.LogInformation("Follow request by {Username} accepted by {AcceptingActorId}", username, acceptingActorId);
+        }
         return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleRejectAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    {
+        if (activity is not Activity rejectActivity || rejectActivity.Object == null)
+        {
+            return false;
+        }
+
+        var rejectedObject = rejectActivity.Object.FirstOrDefault();
+        
+        // Handle ILink references (plain IRI strings or Link objects)
+        if (rejectedObject is ILink link && link.Href != null)
+        {
+            var activityId = link.Href.ToString();
+            var originalActivity = await _activityRepository.GetActivityByIdAsync(activityId, cancellationToken);
+            if (originalActivity is IObject linkedObj)
+            {
+                rejectedObject = linkedObj;
+            }
+        }
+        
+        if (rejectedObject is IObject obj && obj.Type?.Contains("Follow") == true)
+        {
+            var rejectingActorId = rejectActivity.Actor?.FirstOrDefault() switch
+            {
+                ILink actorLink => actorLink.Href?.ToString(),
+                IObject actorObj => actorObj.Id,
+                _ => null
+            };
+
+            if (rejectingActorId != null)
+            {
+                await _actorRepository.RemoveFollowingAsync(username, rejectingActorId, cancellationToken);
+                _logger.LogInformation("Follow of {RejectingActorId} by {Username} was rejected - removed from following",
+                    rejectingActorId, username);
+            }
+        }
+
+        return true;
     }
 
     private Task<bool> HandleCreateAsync(string username, IObject? activity, CancellationToken cancellationToken)
@@ -200,24 +311,49 @@ public class InboxProcessor : IInboxHandler
         return Task.FromResult(true);
     }
 
-    private Task<bool> HandleDeleteAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task<bool> HandleDeleteAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {
-        // Delete activities indicate content should be removed
-        // This would typically mark objects as deleted in the repository
-        return Task.FromResult(true);
+        if (activity is not Activity deleteActivity)
+        {
+            return false;
+        }
+
+        var objectToDelete = deleteActivity.Object?.FirstOrDefault();
+        if (objectToDelete == null)
+        {
+            _logger.LogWarning("Delete activity has no object");
+            return false;
+        }
+
+        string? objectId = objectToDelete switch
+        {
+            ILink link => link.Href?.ToString(),
+            Tombstone tombstone => tombstone.Id,
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (string.IsNullOrEmpty(objectId))
+        {
+            _logger.LogWarning("Delete activity has invalid object reference");
+            return false;
+        }
+
+        await _activityRepository.MarkObjectAsDeletedAsync(objectId, cancellationToken);
+        _logger.LogInformation("Marked object {ObjectId} as deleted for user {Username}", objectId, username);
+
+        return true;
     }
 
     private Task<bool> HandleLikeAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {
-        // Like activities are informational
-        // Could update like counts on objects
+        _logger.LogInformation("Processed Like activity for {Username}", username);
         return Task.FromResult(true);
     }
 
     private Task<bool> HandleAnnounceAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {
-        // Announce activities (shares/boosts) are informational
-        // Could update share counts on objects
+        _logger.LogInformation("Processed Announce activity for {Username}", username);
         return Task.FromResult(true);
     }
 
@@ -379,7 +515,88 @@ public class InboxProcessor : IInboxHandler
         return match.Success ? match.Groups[1].Value : null;
     }
 
+    private async Task SendAcceptActivityAsync(string username, Activity followActivity, string followerActorId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var builder = _activityBuilderFactory.CreateForUsername(username);
+            var acceptActivity = builder.Accept(followActivity);
+
+            var baseUrl = (_options.BaseUrl ?? "http://localhost").TrimEnd('/');
+            var routePrefix = _options.NormalizedRoutePrefix;
+            acceptActivity.Id = $"{baseUrl}{routePrefix}/activities/{Guid.NewGuid()}";
+
+            await _activityRepository.SaveOutboxActivityAsync(username, acceptActivity.Id, acceptActivity, cancellationToken);
+            await _deliveryService.QueueActivityToTargetAsync(username, acceptActivity.Id, acceptActivity, followerActorId, cancellationToken);
+
+            _logger.LogInformation("Queued Accept activity for delivery to {FollowerActorId}", followerActorId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send Accept activity to {FollowerActorId} - follow is still recorded", followerActorId);
+        }
+    }
+
     /// <summary>
+    private async Task<bool> HandleIncomingUpdateAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    {
+        if (activity is not Activity updateActivity || updateActivity.Object == null)
+            return true;
+
+        var wrappedObject = updateActivity.Object.FirstOrDefault();
+
+        if (wrappedObject is ILink)
+        {
+            _logger.LogDebug("Ignoring Update whose object is an unresolved IRI reference");
+            return true;
+        }
+
+        if (wrappedObject is not Actor updatedActor)
+            return true;
+
+        var updatedActorId = updatedActor.Id;
+        if (string.IsNullOrEmpty(updatedActorId))
+        {
+            _logger.LogWarning("Update activity contains an Actor with no Id");
+            return true;
+        }
+
+        // Security: the sender must be the same actor being updated
+        var senderId = updateActivity.Actor?.FirstOrDefault() switch
+        {
+            ILink l => l.Href?.ToString(),
+            IObject o => o.Id,
+            _ => null
+        };
+
+        if (senderId != updatedActorId)
+        {
+            _logger.LogWarning("Update sender {SenderId} does not match updated actor {ActorId} — ignoring",
+                senderId, updatedActorId);
+            return true;
+        }
+
+        // Only update actors we have already cached locally
+        var existingActor = await _actorRepository.GetActorByIdAsync(updatedActorId, cancellationToken);
+        if (existingActor == null)
+        {
+            _logger.LogDebug("Received Update for unknown remote actor {ActorId} — ignoring", updatedActorId);
+            return true;
+        }
+
+        // Refuse to overwrite local actors via S2S
+        var baseUrl = (_options.BaseUrl ?? string.Empty).TrimEnd('/');
+        if (!string.IsNullOrEmpty(baseUrl) && updatedActorId.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Ignoring Update targeting local actor {ActorId}", updatedActorId);
+            return true;
+        }
+
+        await _actorRepository.SaveActorAsync(existingActor.PreferredUsername!, updatedActor, cancellationToken);
+        _logger.LogInformation("Updated cached remote actor {ActorId}", updatedActorId);
+        return true;
+    }
+
     /// Processes attachments in an activity, downloading remote resources and rewriting URLs
     /// </summary>
     private async Task ProcessActivityAttachmentsAsync(string username, IObject activityObject, CancellationToken cancellationToken)

@@ -14,6 +14,7 @@ public class InMemoryActorRepository : IActorRepository
     private readonly ConcurrentDictionary<string, Actor> _actors = new();
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _followers = new();
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _following = new();
+    private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _pendingFollowers = new();
     private readonly ConcurrentDictionary<string, string> _actorIdToUsername = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, CustomCollectionDefinition>> _collections = new();
 
@@ -52,6 +53,7 @@ public class InMemoryActorRepository : IActorRepository
         _actors.TryRemove(key, out _);
         _followers.TryRemove(key, out _);
         _following.TryRemove(key, out _);
+        _pendingFollowers.TryRemove(key, out _);
         return Task.CompletedTask;
     }
 
@@ -125,8 +127,47 @@ public class InMemoryActorRepository : IActorRepository
         _actors.Clear();
         _followers.Clear();
         _following.Clear();
+        _pendingFollowers.Clear();
         _actorIdToUsername.Clear();
         _collections.Clear();
+    }
+
+    // Pending Followers
+
+    public Task<IEnumerable<string>> GetPendingFollowersAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        if (_pendingFollowers.TryGetValue(key, out var pending))
+        {
+            return Task.FromResult<IEnumerable<string>>(pending.ToList());
+        }
+        return Task.FromResult<IEnumerable<string>>(Array.Empty<string>());
+    }
+
+    public Task AddPendingFollowerAsync(string username, string followerActorId, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        var pending = _pendingFollowers.GetOrAdd(key, _ => new ConcurrentBag<string>());
+        if (!pending.Contains(followerActorId))
+        {
+            pending.Add(followerActorId);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task RemovePendingFollowerAsync(string username, string followerActorId, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        if (_pendingFollowers.TryGetValue(key, out var pending))
+        {
+            _pendingFollowers[key] = new ConcurrentBag<string>(pending.Where(f => f != followerActorId));
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task<IEnumerable<string>> GetAllLocalUsernamesAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IEnumerable<string>>(_actors.Keys.ToList());
     }
 
     // Custom Collections

@@ -230,6 +230,40 @@ public static class TestDataSeeder
     }
 
     /// <summary>
+    /// Creates an Undo activity where the object is a bare IRI reference (ILink), as Mastodon sends.
+    /// </summary>
+    public static Undo CreateUndoByReference(string actorId, string activityIri)
+    {
+        return new Undo
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Type = new[] { "Undo" },
+            Actor = new IObjectOrLink[] { new Actor { Id = actorId } },
+            Object = new IObjectOrLink[] { new Link { Href = new Uri(activityIri) } }
+        };
+    }
+
+    /// <summary>
+    /// Creates a Reject activity where the object is a bare IRI reference (ILink), as Mastodon sends.
+    /// </summary>
+    public static Reject CreateRejectByReference(string actorId, string activityIri)
+    {
+        return new Reject
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Type = new[] { "Reject" },
+            Actor = new IObjectOrLink[] { new Actor { Id = actorId } },
+            Object = new IObjectOrLink[] { new Link { Href = new Uri(activityIri) } }
+        };
+    }
+
+    /// <summary>
     /// Creates a Create activity with an attachment (image, video, etc.)
     /// </summary>
     public static Activity CreateCreateActivityWithAttachment(

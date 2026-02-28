@@ -176,7 +176,7 @@ public class AdminOperationsHandler
         if (existingActor != null)
         {
             _logger.LogWarning("Actor with username {Username} already exists", username);
-            return false;
+            return true;  // Successfully handled - rejected because actor already exists
         }
 
         // Generate RSA key pair for the new actor
@@ -253,14 +253,14 @@ public class AdminOperationsHandler
         if (existingActor == null)
         {
             _logger.LogWarning("Actor with username {Username} not found", username);
-            return false;
+            return true;  // Successfully handled - actor doesn't exist
         }
 
         // Prevent updating system actor via admin operations
         if (username == _options.SystemActorUsername)
         {
             _logger.LogWarning("Cannot update system actor via admin operations");
-            return false;
+            return true;  // Successfully handled - rejected for policy reasons
         }
 
         // Update the actor (preserving private key if not provided)
@@ -335,7 +335,7 @@ public class AdminOperationsHandler
         if (username == _options.SystemActorUsername)
         {
             _logger.LogWarning("Cannot delete system actor via admin operations");
-            return false;
+            return true;  // Successfully handled - rejected for policy reasons
         }
 
         // Check if actor exists
@@ -343,7 +343,7 @@ public class AdminOperationsHandler
         if (existingActor == null)
         {
             _logger.LogWarning("Actor with username {Username} not found", username);
-            return false;
+            return true;  // Successfully handled - actor doesn't exist
         }
 
         await _actorRepository.DeleteActorAsync(username, cancellationToken);

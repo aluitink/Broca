@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Broca.ActivityPub.Core.Interfaces;
 using KristofferStrube.ActivityStreams;
+using Microsoft.Extensions.Logging;
 
 namespace Broca.ActivityPub.Persistence.InMemory;
 
@@ -21,11 +22,21 @@ public class InMemoryActivityRepository : IActivityRepository
     
     // Index for tracking replies: objectId -> list of reply activities
     private readonly ConcurrentDictionary<string, List<(string ActivityId, DateTime Timestamp)>> _replies = new();
+    
+    private readonly ILogger<InMemoryActivityRepository>? _logger;
+
+    public InMemoryActivityRepository(ILogger<InMemoryActivityRepository>? logger = null)
+    {
+        _logger = logger;
+    }
 
     public Task SaveInboxActivityAsync(string username, string activityId, IObjectOrLink activity, CancellationToken cancellationToken = default)
     {
         var key = username.ToLowerInvariant();
         var inbox = _inboxes.GetOrAdd(key, _ => new List<(string, IObjectOrLink, DateTime)>());
+        
+        _logger?.LogDebug("SaveInboxActivityAsync: Saving activity to {Username}'s inbox. ActivityId={ActivityId}, ConcreteType={ConcreteType}",
+            username, activityId, activity.GetType().Name);
         
         lock (inbox)
         {
@@ -71,9 +82,15 @@ public class InMemoryActivityRepository : IActivityRepository
                     .Take(limit)
                     .Select(x => x.Activity)
                     .ToList();
+                
+                _logger?.LogDebug("GetInboxActivitiesAsync: Retrieved {Count} activities from {Username}'s inbox. Types: {Types}",
+                    activities.Count, username, string.Join(", ", activities.Select(a => a.GetType().Name)));
+                
                 return Task.FromResult<IEnumerable<IObjectOrLink>>(activities);
             }
         }
+        
+        _logger?.LogDebug("GetInboxActivitiesAsync: No inbox found for {Username}", username);
         return Task.FromResult<IEnumerable<IObjectOrLink>>(Array.Empty<IObjectOrLink>());
     }
 
@@ -350,6 +367,19 @@ public class InMemoryActivityRepository : IActivityRepository
         }
         
         return Task.FromResult(count);
+    }
+
+    public Task MarkObjectAsDeletedAsync(string objectId, CancellationToken cancellationToken = default)
+    {
+        var tombstone = new Tombstone
+        {
+            Id = objectId,
+            Type = new[] { "Tombstone" },
+            Deleted = DateTime.UtcNow
+        };
+        
+        _activities[objectId] = tombstone;
+        return Task.CompletedTask;
     }
 
     /// <summary>
