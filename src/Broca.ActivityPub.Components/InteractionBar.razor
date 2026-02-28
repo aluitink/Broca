@@ -260,19 +260,21 @@ else
         }
     }
 
-    private async Task HandleCancelReply()
+    private Task HandleCancelReply()
     {
         showReplyComposer = false;
         IsReplying = false;
         StateHasChanged();
+        return Task.CompletedTask;
     }
 
-    private async Task HandleReplyCreated(Activity activity)
+    private Task HandleReplyCreated(Activity activity)
     {
         showReplyComposer = false;
         IsReplying = false;
         ReplyCount++;
         StateHasChanged();
+        return Task.CompletedTask;
     }
 
     private async Task HandleLikeClick()

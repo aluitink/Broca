@@ -22,6 +22,60 @@
         </div>
     }
 
+    @if (ShowSearchHistory && searchHistory.Any() && string.IsNullOrWhiteSpace(searchQuery) && currentActor == null)
+    {
+        <div class="search-history">
+            <div class="history-header">
+                <span class="history-title">Recent Searches</span>
+                <button @onclick="ClearHistory" class="history-clear-button" title="Clear history">Clear</button>
+            </div>
+            <div class="history-items">
+                @foreach (var item in searchHistory)
+                {
+                    <button @onclick="@(() => SearchFromHistoryAsync(item))" class="history-item">
+                        <span class="history-icon">🔍</span>
+                        <span class="history-query">@item</span>
+                    </button>
+                }
+            </div>
+        </div>
+    }
+
+    @if (ShowSuggestedActors && suggestedActors.Any() && string.IsNullOrWhiteSpace(searchQuery) && currentActor == null)
+    {
+        <div class="suggested-actors">
+            <div class="suggestions-header">Suggested Accounts</div>
+            <div class="suggestions-list">
+                @foreach (var actor in suggestedActors)
+                {
+                    <div class="suggestion-item" @onclick="@(() => SelectSuggestedActor(actor))">
+                        @if (SuggestedActorTemplate != null)
+                        {
+                            @SuggestedActorTemplate(actor)
+                        }
+                        else
+                        {
+                            <div class="actor-card">
+                                @if (actor.Icon?.FirstOrDefault() is IImageOrLink icon && icon is Image img && img.Url?.Any() == true)
+                                {
+                                    <img src="@img.Url.First().Href" alt="Avatar" class="actor-avatar" />
+                                }
+                                else
+                                {
+                                    <div class="actor-avatar-placeholder">👤</div>
+                                }
+                                <div class="actor-info">
+                                    <div class="actor-name">@(actor.Name?.FirstOrDefault() ?? "Unknown")</div>
+                                    <div class="actor-handle">@GetActorHandle(actor)</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
     @if (isLoading)
     {
         @if (LoadingTemplate != null)
@@ -68,6 +122,7 @@
     private bool isLoading;
     private string? error;
     private List<string> searchHistory = new();
+    private List<KristofferStrube.ActivityStreams.Object> suggestedActors = new();
     private const int MaxHistorySize = 10;
     private System.Threading.Timer? _debounceTimer;
 
@@ -89,11 +144,28 @@
     [Parameter]
     public bool ShowSearchHistory { get; set; } = true;
 
+    /// <summary>whether to show suggested actors.
+    /// </summary>
+    [Parameter]
+    public bool ShowSuggestedActors { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the list of suggested actors to display.
+    /// </summary>
+    [Parameter]
+    public List<KristofferStrube.ActivityStreams.Object>? SuggestedActors { get; set; }
+
     /// <summary>
     /// Gets or sets the search input template.
     /// </summary>
     [Parameter]
     public RenderFragment<SearchContext>? SearchTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the suggested actor template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? SuggestedActorTemplate { get; set; }
 
     /// <summary>
     /// Gets or sets the profile display template.
@@ -112,7 +184,15 @@
     /// </summary>
     [Parameter]
     public RenderFragment<string>? ErrorTemplate { get; set; }
+protected override void OnParametersSet()
+    {
+        if (SuggestedActors != null)
+        {
+            suggestedActors = SuggestedActors;
+        }
+    }
 
+    
     /// <summary>
     /// Gets or sets a callback for when an actor is found.
     /// </summary>
@@ -245,6 +325,32 @@
         {
             await OnFollowStateChanged.InvokeAsync((currentActor, isFollowing));
         }
+    }
+
+    private async Task SelectSuggestedActor(KristofferStrube.ActivityStreams.Object actor)
+    {
+        currentActor = actor;
+        searchQuery = GetActorHandle(actor);
+        
+        if (OnActorFound.HasDelegate)
+        {
+            await OnActorFound.InvokeAsync(actor);
+        }
+        
+        StateHasChanged();
+    }
+
+    private string GetActorHandle(KristofferStrube.ActivityStreams.Object actor)
+    {
+        var preferredUsername = actor is Actor a ? a.PreferredUsername : null;
+        var id = actor.Id?.ToString() ?? "";
+        
+        if (!string.IsNullOrEmpty(preferredUsername) && Uri.TryCreate(id, UriKind.Absolute, out var uri))
+        {
+            return $"@{preferredUsername}@{uri.Host}";
+        }
+        
+        return id;
     }
 
     /// <summary>

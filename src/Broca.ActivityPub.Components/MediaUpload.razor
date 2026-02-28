@@ -251,7 +251,7 @@
         isDragging = false;
     }
 
-    private async Task HandleDrop()
+    private void HandleDrop()
     {
         isDragging = false;
     }
@@ -413,7 +413,7 @@
         StateHasChanged();
     }
 
-    private async Task RetryUpload(UploadingFile file)
+    private void RetryUpload(UploadingFile file)
     {
         file.Error = null;
         file.Progress = 0;

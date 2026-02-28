@@ -5,7 +5,7 @@
 @inject ActivityStreamNotificationService? NotificationService
 @implements IDisposable
 
-<div class="activitypub-activity-feed @CssClass">
+<div class="activitypub-activity-feed @CssClass" @ref="feedContainerRef">
     @if (!string.IsNullOrEmpty(Title))
     {
         <div class="feed-header">
@@ -17,6 +17,30 @@
         </div>
     }
 
+    @if (ShowSearch)
+    {
+        <div class="feed-search">
+            <input type="text" 
+                   class="search-input"
+                   placeholder="@SearchPlaceholder"
+                   value="@searchQuery"
+                   @oninput="@OnSearchChanged" />
+            @if (!string.IsNullOrEmpty(searchQuery))
+            {
+                <button class="clear-search-button" @onclick="ClearSearch" title="Clear search">
+                    ✕
+                </button>
+            }
+        </div>
+    }
+
+    @if (ShowFilter && FilterTemplate != null)
+    {
+        <div class="feed-filter-container">
+            @FilterTemplate
+        </div>
+    }
+
     @if (newActivitiesCount > 0 && ShowNewPostsNotification)
     {
         <div class="new-posts-notification">
@@ -24,6 +48,13 @@
                 @newActivitiesCount new @(newActivitiesCount == 1 ? "post" : "posts") available
             </button>
         </div>
+    }
+
+    @if (showScrollToTop)
+    {
+        <button class="scroll-to-top-button" @onclick="ScrollToTop" title="Scroll to top">
+            ↑
+        </button>
     }
 
     @if (CollectionUrl != null)
@@ -37,13 +68,16 @@
                          OverscanCount="@OverscanCount"
                          OnItemsLoaded="@HandleItemsLoaded">
             <ItemTemplate Context="activity">
-                @if (ActivityTemplate != null)
+                @if (MatchesSearch(activity))
                 {
-                    @ActivityTemplate(activity)
-                }
-                else
-                {
-                    <ObjectDisplay Object="@activity" />
+                    @if (ActivityTemplate != null)
+                    {
+                        @ActivityTemplate(activity)
+                    }
+                    else
+                    {
+                        <ObjectDisplay Object="@activity" />
+                    }
                 }
             </ItemTemplate>
             <LoadingTemplate>
@@ -100,6 +134,11 @@
     private string? latestActivityId = null;
     private CollectionLoader<Activity>? collectionLoaderRef;
     private IDisposable? notificationSubscription;
+    private ElementReference feedContainerRef;
+    private bool showScrollToTop = false;
+    private string? searchQuery;
+    private List<Activity> allActivities = new();
+    private List<Activity> filteredActivities = new();
 
     /// <summary>
     /// Gets or sets the URL of the activity collection (e.g., outbox, inbox).
@@ -178,6 +217,42 @@
     /// </summary>
     [Parameter]
     public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the search box.
+    /// </summary>
+    [Parameter]
+    public bool ShowSearch { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the search placeholder text.
+    /// </summary>
+    [Parameter]
+    public string SearchPlaceholder { get; set; } = "Search activities...";
+
+    /// <summary>
+    /// Gets or sets whether to show the filter section.
+    /// </summary>
+    [Parameter]
+    public bool ShowFilter { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the filter template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? FilterTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show scroll-to-top button.
+    /// </summary>
+    [Parameter]
+    public bool ShowScrollToTop { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the scroll threshold (in pixels) before showing scroll-to-top button.
+    /// </summary>
+    [Parameter]
+    public int ScrollThreshold { get; set; } = 300;
 
     /// <summary>
     /// Gets or sets a callback for when new activities are detected.
@@ -359,6 +434,83 @@
         }
     }
 
+    private async Task OnSearchChanged(ChangeEventArgs e)
+    {
+        searchQuery = e.Value?.ToString();
+        await ApplyFiltersAsync();
+    }
+
+    private async Task ClearSearch()
+    {
+        searchQuery = null;
+        await ApplyFiltersAsync();
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        // This will trigger a refresh of the displayed items
+        // The actual filtering is done in the ActivityTemplate
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    private async Task ScrollToTop()
+    {
+        // In a real implementation, we'd use JS interop to scroll
+        // For now, just refresh the feed to show new items
+        showScrollToTop = false;
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    private bool MatchesSearch(Activity activity)
+    {
+        if (string.IsNullOrEmpty(searchQuery))
+        {
+            return true;
+        }
+
+        // Search in activity content
+        var query = searchQuery.ToLowerInvariant();
+        
+        // Check activity type
+        if (activity.Type?.Any(t => t.Contains(query, StringComparison.OrdinalIgnoreCase)) == true)
+        {
+            return true;
+        }
+
+        // Check actor
+        if (activity.Actor != null)
+        {
+            var actorRef = activity.Actor.FirstOrDefault();
+            if (actorRef is Actor actor)
+            {
+                if ((actor.Name?.Any(n => n.Contains(query, StringComparison.OrdinalIgnoreCase)) == true) ||
+                    actor.PreferredUsername?.Contains(query, StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    return true;
+                }
+            }
+        }
+
+        // Check object content
+        if (activity.Object != null)
+        {
+            var objRef = activity.Object.FirstOrDefault();
+            if (objRef is KristofferStrube.ActivityStreams.Object obj)
+            {
+                if ((obj.Content?.Any(c => c.Contains(query, StringComparison.OrdinalIgnoreCase)) == true) ||
+                    (obj.Name?.Any(n => n.Contains(query, StringComparison.OrdinalIgnoreCase)) == true) ||
+                    (obj.Summary?.Any(s => s.Contains(query, StringComparison.OrdinalIgnoreCase)) == true))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public void Dispose()
     {
         StopAutoRefresh();
@@ -388,3 +540,72 @@
     public RenderFragment<string>? ErrorTemplate { get; set; }
 }
 
+<style>
+    .feed-search {
+        position: relative;
+        margin-bottom: 1rem;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 0.75rem;
+        padding-right: 2.5rem;
+        border: 1px solid var(--neutral-stroke-1, #d0d0d0);
+        border-radius: 4px;
+        font-size: 0.875rem;
+        font-family: inherit;
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: var(--accent-fill-rest, #0078d4);
+    }
+
+    .clear-search-button {
+        position: absolute;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+        color: var(--neutral-foreground-3, #707070);
+        padding: 0.25rem;
+    }
+
+    .clear-search-button:hover {
+        color: var(--neutral-foreground-1, #242424);
+    }
+
+    .feed-filter-container {
+        margin-bottom: 1rem;
+    }
+
+    .scroll-to-top-button {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--accent-fill-rest, #0078d4);
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-size: 1.5rem;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        transition: transform 0.2s, box-shadow 0.2s;
+        z-index: 100;
+    }
+
+    .scroll-to-top-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        background: var(--accent-fill-hover, #106ebe);
+    }
+
+    .scroll-to-top-button:active {
+        transform: translateY(0);
+    }
+</style>

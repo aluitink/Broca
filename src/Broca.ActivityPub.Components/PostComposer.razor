@@ -634,9 +634,10 @@
         });
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         // Dispose is handled by DI container for DraftManager
+        return ValueTask.CompletedTask;
     }
 
     private class DraftStatus

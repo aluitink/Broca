@@ -1,0 +1,294 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Broca.ActivityPub.Components
+@using static Broca.ActivityPub.Components.ContentFilterSettings
+@using Microsoft.AspNetCore.Components.Forms
+
+<div class="fluent-content-filter-settings">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="24">
+        <div class="filter-section">
+            <FluentLabel Typo="Typography.H5" Weight="FontWeight.Bold">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Filter())" Color="Color.Accent" Style="vertical-align: middle; margin-right: 8px;" />
+                Keyword Filters
+            </FluentLabel>
+            <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint);">
+                Hide posts containing specific words or phrases.
+            </FluentLabel>
+
+            @if (_keywordFilters.Any())
+            {
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" Style="margin-top: 12px;">
+                    @foreach (var filter in _keywordFilters)
+                    {
+                        <FluentCard Style="padding: 12px;">
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                                <FluentStack Orientation="Orientation.Horizontal" VerticalGap="8">
+                                    <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">@filter.Keyword</FluentLabel>
+                                    <FluentBadge Appearance="Appearance.Lightweight">@GetContextLabel(filter.Context)</FluentBadge>
+                                </FluentStack>
+                                <FluentButton Appearance="Appearance.Lightweight" 
+                                            IconOnly="true"
+                                            OnClick="() => RemoveKeywordFilter(filter)">
+                                    <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Color="Color.Error" />
+                                </FluentButton>
+                            </FluentStack>
+                        </FluentCard>
+                    }
+                </FluentStack>
+            }
+
+            <FluentStack Orientation="Orientation.Horizontal" VerticalGap="8" Style="margin-top: 12px;">
+                <FluentTextField @bind-Value="@_newKeyword"
+                               Placeholder="Add keyword or phrase..."
+                               Maxlength="100"
+                               @onkeydown="HandleKeywordKeyDown"
+                               Style="flex: 1;" />
+                <FluentSelect Items="@_filterContextOptions"
+                            @bind-SelectedOption="@_newKeywordContext"
+                            OptionText="@(c => c.ToString())"
+                            OptionValue="@(c => c.ToString())"
+                            Style="width: 150px;">
+                </FluentSelect>
+                <FluentButton Appearance="Appearance.Accent" 
+                            OnClick="AddKeywordFilter"
+                            Disabled="@string.IsNullOrWhiteSpace(_newKeyword)">
+                    Add
+                </FluentButton>
+            </FluentStack>
+        </div>
+
+        <FluentDivider Style="margin: 0;" />
+
+        <div class="filter-section">
+            <FluentLabel Typo="Typography.H5" Weight="FontWeight.Bold">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Color="Color.Accent" Style="vertical-align: middle; margin-right: 8px;" />
+                Content Warning Preferences
+            </FluentLabel>
+            <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint);">
+                Control how content warnings are displayed.
+            </FluentLabel>
+
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Style="margin-top: 12px;">
+                <FluentSwitch Label="Always show content with warnings (don't hide by default)" 
+                            @bind-Value="@_alwaysExpandContentWarnings" />
+                <FluentSwitch Label="Hide all media without content warnings" 
+                            @bind-Value="@_hideContentWithoutWarnings" />
+            </FluentStack>
+        </div>
+
+        <FluentDivider Style="margin: 0;" />
+
+        <div class="filter-section">
+            <FluentLabel Typo="Typography.H5" Weight="FontWeight.Bold">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Image())" Color="Color.Accent" Style="vertical-align: middle; margin-right: 8px;" />
+                Media Filtering
+            </FluentLabel>
+            <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint);">
+                Control what types of media are displayed automatically.
+            </FluentLabel>
+
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Style="margin-top: 12px;">
+                <FluentSwitch Label="Automatically play GIFs" @bind-Value="@_autoPlayGifs" />
+                <FluentSwitch Label="Automatically play videos" @bind-Value="@_autoPlayVideos" />
+                <FluentSwitch Label="Hide media in public timeline" @bind-Value="@_hideMediaInPublicTimeline" />
+                <FluentSwitch Label="Blur media marked as sensitive/NSFW" @bind-Value="@_blurNsfwMedia" />
+            </FluentStack>
+        </div>
+
+        <FluentDivider Style="margin: 0;" />
+
+        <div class="filter-section">
+            <FluentLabel Typo="Typography.H5" Weight="FontWeight.Bold">
+                <FluentIcon Value="@(new Icons.Regular.Size20.FilterSync())" Color="Color.Accent" Style="vertical-align: middle; margin-right: 8px;" />
+                Additional Filters
+            </FluentLabel>
+
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Style="margin-top: 12px;">
+                <FluentSwitch Label="Hide boosts/shares in timeline" @bind-Value="@_hideBoosts" />
+                <FluentSwitch Label="Hide replies in timeline" @bind-Value="@_hideReplies" />
+                <FluentSwitch Label="Hide posts from bot accounts" @bind-Value="@_hideBotPosts" />
+            </FluentStack>
+        </div>
+
+        <FluentDivider Style="margin: 0;" />
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" VerticalGap="12">
+            <FluentButton Appearance="Appearance.Neutral" OnClick="ResetToDefaults">
+                Reset to Defaults
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Accent" OnClick="SaveSettings" Disabled="@_isSaving">
+                @if (_isSaving)
+                {
+                    <FluentProgressRing Style="width: 16px; height: 16px;" />
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <span>Save Settings</span>
+                }
+            </FluentButton>
+        </FluentStack>
+
+        @if (!string.IsNullOrEmpty(_statusMessage))
+        {
+            <FluentMessageBar Intent="@(_isError ? MessageIntent.Error : MessageIntent.Success)" 
+                            Title="@(_isError ? "Error" : "Success")">
+                @_statusMessage
+            </FluentMessageBar>
+        }
+    </FluentStack>
+</div>
+
+@code {
+    [Parameter] public List<KeywordFilter> KeywordFilters { get; set; } = new();
+    [Parameter] public bool AlwaysExpandContentWarnings { get; set; }
+    [Parameter] public bool HideContentWithoutWarnings { get; set; }
+    [Parameter] public bool AutoPlayGifs { get; set; } = true;
+    [Parameter] public bool AutoPlayVideos { get; set; }
+    [Parameter] public bool HideMediaInPublicTimeline { get; set; }
+    [Parameter] public bool BlurNsfwMedia { get; set; } = true;
+    [Parameter] public bool HideBoosts { get; set; }
+    [Parameter] public bool HideReplies { get; set; }
+    [Parameter] public bool HideBotPosts { get; set; }
+    [Parameter] public EventCallback<ContentFilterSettingsData> OnSave { get; set; }
+
+    private List<KeywordFilter> _keywordFilters = new();
+    private string _newKeyword = "";
+    private FilterContext _newKeywordContext = FilterContext.All;
+    private List<FilterContext> _filterContextOptions = new()
+    {
+        FilterContext.HomeTimeline,
+        FilterContext.PublicTimeline,
+        FilterContext.Notifications,
+        FilterContext.Conversations,
+        FilterContext.All
+    };
+    private bool _alwaysExpandContentWarnings;
+    private bool _hideContentWithoutWarnings;
+    private bool _autoPlayGifs = true;
+    private bool _autoPlayVideos;
+    private bool _hideMediaInPublicTimeline;
+    private bool _blurNsfwMedia = true;
+    private bool _hideBoosts;
+    private bool _hideReplies;
+    private bool _hideBotPosts;
+    private bool _isSaving;
+    private string? _statusMessage;
+    private bool _isError;
+
+    protected override void OnParametersSet()
+    {
+        _keywordFilters = KeywordFilters;
+        _alwaysExpandContentWarnings = AlwaysExpandContentWarnings;
+        _hideContentWithoutWarnings = HideContentWithoutWarnings;
+        _autoPlayGifs = AutoPlayGifs;
+        _autoPlayVideos = AutoPlayVideos;
+        _hideMediaInPublicTimeline = HideMediaInPublicTimeline;
+        _blurNsfwMedia = BlurNsfwMedia;
+        _hideBoosts = HideBoosts;
+        _hideReplies = HideReplies;
+        _hideBotPosts = HideBotPosts;
+    }
+
+    private void AddKeywordFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_newKeyword)) return;
+
+        var filter = new KeywordFilter
+        {
+            Keyword = _newKeyword.Trim(),
+            Context = _newKeywordContext,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        _keywordFilters.Add(filter);
+        _newKeyword = "";
+        StateHasChanged();
+    }
+
+    private void RemoveKeywordFilter(KeywordFilter filter)
+    {
+        _keywordFilters.Remove(filter);
+        StateHasChanged();
+    }
+
+    private async Task HandleKeywordKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddKeywordFilter();
+        }
+    }
+
+    private async Task SaveSettings()
+    {
+        _isSaving = true;
+        _isError = false;
+        _statusMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var settings = new ContentFilterSettingsData
+            {
+                KeywordFilters = _keywordFilters,
+                AlwaysExpandContentWarnings = _alwaysExpandContentWarnings,
+                HideContentWithoutWarnings = _hideContentWithoutWarnings,
+                AutoPlayGifs = _autoPlayGifs,
+                AutoPlayVideos = _autoPlayVideos,
+                HideMediaInPublicTimeline = _hideMediaInPublicTimeline,
+                BlurNsfwMedia = _blurNsfwMedia,
+                HideBoosts = _hideBoosts,
+                HideReplies = _hideReplies,
+                HideBotPosts = _hideBotPosts
+            };
+
+            await OnSave.InvokeAsync(settings);
+            _statusMessage = "Settings saved successfully!";
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _statusMessage = ex.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ResetToDefaults()
+    {
+        _keywordFilters.Clear();
+        _alwaysExpandContentWarnings = false;
+        _hideContentWithoutWarnings = false;
+        _autoPlayGifs = true;
+        _autoPlayVideos = false;
+        _hideMediaInPublicTimeline = false;
+        _blurNsfwMedia = true;
+        _hideBoosts = false;
+        _hideReplies = false;
+        _hideBotPosts = false;
+        StateHasChanged();
+    }
+
+    private string GetContextLabel(FilterContext context) => context switch
+    {
+        FilterContext.HomeTimeline => "Home",
+        FilterContext.PublicTimeline => "Public",
+        FilterContext.Notifications => "Notifications",
+        FilterContext.Conversations => "Conversations",
+        FilterContext.All => "All",
+        _ => "Unknown"
+    };
+}
+
+<style>
+    .fluent-content-filter-settings {
+        padding: 1rem;
+    }
+
+    .filter-section {
+        width: 100%;
+    }
+</style>

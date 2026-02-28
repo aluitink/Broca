@@ -185,7 +185,6 @@
     private int? postsCount = null;
     private string? error;
     private List<KristofferStrube.ActivityStreams.Object> pinnedPosts = new();
-    private bool loadingPinnedPosts;
 
     /// <summary>
     /// Gets or sets the actor URI to display.
@@ -352,7 +351,6 @@
     {
         if (actor is not Actor a || !ShowPinnedPosts) return;
 
-        loadingPinnedPosts = true;
         pinnedPosts.Clear();
 
         try
@@ -405,7 +403,6 @@
         }
         finally
         {
-            loadingPinnedPosts = false;
             StateHasChanged();
         }
     }

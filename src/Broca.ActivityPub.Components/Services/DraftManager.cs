@@ -192,13 +192,14 @@ public class DraftManager : IAsyncDisposable
     /// </summary>
     public static string MainContext => "main";
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         foreach (var timer in _autoSaveTimers.Values)
         {
             timer.Dispose();
         }
         _autoSaveTimers.Clear();
+        return ValueTask.CompletedTask;
     }
 }
 

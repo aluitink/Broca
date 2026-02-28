@@ -1,0 +1,190 @@
+@using Broca.ActivityPub.Components.Models
+@namespace Broca.ActivityPub.Components
+
+<div class="activitypub-attachment-list @CssClass">
+    @if (Attachments != null && Attachments.Any())
+    {
+        <div class="attachment-items">
+            @foreach (var (attachment, index) in Attachments.Select((a, i) => (a, i)))
+            {
+                @if (AttachmentTemplate != null)
+                {
+                    @AttachmentTemplate(new AttachmentContext(attachment, index, async () => await RemoveAttachment(index)))
+                }
+                else
+                {
+                    <div class="attachment-item">
+                        <div class="attachment-preview">
+                            @if (IsImage(attachment.MimeType))
+                            {
+                                <img src="@attachment.Url" alt="@attachment.FileName" class="preview-image" />
+                            }
+                            else if (IsVideo(attachment.MimeType))
+                            {
+                                <video src="@attachment.Url" class="preview-video" controls></video>
+                            }
+                            else if (IsAudio(attachment.MimeType))
+                            {
+                                <div class="preview-audio">
+                                    <span class="file-icon">🎵</span>
+                                    <audio src="@attachment.Url" controls class="audio-player"></audio>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="preview-file">
+                                    <span class="file-icon">@GetFileIcon(attachment.MimeType)</span>
+                                    <span class="file-name">@attachment.FileName</span>
+                                </div>
+                            }
+                        </div>
+
+                        @if (ShowAltText && !string.IsNullOrEmpty(attachment.AltText))
+                        {
+                            <div class="attachment-alt-text" title="@attachment.AltText">
+                                @TruncateText(attachment.AltText, 50)
+                            </div>
+                        }
+
+                        @if (AllowEdit)
+                        {
+                            <div class="attachment-actions">
+                                @if (ShowAltTextEditor)
+                                {
+                                    <button type="button" 
+                                            class="action-button edit-button" 
+                                            @onclick="() => EditAltText(index)"
+                                            title="Edit description">
+                                        ✏️
+                                    </button>
+                                }
+                                <button type="button" 
+                                        class="action-button remove-button" 
+                                        @onclick="() => RemoveAttachment(index)"
+                                        title="Remove">
+                                    ✕
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<AttachmentInfo>? Attachments { get; set; }
+
+    [Parameter]
+    public EventCallback<List<AttachmentInfo>> AttachmentsChanged { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public bool AllowEdit { get; set; } = true;
+
+    [Parameter]
+    public bool ShowAltText { get; set; } = true;
+
+    [Parameter]
+    public bool ShowAltTextEditor { get; set; } = true;
+
+    [Parameter]
+    public RenderFragment<AttachmentContext>? AttachmentTemplate { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnRemove { get; set; }
+
+    [Parameter]
+    public EventCallback<(int Index, string NewAltText)> OnAltTextChanged { get; set; }
+
+    private async Task RemoveAttachment(int index)
+    {
+        if (Attachments != null && index >= 0 && index < Attachments.Count)
+        {
+            Attachments.RemoveAt(index);
+            
+            if (AttachmentsChanged.HasDelegate)
+            {
+                await AttachmentsChanged.InvokeAsync(Attachments);
+            }
+
+            if (OnRemove.HasDelegate)
+            {
+                await OnRemove.InvokeAsync(index);
+            }
+        }
+    }
+
+    private async Task EditAltText(int index)
+    {
+        if (Attachments != null && index >= 0 && index < Attachments.Count)
+        {
+            var attachment = Attachments[index];
+            // This would typically open a dialog or inline editor
+            // For now, we'll just invoke the callback
+            if (OnAltTextChanged.HasDelegate)
+            {
+                await OnAltTextChanged.InvokeAsync((index, attachment.AltText ?? ""));
+            }
+        }
+    }
+
+    private bool IsImage(string? mimeType)
+    {
+        return mimeType?.StartsWith("image/") == true;
+    }
+
+    private bool IsVideo(string? mimeType)
+    {
+        return mimeType?.StartsWith("video/") == true;
+    }
+
+    private bool IsAudio(string? mimeType)
+    {
+        return mimeType?.StartsWith("audio/") == true;
+    }
+
+    private string GetFileIcon(string? mimeType)
+    {
+        if (mimeType == null) return "📄";
+        
+        return mimeType.ToLowerInvariant() switch
+        {
+            var t when t.StartsWith("image/") => "🖼️",
+            var t when t.StartsWith("video/") => "🎬",
+            var t when t.StartsWith("audio/") => "🎵",
+            var t when t.Contains("pdf") => "📕",
+            var t when t.Contains("word") || t.Contains("document") => "📘",
+            var t when t.Contains("excel") || t.Contains("spreadsheet") => "📊",
+            var t when t.Contains("powerpoint") || t.Contains("presentation") => "📽️",
+            var t when t.Contains("zip") || t.Contains("archive") || t.Contains("compressed") => "🗜️",
+            var t when t.Contains("text") => "📝",
+            _ => "📄"
+        };
+    }
+
+    private string TruncateText(string text, int maxLength)
+    {
+        if (text.Length <= maxLength)
+            return text;
+        return text.Substring(0, maxLength) + "...";
+    }
+
+    public class AttachmentContext
+    {
+        public AttachmentInfo Attachment { get; }
+        public int Index { get; }
+        public Func<Task> RemoveAsync { get; }
+
+        public AttachmentContext(AttachmentInfo attachment, int index, Func<Task> removeAsync)
+        {
+            Attachment = attachment;
+            Index = index;
+            RemoveAsync = removeAsync;
+        }
+    }
+}

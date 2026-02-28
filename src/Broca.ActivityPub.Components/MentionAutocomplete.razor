@@ -1,0 +1,218 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+@implements IDisposable
+
+<div class="activitypub-mention-autocomplete @CssClass">
+    @if (isVisible && suggestions.Count > 0)
+    {
+        <div class="mention-suggestions" style="@GetPositionStyle()">
+            @if (SuggestionTemplate != null)
+            {
+                @foreach (var (actor, index) in suggestions.Select((a, i) => (a, i)))
+                {
+                    <div class="suggestion-item @(index == selectedIndex ? "selected" : "")"
+                         @onclick="@(() => SelectSuggestion(actor))"
+                         @onmouseenter="@(() => selectedIndex = index)">
+                        @SuggestionTemplate(actor)
+                    </div>
+                }
+            }
+            else
+            {
+                @foreach (var (actor, index) in suggestions.Select((a, i) => (a, i)))
+                {
+                    <div class="suggestion-item @(index == selectedIndex ? "selected" : "")"
+                         @onclick="@(() => SelectSuggestion(actor))"
+                         @onmouseenter="@(() => selectedIndex = index)">
+                        <div class="actor-info">
+                            <span class="actor-name">@GetActorName(actor)</span>
+                            <span class="actor-handle">@GetActorHandle(actor)</span>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<KristofferStrube.ActivityStreams.Object> suggestions = new();
+    private bool isVisible;
+    private int selectedIndex;
+    private string currentQuery = string.Empty;
+    private System.Threading.Timer? _debounceTimer;
+    private (int Top, int Left)? position;
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public int DebounceMilliseconds { get; set; } = 300;
+
+    [Parameter]
+    public int MaxSuggestions { get; set; } = 5;
+
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? SuggestionTemplate { get; set; }
+
+    [Parameter]
+    public EventCallback<KristofferStrube.ActivityStreams.Object> OnMentionSelected { get; set; }
+
+    /// <summary>
+    /// Triggers a search for actors matching the query.
+    /// </summary>
+    public void SearchActors(string query, int cursorTop, int cursorLeft)
+    {
+        currentQuery = query;
+        position = (cursorTop, cursorLeft);
+        
+        _debounceTimer?.Dispose();
+        _debounceTimer = null;
+
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            Hide();
+            return;
+        }
+
+        _debounceTimer = new System.Threading.Timer(
+            _ => InvokeAsync(async () => await PerformSearchAsync(query)),
+            null,
+            DebounceMilliseconds,
+            System.Threading.Timeout.Infinite);
+    }
+
+    /// <summary>
+    /// Hides the autocomplete suggestions.
+    /// </summary>
+    public void Hide()
+    {
+        isVisible = false;
+        suggestions.Clear();
+        selectedIndex = 0;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Selects the currently highlighted suggestion.
+    /// </summary>
+    public async Task SelectCurrentAsync()
+    {
+        if (isVisible && selectedIndex >= 0 && selectedIndex < suggestions.Count)
+        {
+            await SelectSuggestion(suggestions[selectedIndex]);
+        }
+    }
+
+    /// <summary>
+    /// Moves the selection up.
+    /// </summary>
+    public void MoveUp()
+    {
+        if (isVisible && suggestions.Count > 0)
+        {
+            selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : suggestions.Count - 1;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Moves the selection down.
+    /// </summary>
+    public void MoveDown()
+    {
+        if (isVisible && suggestions.Count > 0)
+        {
+            selectedIndex = (selectedIndex + 1) % suggestions.Count;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PerformSearchAsync(string query)
+    {
+        try
+        {
+            // Try to search for actors matching the query
+            // For now, we'll use GetActorByAliasAsync if the query looks like a handle
+            // In a full implementation, we'd want a dedicated search endpoint
+            
+            // Simple approach: if query contains @, try to fetch that specific actor
+            if (query.Contains('@'))
+            {
+                try
+                {
+                    var actor = await Client.GetActorByAliasAsync(query);
+                    if (actor != null)
+                    {
+                        suggestions = new List<KristofferStrube.ActivityStreams.Object> { actor };
+                        isVisible = true;
+                        selectedIndex = 0;
+                        StateHasChanged();
+                    }
+                }
+                catch
+                {
+                    // Actor not found, clear suggestions
+                    Hide();
+                }
+            }
+            else
+            {
+                // For partial queries without @, we'd need a search API
+                // For now, just hide suggestions
+                Hide();
+            }
+        }
+        catch
+        {
+            Hide();
+        }
+    }
+
+    private async Task SelectSuggestion(KristofferStrube.ActivityStreams.Object actor)
+    {
+        if (OnMentionSelected.HasDelegate)
+        {
+            await OnMentionSelected.InvokeAsync(actor);
+        }
+        Hide();
+    }
+
+    private string GetActorName(KristofferStrube.ActivityStreams.Object actor)
+    {
+        return actor.Name?.FirstOrDefault() ?? "Unknown";
+    }
+
+    private string GetActorHandle(KristofferStrube.ActivityStreams.Object actor)
+    {
+        var preferredUsername = actor is Actor a ? a.PreferredUsername : null;
+        var id = actor.Id?.ToString() ?? "";
+        
+        if (!string.IsNullOrEmpty(preferredUsername))
+        {
+            // Try to construct handle from ID
+            if (Uri.TryCreate(id, UriKind.Absolute, out var uri))
+            {
+                return $"@{preferredUsername}@{uri.Host}";
+            }
+            return $"@{preferredUsername}";
+        }
+        
+        return id;
+    }
+
+    private string GetPositionStyle()
+    {
+        if (position.HasValue)
+        {
+            return $"top: {position.Value.Top}px; left: {position.Value.Left}px;";
+        }
+        return string.Empty;
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+    }
+}

@@ -2,7 +2,9 @@
 @using Broca.Web.Services
 @using Broca.ActivityPub.Components
 @using Broca.ActivityPub.Core.Interfaces
+@using Broca.Web.Components.Conversations
 @using KristofferStrube.ActivityStreams
+@using static Broca.ActivityPub.Components.ConversationView
 @inject AuthenticationStateService AuthState
 @inject NavigationManager Navigation
 @inject IActivityPubClient Client
@@ -63,17 +65,18 @@
                 <FluentIcon Value="@(new Icons.Regular.Size20.Comment())" Color="Color.Accent" />
                 Conversation
             </h2>
-            <ReplyThread RootPostId="@_post.Id"
-                        RootPost="@_post"
-                        MaxDepth="10"
-                        PageSize="20"
-                        ShowLoadMore="true"
-                        ShowEmptyState="true"
-                        CssClass="post-reply-thread">
-                <PostTemplate Context="reply">
-                    <ObjectDisplay Object="@reply" />
-                </PostTemplate>
-            </ReplyThread>
+            <ConversationView FocalPostId="@_post.Id"
+                            FocalPost="@_post"
+                            ViewMode="ConversationViewMode.Threaded"
+                            ShowParticipants="true"
+                            ShowMetadata="true"
+                            ShowReplies="true"
+                            MaxReplyDepth="10"
+                            ReplyPageSize="20"
+                            MaxParentDepth="50"
+                            CssClass="post-conversation-view"
+                            ViewTemplate="FluentConversationView.Template">
+            </ConversationView>
         </FluentCard>
     }
 </div>
@@ -199,7 +202,7 @@
         font-size: 1.25rem;
     }
 
-    .post-reply-thread {
+    .post-conversation-view {
         margin-top: 1rem;
     }
 </style>

@@ -1,0 +1,242 @@
+@page "/timeline/hashtag/{hashtag}"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Components
+@using Broca.ActivityPub.Core.Interfaces
+@using Broca.Web.Renderers
+@using static Broca.ActivityPub.Components.FeedFilter
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+@inject IActivityPubClient Client
+
+<PageTitle>@GetPageTitle() - Broca</PageTitle>
+
+<div class="timeline-container">
+    @if (!AuthState.IsAuthenticated)
+    {
+        <FluentCard>
+            <h2>Authentication Required</h2>
+            <p>Please login to view hashtag timelines.</p>
+            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString($"/timeline/hashtag/{Hashtag}")}"))">
+                Login
+            </FluentButton>
+        </FluentCard>
+    }
+    else if (string.IsNullOrEmpty(Hashtag))
+    {
+        <FluentCard>
+            <FluentMessageBar Intent="MessageIntent.Warning">
+                No hashtag specified. Please provide a hashtag to view.
+            </FluentMessageBar>
+        </FluentCard>
+    }
+    else
+    {
+        <FluentCard Class="timeline-header">
+            <div class="header-content">
+                <div class="header-title">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Tag())" Color="Color.Accent" />
+                    <h1>#@Hashtag</h1>
+                </div>
+                <p class="header-subtitle">Posts tagged with #@Hashtag</p>
+            </div>
+            <div class="timeline-actions">
+                <FluentButton 
+                    Appearance="Appearance.Outline"
+                    IconStart="@(new Icons.Regular.Size20.Filter())"
+                    OnClick="@ToggleFilter">
+                    @(showFilter ? "Hide" : "Show") Filters
+                </FluentButton>
+                <FluentButton 
+                    Appearance="@(isFollowing ? Appearance.Outline : Appearance.Accent)"
+                    IconStart="@(isFollowing ? new Icons.Regular.Size20.PersonDelete() : new Icons.Regular.Size20.PersonAdd())"
+                    OnClick="@ToggleFollowHashtag">
+                    @(isFollowing ? "Unfollow" : "Follow") Tag
+                </FluentButton>
+                <FluentButton 
+                    Appearance="Appearance.Accent"
+                    IconStart="@(new Icons.Regular.Size20.Compose())"
+                    OnClick="@(() => Navigation.NavigateTo("/"))">
+                    New Post
+                </FluentButton>
+            </div>
+        </FluentCard>
+
+        @if (_hashtagTimelineUrl != null)
+        {
+            <ActivityFeed 
+                CollectionUrl="@_hashtagTimelineUrl"
+                PageSize="20"
+                UseVirtualization="true"
+                ItemSize="200"
+                ShowSearch="true"
+                ShowFilter="@showFilter"
+                FilterTemplate="@CreateFilterTemplate()"
+                ShowScrollToTop="true"
+                EnableAutoRefresh="true"
+                AutoRefreshInterval="60"
+                ShowNewPostsNotification="true"
+                CssClass="hashtag-timeline-feed">
+                <ActivityTemplate Context="activity">
+                    <div class="activity-item">
+                        <ObjectDisplay Object="@activity" />
+                    </div>
+                </ActivityTemplate>
+            </ActivityFeed>
+        }
+        else
+        {
+            <FluentCard>
+                <FluentMessageBar Intent="MessageIntent.Info">
+                    Hashtag timeline is not available. This feature requires server-side support for hashtag-based collections.
+                </FluentMessageBar>
+            </FluentCard>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string? Hashtag { get; set; }
+
+    private Uri? _hashtagTimelineUrl;
+    private bool showFilter = false;
+    private bool isFollowing = false;
+
+    protected override void OnInitialized()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthStateChanged;
+        UpdateHashtagTimelineUrl();
+    }
+
+    protected override void OnParametersSet()
+    {
+        UpdateHashtagTimelineUrl();
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        UpdateHashtagTimelineUrl();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateHashtagTimelineUrl()
+    {
+        // Construct hashtag timeline URL based on current instance
+        // This would typically be /api/v1/timelines/tag/{hashtag} or similar
+        // For now, we'll use a placeholder - this should be configured based on server
+        if (AuthState.IsAuthenticated && AuthState.CurrentActorId != null && !string.IsNullOrEmpty(Hashtag))
+        {
+            var baseUri = new Uri(AuthState.CurrentActorId);
+            var cleanHashtag = Hashtag.TrimStart('#');
+            _hashtagTimelineUrl = new Uri(baseUri, $"/api/timelines/tag/{Uri.EscapeDataString(cleanHashtag)}");
+        }
+        else
+        {
+            _hashtagTimelineUrl = null;
+        }
+    }
+
+    private void ToggleFilter()
+    {
+        showFilter = !showFilter;
+    }
+
+    private async Task ToggleFollowHashtag()
+    {
+        // TODO: Implement hashtag following/unfollowing
+        // This would require server-side support for following hashtags
+        isFollowing = !isFollowing;
+        await Task.CompletedTask;
+    }
+
+    private RenderFragment CreateFilterTemplate()
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FeedFilter>(0);
+            builder.AddAttribute(1, nameof(FeedFilter.FilterTemplate), FluentFeedFilterRenderer.Template);
+            builder.AddAttribute(2, nameof(FeedFilter.ShowActivityTypeFilter), true);
+            builder.AddAttribute(3, nameof(FeedFilter.ShowContentTypeFilter), true);
+            builder.AddAttribute(4, nameof(FeedFilter.ShowActorFilter), true);
+            builder.AddAttribute(5, nameof(FeedFilter.ShowDateRangeFilter), true);
+            builder.CloseComponent();
+        };
+    }
+
+    private string GetPageTitle()
+    {
+        return string.IsNullOrEmpty(Hashtag) ? "Hashtag Timeline" : $"#{Hashtag}";
+    }
+
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}
+
+<style>
+    .timeline-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .timeline-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+    }
+
+    .header-content {
+        flex: 1;
+    }
+
+    .header-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .header-title h1 {
+        margin: 0;
+        font-size: 1.75rem;
+    }
+
+    .header-subtitle {
+        margin: 0;
+        color: var(--neutral-foreground-hint);
+        font-size: 0.875rem;
+    }
+
+    .timeline-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .activity-item {
+        padding: 1rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
+    }
+
+    .activity-item:last-child {
+        border-bottom: none;
+    }
+
+    @@media (max-width: 768px) {
+        .timeline-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .timeline-actions {
+            width: 100%;
+            flex-direction: column;
+        }
+    }
+</style>
