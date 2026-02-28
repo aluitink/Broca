@@ -19,6 +19,7 @@ public class InboxProcessor : IInboxHandler
     private readonly AdminOperationsHandler _adminOperationsHandler;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ActivityDeliveryService _deliveryService;
+    private readonly IActivityPubClient _activityPubClient;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<InboxProcessor> _logger;
 
@@ -30,6 +31,7 @@ public class InboxProcessor : IInboxHandler
         AdminOperationsHandler adminOperationsHandler,
         AttachmentProcessingService attachmentProcessingService,
         ActivityDeliveryService deliveryService,
+        IActivityPubClient activityPubClient,
         IOptions<ActivityPubServerOptions> options,
         ILogger<InboxProcessor> logger)
     {
@@ -40,6 +42,7 @@ public class InboxProcessor : IInboxHandler
         _adminOperationsHandler = adminOperationsHandler;
         _attachmentProcessingService = attachmentProcessingService;
         _deliveryService = deliveryService;
+        _activityPubClient = activityPubClient;
         _options = options.Value;
         _logger = logger;
     }
@@ -102,6 +105,7 @@ public class InboxProcessor : IInboxHandler
                 "Add" => await HandleAddAsync(username, activity as IObject, cancellationToken),
                 "Remove" => await HandleRemoveAsync(username, activity as IObject, cancellationToken),
                 "Update" => await HandleIncomingUpdateAsync(username, activity as IObject, cancellationToken),
+                "Move" => await HandleMoveAsync(username, activity as IObject, cancellationToken),
                 _ => true // Unknown types are accepted but not processed
             };
 
@@ -355,6 +359,111 @@ public class InboxProcessor : IInboxHandler
     {
         _logger.LogInformation("Processed Announce activity for {Username}", username);
         return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleMoveAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    {
+        if (activity is not Activity moveActivity || moveActivity.Object == null || moveActivity.Target == null)
+        {
+            _logger.LogWarning("Move activity missing required properties");
+            return false;
+        }
+
+        // Extract old actor ID (from object - the actor being moved from)
+        var oldActorRef = moveActivity.Object.FirstOrDefault();
+        var oldActorId = oldActorRef switch
+        {
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (string.IsNullOrEmpty(oldActorId))
+        {
+            _logger.LogWarning("Move  activity has invalid object reference");
+            return false;
+        }
+
+        // Extract new actor ID (from target - the actor being moved to)
+        var newActorRef = moveActivity.Target.FirstOrDefault();
+        var newActorId = newActorRef switch
+        {
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (string.IsNullOrEmpty(newActorId))
+        {
+            _logger.LogWarning("Move activity has invalid target reference");
+            return false;
+        }
+
+        _logger.LogInformation("Processing Move activity: {OldActorId} -> {NewActorId} for user {Username}", 
+            oldActorId, newActorId, username);
+
+        // Check if this user follows the old actor
+        var following = await _actorRepository.GetFollowingAsync(username, cancellationToken);
+        if (!following.Contains(oldActorId))
+        {
+            _logger.LogDebug("User {Username} does not follow {OldActorId}, skipping Move", username, oldActorId);
+            return true; // Not an error, just not relevant to this user
+        }
+
+        // Fetch the new actor to verify alsoKnownAs
+        try
+        {
+            var newActor = await _activityPubClient.GetAsync<Actor>(new Uri(newActorId), useCache: false, cancellationToken);
+            
+            if (newActor == null)
+            {
+                _logger.LogWarning("Could not fetch new actor {NewActorId} for Move verification", newActorId);
+                return false;
+            }
+
+            // Security check: verify alsoKnownAs contains the old actor ID
+            var alsoKnownAs = new List<string>();
+            if (newActor.ExtensionData?.TryGetValue("alsoKnownAs", out var alsoKnownAsElement) == true)
+            {
+                try
+                {
+                    if (alsoKnownAsElement.ValueKind == JsonValueKind.Array)
+                    {
+                        alsoKnownAs = JsonSerializer.Deserialize<List<string>>(alsoKnownAsElement.GetRawText()) ?? new List<string>();
+                    }
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse alsoKnownAs for {NewActorId}", newActorId);
+                }
+            }
+
+            if (!alsoKnownAs.Contains(oldActorId))
+            {
+                _logger.LogWarning("Security check failed: {NewActorId} does not list {OldActorId} in alsoKnownAs. Rejecting Move.",
+                    newActorId, oldActorId);
+                return false;
+            }
+
+            // Valid migration - update following list
+            await _actorRepository.RemoveFollowingAsync(username, oldActorId, cancellationToken);
+            await _actorRepository.AddFollowingAsync(username, newActorId, cancellationToken);
+            
+            _logger.LogInformation("Successfully migrated follow for {Username}: {OldActorId} -> {NewActorId}",
+                username, oldActorId, newActorId);
+
+            return true;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error fetching new actor {NewActorId} for Move verification", newActorId);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing Move activity for {Username}", username);
+            return false;
+        }
     }
 
     private async Task<bool> HandleAddAsync(string username, IObject? activity, CancellationToken cancellationToken)

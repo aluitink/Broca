@@ -8,21 +8,21 @@ Last reviewed: 2026-02-28. Mastodon is the primary target for interop, with seco
 
 **Critical items:** 0 remaining (all resolved)  
 **High priority items:** 0 remaining (all resolved)  
-**Medium priority items:** 5 remaining  
+**Medium priority items:** 3 remaining  
 **Low priority items:** 2 remaining
 
 
 ## 🟡 Medium — Missing Features / Spec Gaps
 
-### M1 · `Move` activity not handled (account migration)
+### ✅ M1 · `Move` activity handled (COMPLETED)
 
 **File:** `InboxProcessor.cs`
 
-`Move` is used by Mastodon for account portability. Currently falls to `_ => true` (accepted but not processed).
+`Move` is used by Mastodon for account portability. When a user migrates to a new account, followers are automatically migrated.
 
-**Fix:** Handle `Move` by updating the follower's following list: replace the old actor IRI with the new one (if the new actor's `alsoKnownAs` references the old one, to prevent spoofing).
+**Implementation:** Handles `Move` by updating the follower's following list: replaces the old actor IRI with the new one if the new actor's `alsoKnownAs` references the old one (prevents spoofing).
 
-**Priority:** Medium - required for full Mastodon compatibility, but low usage.
+**Status:** ✅ Implemented and tested with security validation.
 
 ---
 
@@ -38,15 +38,15 @@ Mastodon expects a `featured` property on the actor document pointing to an `Ord
 
 ---
 
-### M3 · Actor document missing `alsoKnownAs` field
+### ✅ M3 · `alsoKnownAs` field supported (COMPLETED)
 
-**File:** `ActorController.cs` → `Get`
+**File:** `ActorController.cs`
 
-Required for `Move`-based account migration. Actors need to be able to declare aliases.
+Required for `Move`-based account migration. Actors can declare aliases via the `alsoKnownAs` property.
 
-**Fix:** Support an `alsoKnownAs` property in the actor's stored extension data and expose it in the actor document response.
+**Implementation:** Supported via actor's ExtensionData dictionary. Set as a JSON array of actor URI strings.
 
-**Priority:** Medium - required for M1 (Move activity) to be fully functional.
+**Status:** ✅ No code changes required - ExtensionData already serializes arbitrary fields in actor documents.
 
 ---
 
@@ -80,9 +80,9 @@ The outer `Split(',')` then inner `Split('=', 2)` approach is correct for most c
 
 | Order | Item | Effort | Notes |
 |-------|------|--------|-------|
-| 1 | M2 — `featured` collection on actor | Small | Quick win — collection infrastructure exists |
-| 2 | M3 — `alsoKnownAs` | Small | Required for M1 |
-| 3 | M1 — `Move` activity | Medium | Depends on M3 |
+| 1 | ~~M1 — `Move` activity~~ | ~~Medium~~ | ✅ **Completed** |
+| 2 | ~~M3 — `alsoKnownAs`~~ | ~~Small~~ | ✅ **Completed** (no code changes needed) |
+| 3 | M2 — `featured` collection on actor | Small | Quick win — collection infrastructure exists |
 | 4 | M4 — Followers list auth for locked accounts | Small | Privacy fix |
 | 5 | M5 — NodeInfo real stats | Medium | Requires repo changes |
 | 6 | L2 — Content-type testing | Small | Verification only |

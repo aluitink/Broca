@@ -93,7 +93,18 @@ public class ActorController : ActivityPubControllerBase
                         $"{baseUrl}/users/{username}/collections",
                         _jsonOptions);
                     
-                    // Add individual collection links with broca: prefix
+                    // Special case: "featured" is a de facto standard across the fediverse (Mastodon, Pleroma, etc.)
+                    // for pinned posts. Expose it at root level for interoperability.
+                    // This is a one-off exception - all other collections use broca: prefix.
+                    var featuredCollection = publicCollections.FirstOrDefault(c => c.Id == "featured");
+                    if (featuredCollection != null)
+                    {
+                        actor.ExtensionData["featured"] = JsonSerializer.SerializeToElement(
+                            $"{baseUrl}/users/{username}/collections/featured",
+                            _jsonOptions);
+                    }
+                    
+                    // Add individual collection links with broca: prefix (for Broca-specific extensions)
                     foreach (var collection in publicCollections)
                     {
                         actor.ExtensionData[$"broca:{collection.Id}"] = JsonSerializer.SerializeToElement(

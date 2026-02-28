@@ -1417,5 +1417,163 @@ public class ServerToServerTests : TwoServerFixture
             Assert.Equal("Alice Legitimate Name", aliceOnB.Name?.FirstOrDefault());
         }
     }
+
+    [Fact]
+    public async Task S2S_Move_ValidMigration_UpdatesFollowingList()
+    {
+        // Arrange - Set up Alice (old account) and Alice2 (new account) on Server A, Bob on Server B
+        string alicePrivateKey;
+        string alice2PrivateKey;
+        string bobPrivateKey;
+
+        var aliceOldId = $"{ServerA.BaseUrl}/users/alice_old";
+        var aliceNewId = $"{ServerA.BaseUrl}/users/alice_new";
+        var bobId = $"{ServerB.BaseUrl}/users/bob";
+
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (alice, aliceKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice_old", ServerA.BaseUrl);
+            alicePrivateKey = aliceKey;
+
+            var (alice2, alice2Key) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice_new", ServerA.BaseUrl);
+            alice2PrivateKey = alice2Key;
+
+            // Add alsoKnownAs to alice_new pointing to alice_old
+            alice2.ExtensionData ??= new Dictionary<string, System.Text.Json.JsonElement>();
+            alice2.ExtensionData["alsoKnownAs"] = System.Text.Json.JsonSerializer.SerializeToElement(
+                new[] { aliceOldId },
+                new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+            await actorRepo.SaveActorAsync("alice_new", alice2);
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (bob, bobKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "bob", ServerB.BaseUrl);
+            bobPrivateKey = bobKey;
+        }
+
+        // Bob follows Alice (old account)
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await actorRepo.AddFollowingAsync("bob", aliceOldId);
+        }
+
+        // Act - Alice (old account) sends a Move activity to Bob
+        var moveActivity = new Move
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Id = $"{aliceOldId}/activities/{Guid.NewGuid()}",
+            Type = new[] { "Move" },
+            Actor = new IObjectOrLink[] { new Link { Href = new Uri(aliceOldId) } }, // Old account (sender)
+            Object = new IObjectOrLink[] { new Link { Href = new Uri(aliceOldId) } }, // Old account
+            Target = new IObjectOrLink[] { new Link { Href = new Uri(aliceNewId) } }, // New account (destination)
+            Published = DateTime.UtcNow
+        };
+
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            aliceOldId,
+            alicePrivateKey);
+
+        var response = await aliceClient.PostAsync(
+            new Uri($"{ServerB.BaseUrl}/users/bob/inbox"),
+            moveActivity);
+
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Wait for processing
+        await Task.Delay(1000);
+
+        // Assert - Bob's following list should be updated
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            var following = await actorRepo.GetFollowingAsync("bob");
+            
+            Assert.DoesNotContain(aliceOldId, following);
+            Assert.Contains(aliceNewId, following);
+        }
+    }
+
+    [Fact]
+    public async Task S2S_Move_MissingAlsoKnownAs_Rejected()
+    {
+        // Arrange - Set up Alice (old) and Alice2 (new, without alsoKnownAs) on Server A, Bob on Server B
+        string aliceOldPrivateKey;
+
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (aliceOld, oldKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice_old2", ServerA.BaseUrl);
+            aliceOldPrivateKey = oldKey;
+            await TestDataSeeder.SeedActorAsync(actorRepo, "alice_new2", ServerA.BaseUrl);
+            // Intentionally NOT setting alsoKnownAs on alice_new2
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await TestDataSeeder.SeedActorAsync(actorRepo, "bob2", ServerB.BaseUrl);
+        }
+
+        var aliceOldId = $"{ServerA.BaseUrl}/users/alice_old2";
+        var aliceNewId = $"{ServerA.BaseUrl}/users/alice_new2";
+        var bobId = $"{ServerB.BaseUrl}/users/bob2";
+
+        // Bob follows Alice (old account)
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            await actorRepo.AddFollowingAsync("bob2", aliceOldId);
+        }
+
+        // Act - Attempt Move without alsoKnownAs
+        var moveActivity = new Move
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Id = $"{aliceOldId}/activities/{Guid.NewGuid()}",
+            Type = new[] { "Move" },
+            Actor = new IObjectOrLink[] { new Link { Href = new Uri(aliceOldId) } }, // Old account (sender)
+            Object = new IObjectOrLink[] { new Link { Href = new Uri(aliceOldId) } }, // Old account
+            Target = new IObjectOrLink[] { new Link { Href = new Uri(aliceNewId) } }, // New account (destination)
+            Published = DateTime.UtcNow
+        };
+
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            aliceOldId,
+            aliceOldPrivateKey);
+
+        var response = await aliceClient.PostAsync(
+            new Uri($"{ServerB.BaseUrl}/users/bob2/inbox"),
+            moveActivity);
+
+        // The activity should be accepted (202) even though processing will fail
+        // Accept  that rejection can happen at the HTTP level or during processing
+        // The key test is that the following list should NOT be updated
+
+        // Wait for processing
+        await Task.Delay(1000);
+
+        // Assert - Bob's following list should NOT be updated (security check failed)
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            var following = await actorRepo.GetFollowingAsync("bob2");
+            
+            // Should still follow the old account (Move was rejected)
+            Assert.Contains(aliceOldId, following);
+            Assert.DoesNotContain(aliceNewId, following);
+        }
+    }
 }
 

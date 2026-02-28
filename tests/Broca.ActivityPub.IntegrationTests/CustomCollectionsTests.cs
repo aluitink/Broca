@@ -551,6 +551,86 @@ public class CustomCollectionsTests : IAsyncLifetime
         Assert.Equal(3, collection.OrderedItems.Count());
     }
 
+    [Fact]
+    public async Task ActorDocument_WithFeaturedCollection_ExposesFeaturedProperty()
+    {
+        // Arrange - Create a user with a featured collection
+        var username = $"testuser_{Guid.NewGuid():N}";
+        await CreateTestUserAsync(username);
+        await CreateTestCollectionAsync(username, "featured", "Featured Posts");
+
+        // Act - Get the actor document
+        var response = await _client.GetAsync($"/users/{username}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        
+        var content = await response.Content.ReadAsStringAsync();
+        var actorDoc = JsonSerializer.Deserialize<JsonElement>(content, _jsonOptions);
+        
+        // Verify "featured" property exists at root level (de facto fediverse standard)
+        Assert.True(actorDoc.TryGetProperty("featured", out var featuredProp), 
+            "Actor document should have 'featured' property for Mastodon compatibility");
+        var featuredUrl = featuredProp.GetString();
+        Assert.NotNull(featuredUrl);
+        Assert.Contains($"/users/{username}/collections/featured", featuredUrl);
+        
+        // Verify "broca:featured" also exists (our namespaced version for consistency)
+        Assert.True(actorDoc.TryGetProperty("broca:featured", out var brocaFeaturedProp),
+            "Actor document should have 'broca:featured' property for consistency");
+        var brocaFeaturedUrl = brocaFeaturedProp.GetString();
+        Assert.NotNull(brocaFeaturedUrl);
+        Assert.Contains($"/users/{username}/collections/featured", brocaFeaturedUrl);
+    }
+
+    [Fact]
+    public async Task ActorDocument_WithoutFeaturedCollection_NoFeaturedProperty()
+    {
+        // Arrange - Create a user without a featured collection
+        var username = $"testuser_{Guid.NewGuid():N}";
+        await CreateTestUserAsync(username);
+
+        // Act - Get the actor document
+        var response = await _client.GetAsync($"/users/{username}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        
+        var content = await response.Content.ReadAsStringAsync();
+        
+        // Verify "featured" property does NOT exist
+        Assert.DoesNotContain("\"featured\":", content);
+    }
+
+    [Fact]
+    public async Task ActorDocument_WithOtherPublicCollections_OnlyFeaturedAtRoot()
+    {
+        // Arrange - Create a user with multiple public collections
+        var username = $"testuser_{Guid.NewGuid():N}";
+        await CreateTestUserAsync(username);
+        await CreateTestCollectionAsync(username, "featured", "Featured Posts");
+        await CreateTestCollectionAsync(username, "photography", "Photography");
+        await CreateTestCollectionAsync(username, "bookmarks", "Bookmarks");
+
+        // Act - Get the actor document
+        var response = await _client.GetAsync($"/users/{username}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        
+        var content = await response.Content.ReadAsStringAsync();
+        
+        // Only "featured" should be at root level (not photography or bookmarks)
+        Assert.Contains("\"featured\":", content);
+        Assert.DoesNotContain("\"photography\":", content);
+        Assert.DoesNotContain("\"bookmarks\":", content);
+        
+        // All should have broca: prefixed versions
+        Assert.Contains("\"broca:featured\":", content);
+        Assert.Contains("\"broca:photography\":", content);
+        Assert.Contains("\"broca:bookmarks\":", content);
+    }
+
     // Helper methods
 
     private async Task CreateTestUserAsync(string username)

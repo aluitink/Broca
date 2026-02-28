@@ -6,13 +6,104 @@ A modular .NET library for building ActivityPub-enabled applications.
 
 Broca provides a complete, standards-compliant implementation of the ActivityPub protocol for .NET developers. It offers both client and server capabilities with a clean API that makes federation simple.
 
-**Key Features:**
-- ✅ Full ActivityPub client and server implementation
-- ✅ HTTP Signatures for authenticated federation
+## Features
+
+### Core ActivityPub Protocol
+
+**Client-to-Server (C2S)**
+- ✅ Post activities to outbox (Create, Like, Follow, Announce, Undo)
+- ✅ Server-assigned activity IDs with proper URL structure
+- ✅ Follow/Unfollow relationship management
+- ✅ HTTP Signature authentication for outbox operations
+- ✅ API key-based client authentication
+
+**Server-to-Server (S2S) Federation**
+- ✅ Cross-server activity delivery with HTTP Signatures
+- ✅ Background delivery queue with retry logic
+- ✅ Follow/Accept/Reject workflow (auto-accept and manual approval modes)
+- ✅ Undo operations (Follow, Like, Announce)
+- ✅ Delete activities with Tombstone support
+- ✅ Update Person for profile changes
+- ✅ Move activity for account migration with `alsoKnownAs` validation
+- ✅ Date validation (reject stale or future-dated requests)
+- ✅ Actor caching and refresh
+
+**Shared Inbox**
+- ✅ Efficient batch delivery to multiple local users
+- ✅ To, Cc, and Bcc addressing support
+- ✅ Public addressing (`https://www.w3.org/ns/activitystreams#Public`)
+- ✅ Followers collection addressing
+- ✅ Smart routing (mixed local/remote recipient handling)
+
+### Collections & Discovery
+
+- ✅ Followers and Following collections
+- ✅ Custom collections (manual curation and query-based)
+- ✅ Ordered collection pagination
 - ✅ WebFinger support for @user@domain discovery
-- ✅ Background activity delivery with retry logic
-- ✅ Modular persistence (in-memory, file-based, or custom)
-- ✅ Production-ready with Docker and Let's Encrypt support
+- ✅ NodeInfo 2.0 and 2.1 (server metadata and statistics)
+
+### Media & Attachments
+
+- ✅ Blob storage for media files
+- ✅ Media endpoint (`/users/:username/media/:blobId`)
+- ✅ Attachments in Create activities
+- ✅ Content-Type preservation and validation
+
+### Security & Authentication
+
+- ✅ HTTP Signatures (draft-cavage-http-signatures-12)
+- ✅ Public key infrastructure with cryptographic key generation
+- ✅ Request date validation (prevents replay attacks)
+- ✅ Outbox authentication (users can only post as themselves)
+- ✅ Signature verification for incoming federation
+
+### Content Type Handling
+
+- ✅ `application/activity+json`
+- ✅ `application/ld+json`
+- ✅ Profile parameter support (`application/ld+json; profile="..."`)
+- ✅ Mastodon compatibility
+
+### Administration
+
+- ✅ Back-channel user management via ActivityPub protocol
+- ✅ System actor for server-level operations
+- ✅ Create/Update/Delete users through admin endpoints
+- ✅ Automatic key pair generation for new actors
+
+### Persistence & Storage
+
+- ✅ Modular storage abstractions (`IActorRepository`, `IActivityRepository`, `IBlobStorageService`)
+- ✅ In-memory implementation (development/testing)
+- ✅ File-based implementation (production-ready)
+- ✅ Easy integration with custom storage backends
+
+### Developer Experience
+
+- ✅ Comprehensive integration test suite (88+ tests)
+- ✅ Multi-server federation testing infrastructure
+- ✅ Activity builder API for constructing valid ActivityStreams objects
+- ✅ Blazor component library for building federated UIs
+- ✅ Docker and Let's Encrypt support for production deployment
+
+## Standards Compliance
+
+Broca implements the core [ActivityPub W3C Recommendation](https://www.w3.org/TR/activitypub/) with extensions for real-world interoperability:
+
+- ✅ **ActivityPub** - Client-to-Server and Server-to-Server protocols
+- ✅ **ActivityStreams 2.0** - Core vocabulary and extended types
+- ✅ **HTTP Signatures** - Request authentication (draft-cavage-http-signatures-12)
+- ✅ **WebFinger** (RFC 7033) - User discovery via @username@domain
+- ✅ **NodeInfo 2.0/2.1** - Server metadata and statistics
+
+**Interoperability Target:** Mastodon (primary), with support for Threads, Pixelfed, and Pleroma.
+
+**Known Limitations:**
+- `featured` collection not yet exposed on actor documents (pinned posts)
+- Follow/Following collections for locked accounts publicly visible (privacy enhancement pending)
+
+All critical and high-priority federation features are complete. See [docs/s2s-compliance-todo.md](docs/s2s-compliance-todo.md) for detailed compliance tracking.
 
 ## Library Components
 
@@ -308,6 +399,29 @@ builder.Services.AddSingleton<IIdentityProvider, CustomIdentityProvider>();
 - .NET 9.0 or later
 - Docker (for containerized deployment)
 - A domain name with HTTPS for production federation
+
+## Testing & Quality Assurance
+
+Broca includes a comprehensive test suite to ensure reliability and standards compliance:
+
+**Integration Tests** (88+ tests across 10 test suites)
+- `ServerToServerTests` - Cross-server federation scenarios (22 tests)
+- `SharedInboxTests` - Efficient multi-user delivery (11 tests)
+- `ClientToServerTests` - Outbox posting and activity creation (7 tests)
+- `CustomCollectionsTests` - Manual and query-based collections (15 tests)
+- `AdminOperationsTests` - Back-channel user management (8 tests)
+- `ClientAuthenticationTests` - API key and HTTP Signature auth (5 tests)
+- `ContentTypeHandlingTests` - Mastodon compatibility (7 tests)
+- `BlobStorageTests` - Media upload and retrieval (4 tests)
+- `NodeInfoStatisticsTests` - Server metadata endpoints (5 tests)
+- `OutboxAuthenticationTests` - Security validation (3 tests)
+
+**Unit Tests**
+- Repository implementations (actors, activities, delivery queue)
+- Blob storage service functionality
+- Component rendering logic
+
+All tests use real HTTP clients and in-memory servers to validate end-to-end behavior, not mocked implementations. This ensures that Broca works correctly with actual ActivityPub clients and servers in the fediverse.
 
 ## Contributing
 
