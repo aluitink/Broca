@@ -1,0 +1,242 @@
+.activitypub-conversation-view {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Loading and error states */
+.conversation-loading,
+.conversation-error,
+.conversation-empty {
+    padding: 2rem;
+    text-align: center;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: #f9f9f9;
+}
+
+.conversation-error {
+    background: #fff5f5;
+    border-color: #ffcccc;
+    color: #cc0000;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid #ccc;
+    border-top-color: #666;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 0.5rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-icon {
+    margin-right: 0.5rem;
+    font-size: 1.25rem;
+}
+
+/* Participants section */
+.conversation-participants {
+    padding: 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.participants-header {
+    margin-bottom: 0.75rem;
+}
+
+.participants-label {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.participants-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.participant-item {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.participant-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+/* Metadata section */
+.conversation-metadata {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: #f9f9f9;
+    font-size: 0.875rem;
+    color: #666;
+}
+
+.metadata-item::before {
+    content: "•";
+    margin-right: 0.5rem;
+    color: #999;
+}
+
+.metadata-item:first-child::before {
+    content: "";
+    margin-right: 0;
+}
+
+/* Posts container */
+.conversation-posts {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.conversation-post {
+    padding: 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
+    transition: all 0.2s ease;
+}
+
+.conversation-post:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Context posts (parent chain) */
+.conversation-post.context-post {
+    background: #f9f9f9;
+    border-left: 3px solid #ccc;
+    opacity: 0.85;
+}
+
+/* Focal post (the main post being viewed) */
+.conversation-post.focal-post {
+    border: 2px solid #4a90e2;
+    background: #f0f8ff;
+    box-shadow: 0 2px 12px rgba(74, 144, 226, 0.2);
+}
+
+/* Parent chain container */
+.parent-chain {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    position: relative;
+    padding-left: 0.75rem;
+}
+
+.parent-chain::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, transparent 0%, #ccc 10%, #ccc 90%, transparent 100%);
+}
+
+/* Reply section */
+.reply-section {
+    margin-top: 0.5rem;
+    padding-left: 1rem;
+    border-left: 2px solid #e0e0e0;
+}
+
+/* Chronological view specific */
+.conversation-posts.chronological-view .conversation-post {
+    position: relative;
+}
+
+.conversation-posts.chronological-view .conversation-post::before {
+    content: "";
+    position: absolute;
+    left: -0.75rem;
+    top: 1.5rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4a90e2;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #ccc;
+}
+
+.conversation-posts.chronological-view {
+    padding-left: 1rem;
+    position: relative;
+}
+
+.conversation-posts.chronological-view::before {
+    content: "";
+    position: absolute;
+    left: 0.25rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e0e0e0;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .activitypub-conversation-view {
+        gap: 0.75rem;
+    }
+
+    .conversation-participants {
+        padding: 0.75rem;
+    }
+
+    .participant-avatar {
+        width: 28px;
+        height: 28px;
+        font-size: 0.7rem;
+    }
+
+    .conversation-metadata {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .metadata-item::before {
+        content: "";
+        margin-right: 0;
+    }
+
+    .conversation-post {
+        padding: 0.75rem;
+    }
+
+    .reply-section {
+        padding-left: 0.5rem;
+    }
+
+    .parent-chain {
+        padding-left: 0.5rem;
+    }
+}

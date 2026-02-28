@@ -1,0 +1,289 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<ObjectCard Actor="@(Page?.AttributedTo?.FirstOrDefault())"
+            ObjectType="Page"
+            Timestamp="@Page?.Published"
+            ShowActor="@ShowActor"
+            ShowType="false"
+            ShowTimestamp="true"
+            CssClass="@CssClass">
+    <ChildContent>
+        @if (Page != null)
+        {
+            @if (CompactMode)
+            {
+                <div class="page-compact">
+                    <div class="page-icon">🔗</div>
+                    <div class="page-info">
+                        @if (!string.IsNullOrEmpty(GetPageTitle()))
+                        {
+                            <div class="page-title">@GetPageTitle()</div>
+                        }
+                        @if (ShowUrl && !string.IsNullOrEmpty(GetPageUrl()))
+                        {
+                            <div class="page-url">
+                                <a href="@GetPageUrl()" target="_blank" rel="noopener noreferrer">
+                                    @GetDisplayUrl()
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                @if (ShowPreview && !string.IsNullOrEmpty(GetPreviewImageUrl()))
+                {
+                    <div class="page-preview-image">
+                        <img src="@GetPreviewImageUrl()" 
+                             alt="@GetPageTitle()" 
+                             loading="lazy" 
+                             class="preview-image" />
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(GetPageTitle()))
+                {
+                    <h3 class="page-title">
+                        @if (!string.IsNullOrEmpty(GetPageUrl()))
+                        {
+                            <a href="@GetPageUrl()" target="_blank" rel="noopener noreferrer">
+                                @GetPageTitle()
+                            </a>
+                        }
+                        else
+                        {
+                            @GetPageTitle()
+                        }
+                    </h3>
+                }
+
+                @if (Page.Summary?.Any() == true)
+                {
+                    <div class="page-summary">
+                        @((MarkupString)(Page.Summary.First() ?? string.Empty))
+                    </div>
+                }
+
+                @if (Page.Content?.Any() == true && ShowContent)
+                {
+                    <div class="page-content">
+                        @((MarkupString)(Page.Content.First() ?? string.Empty))
+                    </div>
+                }
+
+                @if (ShowUrl && !string.IsNullOrEmpty(GetPageUrl()))
+                {
+                    <div class="page-url">
+                        <span class="url-icon">🔗</span>
+                        <a href="@GetPageUrl()" target="_blank" rel="noopener noreferrer">
+                            @GetDisplayUrl()
+                        </a>
+                    </div>
+                }
+
+                @if (ShowMetadata)
+                {
+                    <div class="page-metadata">
+                        @if (Page.Updated != null)
+                        {
+                            <span class="metadata-item">Updated @FormatTimestamp(Page.Updated.Value)</span>
+                        }
+                        @if (Page.MediaType != null)
+                        {
+                            <span class="metadata-item">@Page.MediaType</span>
+                        }
+                    </div>
+                }
+            }
+
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Page)
+            }
+        }
+    </ChildContent>
+    <FooterContent>
+        @if (ShowInteractions && Page?.Id != null)
+        {
+            <InteractionBar ObjectId="@Page.Id"
+                           Object="@Page"
+                           ShowReply="@ShowReply"
+                           ShowBoost="@ShowBoost"
+                           ShowLike="@ShowLike"
+                           ShowBookmark="@ShowBookmark"
+                           CssClass="page-interactions" />
+        }
+    </FooterContent>
+</ObjectCard>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Page object to render.
+    /// </summary>
+    [Parameter]
+    public Page? Page { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the actor attribution.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the preview image.
+    /// </summary>
+    [Parameter]
+    public bool ShowPreview { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the page URL.
+    /// </summary>
+    [Parameter]
+    public bool ShowUrl { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the full content.
+    /// </summary>
+    [Parameter]
+    public bool ShowContent { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show metadata.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to use compact display mode.
+    /// </summary>
+    [Parameter]
+    public bool CompactMode { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show the interaction bar.
+    /// </summary>
+    [Parameter]
+    public bool ShowInteractions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the reply button.
+    /// </summary>
+    [Parameter]
+    public bool ShowReply { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the boost button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBoost { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the like button.
+    /// </summary>
+    [Parameter]
+    public bool ShowLike { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the bookmark button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBookmark { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Page>? AdditionalContent { get; set; }
+
+    private string GetPageTitle()
+    {
+        return Page?.Name?.FirstOrDefault() ?? "Untitled Page";
+    }
+
+    private string GetPageUrl()
+    {
+        if (Page?.Url?.Any() == true)
+        {
+            var urlLink = Page.Url.FirstOrDefault();
+            if (urlLink?.Href != null)
+            {
+                return urlLink.Href.ToString();
+            }
+        }
+
+        if (Page?.Id != null)
+        {
+            return Page.Id;
+        }
+
+        return string.Empty;
+    }
+
+    private string GetDisplayUrl()
+    {
+        var url = GetPageUrl();
+        if (string.IsNullOrEmpty(url)) return string.Empty;
+
+        try
+        {
+            var uri = new Uri(url);
+            return uri.Host;
+        }
+        catch
+        {
+            return url;
+        }
+    }
+
+    private string GetPreviewImageUrl()
+    {
+        if (Page?.Image?.Any() == true)
+        {
+            var image = Page.Image.FirstOrDefault();
+            if (image is Image img && img.Url?.Any() == true)
+            {
+                var urlLink = img.Url.FirstOrDefault();
+                if (urlLink?.Href != null)
+                {
+                    return urlLink.Href.ToString();
+                }
+            }
+        }
+
+        if (Page?.Icon?.Any() == true)
+        {
+            var icon = Page.Icon.FirstOrDefault();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var urlLink = img.Url.FirstOrDefault();
+                if (urlLink?.Href != null)
+                {
+                    return urlLink.Href.ToString();
+                }
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - timestamp;
+        
+        if (diff.TotalMinutes < 1) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+        
+        return timestamp.ToString("MMM d, yyyy");
+    }
+}

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Broca.ActivityPub.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Broca.ActivityPub.Core.Interfaces;
@@ -356,6 +357,23 @@ public class ActivityPubClient : IActivityPubClient
                 ? GetCollectionPageUri(collectionPage.Next)
                 : null;
         }
+    }
+
+    /// <inheritdoc/>
+    public IAsyncEnumerable<T> GetCollectionAsync<T>(
+        Uri collectionUri,
+        CollectionSearchParameters search,
+        int? limit = null,
+        CancellationToken cancellationToken = default)
+    {
+        var searchQuery = search.ToQueryString();
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var separator = collectionUri.Query.Length > 0 ? "&" : "?";
+            collectionUri = new Uri($"{collectionUri}{separator}{searchQuery}");
+        }
+
+        return GetCollectionAsync<T>(collectionUri, limit, cancellationToken);
     }
 
     private static Uri? GetCollectionPageUri(ICollectionPageOrLink? pageOrLink) =>

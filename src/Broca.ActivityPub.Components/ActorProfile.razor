@@ -31,9 +31,20 @@
         }
         else
         {
+            @if (ShowBanner)
+            {
+                var bannerUrl = GetBannerUrl();
+                if (bannerUrl != null)
+                {
+                    <div class="profile-banner">
+                        <img src="@bannerUrl" alt="Profile banner" class="banner-image" />
+                    </div>
+                }
+            }
+
             <div class="profile-content">
                 <ActorRenderer Actor="@actor" ShowDetails="@ShowDetails" />
-                
+
                 @if (ShowFollowButton && CanShowFollowButton())
                 {
                     <div class="profile-actions">
@@ -96,6 +107,59 @@
                         }
                     </div>
                 }
+
+                @if (ShowAttachmentFields)
+                {
+                    var fields = GetAttachmentFields().ToList();
+                    if (fields.Any())
+                    {
+                        <div class="profile-fields">
+                            @foreach (var (fieldName, fieldValue, attachment) in fields)
+                            {
+                                <div class="profile-field">
+                                    <span class="field-name">@fieldName</span>
+                                    <span class="field-value">
+                                        @if (fieldValue != null && Uri.TryCreate(fieldValue, UriKind.Absolute, out _))
+                                        {
+                                            <a href="@fieldValue" 
+                                               target="_blank" 
+                                               rel="noopener noreferrer me"
+                                               class="@(IsVerifiedLink(attachment) ? "verified-link" : "")">
+                                                @fieldValue
+                                                @if (IsVerifiedLink(attachment))
+                                                {
+                                                    <span class="verification-badge" title="Verified link">✓</span>
+                                                }
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            @fieldValue
+                                        }
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        }
+
+        @if (ShowPinnedPosts && pinnedPosts.Any())
+        {
+            <div class="profile-pinned-posts">
+                <h4>
+                    <span class="pin-icon">📌</span>
+                    Pinned Posts
+                </h4>
+                <div class="pinned-posts-list">
+                    @foreach (var post in pinnedPosts)
+                    {
+                        <div class="pinned-post-item">
+                            <ObjectDisplay Object="@post" />
+                        </div>
+                    }
+                </div>
             </div>
         }
 
@@ -120,6 +184,8 @@
     private int? followingCount = null;
     private int? postsCount = null;
     private string? error;
+    private List<KristofferStrube.ActivityStreams.Object> pinnedPosts = new();
+    private bool loadingPinnedPosts;
 
     /// <summary>
     /// Gets or sets the actor URI to display.
@@ -152,13 +218,29 @@
     [Parameter]
     public bool ShowStatistics { get; set; } = true;
 
+    [Parameter]
+    public bool ShowBanner { get; set; } = true;
+
+    [Parameter]
+    public bool ShowAttachmentFields { get; set; } = true;
+
     /// <summary>
     /// Gets or sets whether to show the 
     [Parameter]
     public bool ShowDetails { get; set; } = true;
 
+    /// <summary>    /// Gets or sets whether to show pinned posts.
+    /// </summary>
+    [Parameter]
+    public bool ShowPinnedPosts { get; set; } = true;
+
     /// <summary>
-    /// Gets or sets whether to show the actor's outbox.
+    /// Gets or sets the maximum number of pinned posts to display.
+    /// </summary>
+    [Parameter]
+    public int MaxPinnedPosts { get; set; } = 3;
+
+    /// <summary>    /// Gets or sets whether to show the actor's outbox.
     /// </summary>
     [Parameter]
     public bool ShowOutbox { get; set; } = false;
@@ -230,6 +312,7 @@
             {
                 await LoadStatisticsAsync();
                 await CheckFollowStatusAsync();
+                await LoadPinnedPostsAsync();
             }
         }
         catch (Exception ex)
@@ -243,22 +326,102 @@
         }
     }
 
-    private Task LoadStatisticsAsync()
+    private async Task LoadStatisticsAsync()
     {
+        if (actor is not Actor a) return;
+
+        var tasks = new List<Task>();
+
+        if (a.Followers is ILink followersLink && followersLink.Href != null)
+            tasks.Add(LoadCollectionCountAsync(followersLink.Href, v => followersCount = v));
+
+        if (a.Following is ILink followingLink && followingLink.Href != null)
+            tasks.Add(LoadCollectionCountAsync(followingLink.Href, v => followingCount = v));
+
+        var outboxUrl = GetOutboxUrl();
+        if (!string.IsNullOrEmpty(outboxUrl) && Uri.TryCreate(outboxUrl, UriKind.Absolute, out var outboxUri))
+            tasks.Add(LoadCollectionCountAsync(outboxUri, v => postsCount = v));
+
+        if (tasks.Any())
+            await Task.WhenAll(tasks);
+
+        StateHasChanged();
+    }
+
+    private async Task LoadPinnedPostsAsync()
+    {
+        if (actor is not Actor a || !ShowPinnedPosts) return;
+
+        loadingPinnedPosts = true;
+        pinnedPosts.Clear();
+
         try
         {
-            // TODO: Load actual statistics from collections
-            // For now, these would need to be fetched from the followers/following/outbox collections
-            // followersCount = await GetCollectionCount(GetFollowersUrl());
-            // followingCount = await GetCollectionCount(GetFollowingUrl());
-            // postsCount = await GetCollectionCount(GetOutboxUrl());
+            Uri? featuredUrl = null;
+            
+            // Check ExtensionData for featured collection URL (stored as extension property)
+            if (a.ExtensionData?.TryGetValue("featured", out var featuredElement) == true)
+            {
+                var featuredStr = featuredElement.GetString();
+                if (!string.IsNullOrEmpty(featuredStr) && Uri.TryCreate(featuredStr, UriKind.Absolute, out var uri))
+                    featuredUrl = uri;
+            }
+
+            if (featuredUrl == null) return;
+
+            var collection = await Client.GetAsync<OrderedCollection>(featuredUrl);
+            if (collection?.OrderedItems != null)
+            {
+                foreach (var item in collection.OrderedItems.Take(MaxPinnedPosts))
+                {
+                    if (item is KristofferStrube.ActivityStreams.Object obj)
+                        pinnedPosts.Add(obj);
+                    else if (item is ILink itemLink && itemLink.Href != null)
+                    {
+                        var resolved = await Client.GetAsync<KristofferStrube.ActivityStreams.Object>(itemLink.Href);
+                        if (resolved != null)
+                            pinnedPosts.Add(resolved);
+                    }
+                }
+            }
+            else if (collection?.Items != null)
+            {
+                foreach (var item in collection.Items.Take(MaxPinnedPosts))
+                {
+                    if (item is KristofferStrube.ActivityStreams.Object obj)
+                        pinnedPosts.Add(obj);
+                    else if (item is ILink itemLink && itemLink.Href != null)
+                    {
+                        var resolved = await Client.GetAsync<KristofferStrube.ActivityStreams.Object>(itemLink.Href);
+                        if (resolved != null)
+                            pinnedPosts.Add(resolved);
+                    }
+                }
+            }
         }
         catch
         {
-            // Silently fail - statistics are optional
+            // Pinned posts are optional - silently fail
         }
+        finally
+        {
+            loadingPinnedPosts = false;
+            StateHasChanged();
+        }
+    }
 
-        return Task.CompletedTask;
+    private async Task LoadCollectionCountAsync(Uri uri, Action<int> setter)
+    {
+        try
+        {
+            var collection = await Client.GetAsync<OrderedCollection>(uri, useCache: false);
+            if (collection?.TotalItems != null)
+                setter((int)collection.TotalItems.Value);
+        }
+        catch
+        {
+            // Statistics are optional - silently ignore failures
+        }
     }
 
     private async Task CheckFollowStatusAsync()
@@ -394,6 +557,40 @@
         if (count < 1000000)
             return $"{count / 1000.0:F1}K";
         return $"{count / 1000000.0:F1}M";
+    }
+
+    private string? GetBannerUrl()
+    {
+        if (actor?.Image?.FirstOrDefault() is { } imageOrLink)
+        {
+            if (imageOrLink is Image img)
+                return img.Url?.FirstOrDefault()?.Href?.ToString();
+            if (imageOrLink is ILink link)
+                return link.Href?.ToString();
+        }
+        return null;
+    }
+
+    private IEnumerable<(string Name, string? Value, IObjectOrLink Attachment)> GetAttachmentFields()
+    {
+        if (actor?.Attachment == null) yield break;
+        foreach (var item in actor.Attachment)
+        {
+            if (item is KristofferStrube.ActivityStreams.Object obj && obj.Name?.FirstOrDefault() is { } name)
+            {
+                var value = obj.Url?.FirstOrDefault()?.Href?.ToString() ?? obj.Id;
+                yield return (name, value, item);
+            }
+        }
+    }
+
+    private bool IsVerifiedLink(IObjectOrLink attachment)
+    {
+        if (attachment is not KristofferStrube.ActivityStreams.Object obj)
+            return false;
+
+        var value = obj.Url?.FirstOrDefault()?.Href?.ToString() ?? obj.Id;
+        return value?.StartsWith("https://", StringComparison.OrdinalIgnoreCase) == true;
     }
 }
 

@@ -287,56 +287,22 @@ public class ActorController : ActivityPubControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var liked = await _activityRepository.GetLikedByActorAsync(username, limit, offset);
-            var totalCount = await _activityRepository.GetLikedByActorCountAsync(username);
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+
+            var liked = await _activityRepository.GetLikedByActorAsync(username, search?.HasSearchCriteria == true ? int.MaxValue : limit, search?.HasSearchCriteria == true ? 0 : offset);
+            var totalCount = await _activityRepository.GetLikedByActorCountAsync(username);
 
             // Enrich activities with collection information
             await _enrichmentService.EnrichActivitiesAsync(liked, baseUrl);
 
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
-
-            if (!hasPageParam && !hasLimitParam)
-            {
-                // Return the collection wrapper
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/liked",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/liked?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
-            }
-            else
-            {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/liked?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/liked") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = liked.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/liked?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/liked?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
-            }
+            var collectionUrl = $"{baseUrl}/users/{username}/liked";
+            return BuildCollectionResponse(collectionUrl, liked, totalCount, page, limit, search, search?.HasSearchCriteria != true);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {
@@ -357,56 +323,22 @@ public class ActorController : ActivityPubControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var shared = await _activityRepository.GetSharedByActorAsync(username, limit, offset);
-            var totalCount = await _activityRepository.GetSharedByActorCountAsync(username);
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+
+            var shared = await _activityRepository.GetSharedByActorAsync(username, search?.HasSearchCriteria == true ? int.MaxValue : limit, search?.HasSearchCriteria == true ? 0 : offset);
+            var totalCount = await _activityRepository.GetSharedByActorCountAsync(username);
 
             // Enrich activities with collection information
             await _enrichmentService.EnrichActivitiesAsync(shared, baseUrl);
 
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
-
-            if (!hasPageParam && !hasLimitParam)
-            {
-                // Return the collection wrapper
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/shared",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/shared?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
-            }
-            else
-            {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/shared?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/shared") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = shared.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/shared?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/shared?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
-            }
+            var collectionUrl = $"{baseUrl}/users/{username}/shared";
+            return BuildCollectionResponse(collectionUrl, shared, totalCount, page, limit, search, search?.HasSearchCriteria != true);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {

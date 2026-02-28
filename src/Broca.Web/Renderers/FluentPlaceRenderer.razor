@@ -1,0 +1,141 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@inherits ComponentBase
+
+<div class="@($"fluent-place {CssClass} {(Compact ? "compact" : "")}")">
+    @if (Place != null)
+    {
+        @if (Compact)
+        {
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Location())" Color="Color.Accent" />
+                @if (!string.IsNullOrEmpty(GetPlaceName()))
+                {
+                    <span class="place-name">@GetPlaceName()</span>
+                }
+                @if (ShowCoordinates && HasCoordinates())
+                {
+                    <span class="place-coords">(@GetCoordinatesText())</span>
+                }
+            </FluentStack>
+        }
+        else
+        {
+            <FluentCard Class="place-card">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentIcon Value="@(new Icons.Regular.Size24.Location())" Color="Color.Accent" />
+                        @if (!string.IsNullOrEmpty(GetPlaceName()))
+                        {
+                            <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold" Style="flex: 1;">
+                                @GetPlaceName()
+                            </FluentLabel>
+                        }
+                    </FluentStack>
+
+                    @if (!string.IsNullOrEmpty(GetAddress()))
+                    {
+                        <div class="place-address">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Building())" />
+                            <span>@GetAddress()</span>
+                        </div>
+                    }
+
+                    @if (ShowCoordinates && HasCoordinates())
+                    {
+                        <div class="place-coordinates">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Navigation())" />
+                            <span class="coord-label">Coordinates:</span>
+                            <code class="coord-value">@GetCoordinatesText()</code>
+                        </div>
+                    }
+
+                    @if (ShowRadius && Place.Radius != null)
+                    {
+                        <div class="place-radius">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Circle())" />
+                            <span>Radius: @FormatRadius(Place.Radius.Value, Place.Units)</span>
+                        </div>
+                    }
+
+                    @if (ShowMapLink && HasCoordinates())
+                    {
+                        <FluentButton Appearance="Appearance.Lightweight" 
+                                     IconStart="@(new Icons.Regular.Size20.Map())"
+                                     OnClick="@(() => OpenMap())">
+                            View on map
+                        </FluentButton>
+                    }
+                </FluentStack>
+            </FluentCard>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Place? Place { get; set; }
+    [Parameter] public bool ShowCoordinates { get; set; } = true;
+    [Parameter] public bool ShowRadius { get; set; } = true;
+    [Parameter] public bool ShowMapLink { get; set; } = true;
+    [Parameter] public bool Compact { get; set; } = false;
+    [Parameter] public string MapProvider { get; set; } = "osm";
+    [Parameter] public string? CssClass { get; set; }
+
+    private string GetPlaceName() => Place?.Name?.FirstOrDefault() ?? string.Empty;
+
+    private string GetAddress()
+    {
+        if (Place?.Content?.Any() == true)
+            return Place.Content.First();
+        
+        if (Place?.Summary?.Any() == true)
+            return Place.Summary.First();
+        
+        return string.Empty;
+    }
+
+    private bool HasCoordinates() => Place?.Latitude.HasValue == true && Place?.Longitude.HasValue == true;
+
+    private string GetCoordinatesText()
+    {
+        if (!HasCoordinates()) return string.Empty;
+        return $"{Place!.Latitude:F6}, {Place.Longitude:F6}";
+    }
+
+    private string GetMapLink()
+    {
+        if (!HasCoordinates()) return "#";
+        var lat = Place!.Latitude!.Value;
+        var lon = Place!.Longitude!.Value;
+        return MapProvider.ToLowerInvariant() switch
+        {
+            "google" => $"https://www.google.com/maps?q={lat},{lon}",
+            "apple" => $"https://maps.apple.com/?q={lat},{lon}",
+            _ => $"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}&zoom=15"
+        };
+    }
+
+    private void OpenMap()
+    {
+        var url = GetMapLink();
+        if (url != "#")
+        {
+            // Open in new window - would need JSInterop for this
+            // For now, just navigate
+        }
+    }
+
+    private string FormatRadius(double radius, string? units)
+    {
+        var unitStr = units?.ToLowerInvariant() ?? "m";
+        if (unitStr == "m" || unitStr == "meters")
+        {
+            if (radius >= 1000) return $"{radius / 1000:F1} km";
+            return $"{radius:F0} m";
+        }
+        if (unitStr == "km" || unitStr == "kilometers") return $"{radius:F1} km";
+        if (unitStr == "mi" || unitStr == "miles") return $"{radius:F1} mi";
+        return $"{radius} {units}";
+    }
+}

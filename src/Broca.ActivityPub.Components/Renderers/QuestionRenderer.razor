@@ -1,0 +1,239 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<ObjectCard Actor="@(Question?.AttributedTo?.FirstOrDefault())"
+            ObjectType="Question"
+            Timestamp="@Question?.Published"
+            ShowActor="@ShowActor"
+            ShowType="false"
+            ShowTimestamp="true"
+            CssClass="@CssClass">
+    <ChildContent>
+        @if (Question != null)
+        {
+            @if (Question.Name?.Any() == true)
+            {
+                <div class="question-title">@Question.Name.First()</div>
+            }
+
+            @if (Question.Content?.Any() == true)
+            {
+                <div class="question-content">
+                    @((MarkupString)(Question.Content.First() ?? string.Empty))
+                </div>
+            }
+
+            @if (ShowOptions)
+            {
+                <div class="question-options">
+                    @if (ShowResults || Question.Closed != null)
+                    {
+                        @* Show results *@
+                        @foreach (var option in GetOptions())
+                        {
+                            var votes = GetOptionVotes(option);
+                            var percentage = GetPercentage(option);
+                            <div class="question-option-result">
+                                <div class="option-header">
+                                    <span class="option-name">@GetOptionName(option)</span>
+                                    <span class="option-stats">@votes votes (@percentage%)</span>
+                                </div>
+                                <div class="option-bar">
+                                    <div class="option-bar-fill" style="width: @(percentage)%"></div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        @* Show voting options *@
+                        @foreach (var option in GetOptions())
+                        {
+                            <div class="question-option">
+                                <label class="option-label">
+                                    @if (AllowMultipleChoice)
+                                    {
+                                        <input type="checkbox" disabled="@(!AllowVoting)" />
+                                    }
+                                    else
+                                    {
+                                        <input type="radio" name="question-@Question.Id" disabled="@(!AllowVoting)" />
+                                    }
+                                    <span>@GetOptionName(option)</span>
+                                </label>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+
+            @if (IsClosed())
+            {
+                <div class="question-closed">
+                    Poll closed
+                </div>
+            }
+            else if (Question.EndTime != null)
+            {
+                <div class="question-ends">
+                    Ends @FormatTimestamp(Question.EndTime.Value)
+                </div>
+            }
+
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Question)
+            }
+        }
+    </ChildContent>
+    <FooterContent>
+        @if (ShowInteractions && Question?.Id != null)
+        {
+            <InteractionBar ObjectId="@Question.Id"
+                           Object="@Question"
+                           ShowReply="@ShowReply"
+                           ShowBoost="@ShowBoost"
+                           ShowLike="@ShowLike"
+                           ShowBookmark="@ShowBookmark"
+                           CssClass="question-interactions" />
+        }
+    </FooterContent>
+</ObjectCard>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Question object to render.
+    /// </summary>
+    [Parameter]
+    public Question? Question { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the actor attribution.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the voting options.
+    /// </summary>
+    [Parameter]
+    public bool ShowOptions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show results.
+    /// </summary>
+    [Parameter]
+    public bool ShowResults { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether voting is allowed.
+    /// </summary>
+    [Parameter]
+    public bool AllowVoting { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show the interaction bar.
+    /// </summary>
+    [Parameter]
+    public bool ShowInteractions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the reply button.
+    /// </summary>
+    [Parameter]
+    public bool ShowReply { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the boost button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBoost { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the like button.
+    /// </summary>
+    [Parameter]
+    public bool ShowLike { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the bookmark button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBookmark { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Question>? AdditionalContent { get; set; }
+
+    private bool AllowMultipleChoice => Question?.AnyOf?.Any() == true;
+
+    private IEnumerable<IObjectOrLink> GetOptions()
+    {
+        if (Question == null) return Enumerable.Empty<IObjectOrLink>();
+        
+        if (Question.OneOf?.Any() == true)
+            return Question.OneOf;
+        
+        if (Question.AnyOf?.Any() == true)
+            return Question.AnyOf;
+        
+        return Enumerable.Empty<IObjectOrLink>();
+    }
+
+    private string GetOptionName(IObjectOrLink option)
+    {
+        if (option is Note note && note.Name?.Any() == true)
+            return note.Name.First();
+        
+        if (option is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
+            return obj.Name.First();
+        
+        return "Option";
+    }
+
+    private int GetOptionVotes(IObjectOrLink option)
+    {
+        if (option is Note note && note.Replies?.TotalItems != null)
+            return (int)note.Replies.TotalItems.Value;
+        
+        if (option is KristofferStrube.ActivityStreams.Object obj && obj.Replies?.TotalItems != null)
+            return (int)obj.Replies.TotalItems.Value;
+        
+        return 0;
+    }
+
+    private int GetPercentage(IObjectOrLink option)
+    {
+        var totalVotes = GetOptions().Sum(GetOptionVotes);
+        if (totalVotes == 0) return 0;
+        
+        var optionVotes = GetOptionVotes(option);
+        return (int)((double)optionVotes / totalVotes * 100);
+    }
+
+    private bool IsClosed()
+    {
+        return Question?.Closed?.Any() == true;
+    }
+
+    private string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - timestamp;
+        
+        if (diff.TotalMinutes < 1) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+        
+        return timestamp.ToString("MMM d, yyyy");
+    }
+}

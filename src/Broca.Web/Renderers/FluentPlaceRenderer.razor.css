@@ -1,0 +1,39 @@
+/* Fluent Place Renderer Styles */
+.fluent-place {
+    display: block;
+}
+
+.fluent-place.compact {
+    display: inline-block;
+}
+
+.place-card {
+    padding: 1rem;
+}
+
+.place-name {
+    font-weight: 600;
+}
+
+.place-address,
+.place-coordinates,
+.place-radius {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--neutral-foreground-hint);
+}
+
+.coord-value {
+    font-family: var(--font-family-monospace, monospace);
+    font-size: 0.8125rem;
+    background: var(--neutral-layer-2);
+    padding: 0.125rem 0.375rem;
+    border-radius: var(--control-corner-radius);
+}
+
+.place-coords {
+    font-size: 0.875rem;
+    color: var(--neutral-foreground-hint);
+}

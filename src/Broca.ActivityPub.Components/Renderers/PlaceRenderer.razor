@@ -1,0 +1,183 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-place @CssClass @(Compact ? "compact" : "")">
+    @if (Place != null)
+    {
+        @if (Compact)
+        {
+            <div class="place-compact">
+                <span class="place-icon">📍</span>
+                @if (!string.IsNullOrEmpty(GetPlaceName()))
+                {
+                    <span class="place-name">@GetPlaceName()</span>
+                }
+                @if (ShowCoordinates && HasCoordinates())
+                {
+                    <span class="place-coords">(@GetCoordinatesText())</span>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="place-card">
+                <div class="place-header">
+                    <span class="place-icon">📍</span>
+                    @if (!string.IsNullOrEmpty(GetPlaceName()))
+                    {
+                        <h4 class="place-name">@GetPlaceName()</h4>
+                    }
+                </div>
+
+                @if (!string.IsNullOrEmpty(GetAddress()))
+                {
+                    <div class="place-address">
+                        @GetAddress()
+                    </div>
+                }
+
+                @if (ShowCoordinates && HasCoordinates())
+                {
+                    <div class="place-coordinates">
+                        <span class="coord-label">Coordinates:</span>
+                        <span class="coord-value">@GetCoordinatesText()</span>
+                    </div>
+                }
+
+                @if (ShowRadius && Place.Radius != null)
+                {
+                    <div class="place-radius">
+                        <span class="radius-label">Radius:</span>
+                        <span class="radius-value">@FormatRadius(Place.Radius.Value, Place.Units)</span>
+                    </div>
+                }
+
+                @if (ShowMapLink && HasCoordinates())
+                {
+                    <div class="place-actions">
+                        <a href="@GetMapLink()" target="_blank" rel="noopener noreferrer" class="map-link">
+                            View on map
+                        </a>
+                    </div>
+                }
+
+                @if (AdditionalContent != null)
+                {
+                    @AdditionalContent(Place)
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Place object to render.
+    /// </summary>
+    [Parameter]
+    public Place? Place { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show coordinates.
+    /// </summary>
+    [Parameter]
+    public bool ShowCoordinates { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show radius.
+    /// </summary>
+    [Parameter]
+    public bool ShowRadius { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show a map link.
+    /// </summary>
+    [Parameter]
+    public bool ShowMapLink { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to use compact display mode.
+    /// </summary>
+    [Parameter]
+    public bool Compact { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the map provider (google, osm, apple).
+    /// </summary>
+    [Parameter]
+    public string MapProvider { get; set; } = "osm";
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Place>? AdditionalContent { get; set; }
+
+    private string GetPlaceName()
+    {
+        return Place?.Name?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private string GetAddress()
+    {
+        if (Place?.Content?.Any() == true)
+            return Place.Content.First();
+        
+        if (Place?.Summary?.Any() == true)
+            return Place.Summary.First();
+        
+        return string.Empty;
+    }
+
+    private bool HasCoordinates()
+    {
+        return Place?.Latitude.HasValue == true && Place?.Longitude.HasValue == true;
+    }
+
+    private string GetCoordinatesText()
+    {
+        if (!HasCoordinates()) return string.Empty;
+        return $"{Place!.Latitude:F6}, {Place.Longitude:F6}";
+    }
+
+    private string GetMapLink()
+    {
+        if (!HasCoordinates()) return "#";
+
+        var lat = Place!.Latitude!.Value;
+        var lon = Place!.Longitude!.Value;
+
+        return MapProvider.ToLowerInvariant() switch
+        {
+            "google" => $"https://www.google.com/maps?q={lat},{lon}",
+            "apple" => $"https://maps.apple.com/?q={lat},{lon}",
+            _ => $"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}&zoom=15"
+        };
+    }
+
+    private string FormatRadius(double radius, string? units)
+    {
+        var unitStr = units?.ToLowerInvariant() ?? "m";
+        
+        if (unitStr == "m" || unitStr == "meters")
+        {
+            if (radius >= 1000)
+                return $"{radius / 1000:F1} km";
+            return $"{radius:F0} m";
+        }
+
+        if (unitStr == "km" || unitStr == "kilometers")
+            return $"{radius:F1} km";
+
+        if (unitStr == "mi" || unitStr == "miles")
+            return $"{radius:F1} mi";
+
+        return $"{radius} {units}";
+    }
+}

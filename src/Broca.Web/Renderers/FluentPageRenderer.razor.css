@@ -1,0 +1,37 @@
+/* Fluent Page Renderer Styles */
+.fluent-page {
+    display: block;
+}
+
+.page-card,
+.page-compact-card {
+    padding: 1rem;
+}
+
+.page-preview {
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--control-corner-radius);
+    max-height: 300px;
+}
+
+.page-preview img {
+    width: 100%;
+    height: auto;
+    object-fit: cover;
+    display: block;
+}
+
+.page-summary {
+    color: var(--neutral-foreground-hint);
+    line-height: 1.5;
+}
+
+.page-content {
+    line-height: 1.6;
+}
+
+.page-metadata {
+    font-size: 0.875rem;
+    color: var(--neutral-foreground-hint);
+}

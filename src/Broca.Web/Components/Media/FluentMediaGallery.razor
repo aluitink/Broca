@@ -1,0 +1,69 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@using static Broca.ActivityPub.Components.MediaGallery
+
+@*
+    FluentMediaGallery - A Fluent UI wrapper for MediaGallery component.
+    This provides enhanced styling and Fluent UI integration for media galleries.
+*@
+
+<MediaGallery
+    Items="@Items"
+    Images="@Images"
+    DisplayMode="@DisplayMode"
+    GridColumns="@GridColumns"
+    AspectRatio="@AspectRatio"
+    ShowNavigationButtons="@ShowNavigationButtons"
+    ShowDots="@ShowDots"
+    ShowImageInfo="@ShowImageInfo"
+    ShowMetadata="@ShowMetadata"
+    ShowZoomControls="@ShowZoomControls"
+    EnableLightbox="@EnableLightbox"
+    Loop="@Loop"
+    CssClass="@($"fluent-media-gallery {CssClass}")"
+    OnItemClick="@OnItemClick" />
+
+@code {
+    [Parameter]
+    public List<MediaItem>? Items { get; set; }
+
+    [Parameter]
+    public IEnumerable<KristofferStrube.ActivityStreams.Image>? Images { get; set; }
+
+    [Parameter]
+    public GalleryDisplayMode DisplayMode { get; set; } = GalleryDisplayMode.Grid;
+
+    [Parameter]
+    public int GridColumns { get; set; } = 3;
+
+    [Parameter]
+    public string AspectRatio { get; set; } = "1/1";
+
+    [Parameter]
+    public bool ShowNavigationButtons { get; set; } = true;
+
+    [Parameter]
+    public bool ShowDots { get; set; } = true;
+
+    [Parameter]
+    public bool ShowImageInfo { get; set; } = true;
+
+    [Parameter]
+    public bool ShowMetadata { get; set; } = true;
+
+    [Parameter]
+    public bool ShowZoomControls { get; set; } = true;
+
+    [Parameter]
+    public bool EnableLightbox { get; set; } = true;
+
+    [Parameter]
+    public bool Loop { get; set; } = false;
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnItemClick { get; set; }
+}

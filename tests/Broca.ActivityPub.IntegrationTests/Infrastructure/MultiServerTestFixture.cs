@@ -52,9 +52,11 @@ public abstract class MultiServerTestFixture : IAsyncLifetime
     /// <summary>
     /// Creates and registers a new test server
     /// </summary>
-    protected async Task<BrocaTestServer> CreateServerAsync(string instanceName, string baseUrl, string domain)
+    protected async Task<BrocaTestServer> CreateServerAsync(
+        string instanceName, string baseUrl, string domain,
+        Action<IServiceCollection>? configureServices = null)
     {
-        var server = new BrocaTestServer(baseUrl, domain, instanceName, _routingHandler!);
+        var server = new BrocaTestServer(baseUrl, domain, instanceName, _routingHandler!, configureServices: configureServices);
         await server.InitializeAsync();
         
         Servers[instanceName] = server;

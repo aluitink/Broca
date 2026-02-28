@@ -85,6 +85,8 @@ public interface IActivityPubClient
     /// <returns>Enumerable of collection items</returns>
     IAsyncEnumerable<T> GetCollectionAsync<T>(Uri collectionUri, int? limit = null, CancellationToken cancellationToken = default);
 
+    IAsyncEnumerable<T> GetCollectionAsync<T>(Uri collectionUri, Models.CollectionSearchParameters search, int? limit = null, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Creates an activity builder anchored to the authenticated actor's identity
     /// </summary>

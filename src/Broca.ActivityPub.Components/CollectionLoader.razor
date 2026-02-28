@@ -350,7 +350,7 @@
             var skip = items.Count;
             var loadedItems = new List<TItem>();
             
-            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, null))
+            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, (int?)null))
             {
                 if (skip > 0)
                 {
@@ -400,7 +400,7 @@
             var loadedItems = new List<TItem>();
             var skip = request.StartIndex;
 
-            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, null))
+            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, (int?)null))
             {
                 if (skip > 0)
                 {

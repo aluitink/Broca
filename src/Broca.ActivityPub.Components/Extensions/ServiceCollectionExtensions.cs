@@ -44,6 +44,9 @@ public static class ServiceCollectionExtensions
         // Register activity stream notification service
         services.TryAddScoped<ActivityStreamNotificationService>();
 
+        // Register draft manager service
+        services.TryAddScoped<DraftManager>();
+
         // Register default renderers
         RegisterDefaultRenderers(services);
 
