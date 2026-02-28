@@ -179,8 +179,7 @@ public class ClientToServerTests : TwoServerFixture
         Assert.NotEmpty(outboxActivities);
         
         // Verify there's a Follow activity in the outbox
-        var followInOutbox = outboxActivities.FirstOrDefault(a => 
-            a.Type?.Contains("Follow") == true);
+        var followInOutbox = outboxActivities.OfType<Follow>().FirstOrDefault();
         Assert.NotNull(followInOutbox);
 
         // Verify Alice's following collection was updated
@@ -233,8 +232,7 @@ public class ClientToServerTests : TwoServerFixture
         Assert.NotEmpty(outboxActivities);
         
         // Verify there's an Undo activity in the outbox
-        var undoInOutbox = outboxActivities.FirstOrDefault(a => 
-            a.Type?.Contains("Undo") == true);
+        var undoInOutbox = outboxActivities.OfType<Undo>().FirstOrDefault();
         Assert.NotNull(undoInOutbox);
 
         // Verify Alice's following collection was updated (Bob removed)
@@ -264,7 +262,7 @@ public class ClientToServerTests : TwoServerFixture
 
         var s2sHelper = new ServerToServerHelper(ServerA);
         var outboxActivities = await s2sHelper.GetOutboxActivitiesAsync("alice");
-        var storedFollow = outboxActivities.FirstOrDefault(a => a.Type?.Contains("Follow") == true) as IObject;
+        var storedFollow = outboxActivities.OfType<Follow>().FirstOrDefault();
         Assert.NotNull(storedFollow);
         var followId = storedFollow.Id!;
 

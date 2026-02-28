@@ -111,21 +111,15 @@ public static class TestDataSeeder
         IEnumerable<Document> attachments,
         string? noteId = null)
     {
-        noteId ??= $"{actorId}/notes/{Guid.NewGuid()}";
+        var builder = CreateBuilderForActor(actorId);
+        var noteBuilder = builder.CreateNote(content);
 
-        return new Activity
+        foreach (var attachment in attachments)
         {
-            JsonLDContext = new List<ITermDefinition>
-            {
-                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
-            },
-            Id = noteId,
-            Type = new[] { "Note" },
-            AttributedTo = new IObjectOrLink[] { new Actor { Id = actorId } },
-            Content = new[] { content },
-            Attachment = attachments.Cast<IObjectOrLink>().ToList(),
-            Published = DateTime.UtcNow
-        };
+            noteBuilder.WithAttachment(attachment);
+        }
+
+        return noteBuilder.Build();
     }
 
     /// <summary>
@@ -234,16 +228,8 @@ public static class TestDataSeeder
     /// </summary>
     public static Undo CreateUndoByReference(string actorId, string activityIri)
     {
-        return new Undo
-        {
-            JsonLDContext = new List<ITermDefinition>
-            {
-                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
-            },
-            Type = new[] { "Undo" },
-            Actor = new IObjectOrLink[] { new Actor { Id = actorId } },
-            Object = new IObjectOrLink[] { new Link { Href = new Uri(activityIri) } }
-        };
+        var builder = CreateBuilderForActor(actorId);
+        return builder.UndoByReference(activityIri);
     }
 
     /// <summary>
@@ -251,16 +237,8 @@ public static class TestDataSeeder
     /// </summary>
     public static Reject CreateRejectByReference(string actorId, string activityIri)
     {
-        return new Reject
-        {
-            JsonLDContext = new List<ITermDefinition>
-            {
-                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
-            },
-            Type = new[] { "Reject" },
-            Actor = new IObjectOrLink[] { new Actor { Id = actorId } },
-            Object = new IObjectOrLink[] { new Link { Href = new Uri(activityIri) } }
-        };
+        var builder = CreateBuilderForActor(actorId);
+        return builder.RejectByReference(activityIri);
     }
 
     /// <summary>

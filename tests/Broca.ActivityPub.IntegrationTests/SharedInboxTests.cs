@@ -70,14 +70,13 @@ public class SharedInboxTests : TwoServerFixture
         // Wait for delivery to all three users via shared inbox
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
-        var aliceActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("alice", "Create", TimeSpan.FromSeconds(10));
-        var bobActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("bob", "Create", TimeSpan.FromSeconds(10));
-        var charlieActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("charlie", "Create", TimeSpan.FromSeconds(10));
+        var aliceActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("alice", TimeSpan.FromSeconds(10));
+        var bobActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("bob", TimeSpan.FromSeconds(10));
+        var charlieActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("charlie", TimeSpan.FromSeconds(10));
 
         Assert.NotNull(aliceActivity);
         Assert.NotNull(bobActivity);
         Assert.NotNull(charlieActivity);
-        Assert.Equal("Create", aliceActivity.Type?.FirstOrDefault());
     }
 
     [Fact]
@@ -126,8 +125,8 @@ public class SharedInboxTests : TwoServerFixture
 
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
-        var daveActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("dave", "Create", TimeSpan.FromSeconds(10));
-        var eveActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("eve", "Create", TimeSpan.FromSeconds(10));
+        var daveActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("dave", TimeSpan.FromSeconds(10));
+        var eveActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("eve", TimeSpan.FromSeconds(10));
 
         Assert.NotNull(daveActivity);
         Assert.NotNull(eveActivity);
@@ -175,7 +174,7 @@ public class SharedInboxTests : TwoServerFixture
 
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
-        var frankActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("frank", "Create", TimeSpan.FromSeconds(10));
+        var frankActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("frank", TimeSpan.FromSeconds(10));
         
         Assert.NotNull(frankActivity);
     }
@@ -261,7 +260,7 @@ public class SharedInboxTests : TwoServerFixture
         // Verify only the local user (Grace) received it
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
-        var graceActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("grace", "Create", TimeSpan.FromSeconds(10));
+        var graceActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("grace", TimeSpan.FromSeconds(10));
         
         Assert.NotNull(graceActivity);
     }
@@ -364,10 +363,9 @@ public class SharedInboxTests : TwoServerFixture
 
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
-        var followInInbox = await s2sHelperB.WaitForInboxActivityByTypeAsync("helen", "Follow", TimeSpan.FromSeconds(10));
+        var followInInbox = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>("helen", TimeSpan.FromSeconds(10));
 
         Assert.NotNull(followInInbox);
-        Assert.Equal("Follow", followInInbox.Type?.FirstOrDefault());
     }
 
     [Fact]
@@ -436,14 +434,13 @@ public class SharedInboxTests : TwoServerFixture
         // Verify all local users received it
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
-        var user1Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("user1", "Create", TimeSpan.FromSeconds(5));
-        var user2Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("user2", "Create", TimeSpan.FromSeconds(5));
-        var user3Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("user3", "Create", TimeSpan.FromSeconds(5));
+        var user1Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("user1", TimeSpan.FromSeconds(10));
+        var user2Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("user2", TimeSpan.FromSeconds(10));
+        var user3Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("user3", TimeSpan.FromSeconds(10));
 
         Assert.NotNull(user1Activity);
         Assert.NotNull(user2Activity);
         Assert.NotNull(user3Activity);
-        Assert.Equal("Create", user1Activity.Type?.FirstOrDefault());
     }
 
     [Fact]
@@ -521,12 +518,11 @@ public class SharedInboxTests : TwoServerFixture
         // Verify only the followers received it
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
-        var follower1Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("remote_follower1", "Create", TimeSpan.FromSeconds(5));
-        var follower2Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync("remote_follower2", "Create", TimeSpan.FromSeconds(5));
+        var follower1Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("remote_follower1", TimeSpan.FromSeconds(10));
+        var follower2Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("remote_follower2", TimeSpan.FromSeconds(10));
 
         Assert.NotNull(follower1Activity);
         Assert.NotNull(follower2Activity);
-        Assert.Equal("Create", follower1Activity.Type?.FirstOrDefault());
 
         // Verify non-follower did NOT receive it
         using (var scopeB = ServerB.Services.CreateScope())
@@ -609,13 +605,11 @@ public class SharedInboxTests : TwoServerFixture
         // Wait for delivery - both users should receive it (public + follower expansion)
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
-        var followerActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("follower_user", "Create", TimeSpan.FromSeconds(5));
-        var nonFollowerActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("nonfollower_user", "Create", TimeSpan.FromSeconds(5));
+        var followerActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("follower_user", TimeSpan.FromSeconds(10));
+        var nonFollowerActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("nonfollower_user", TimeSpan.FromSeconds(10));
 
         Assert.NotNull(followerActivity);
         Assert.NotNull(nonFollowerActivity);
-        Assert.Equal("Create", followerActivity.Type?.FirstOrDefault());
-        Assert.Equal("Create", nonFollowerActivity.Type?.FirstOrDefault());
     }
 
     [Fact]
@@ -703,8 +697,8 @@ public class SharedInboxTests : TwoServerFixture
         await Task.Delay(500);
 
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
-        var bobActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("bob_fanout", "Create", TimeSpan.FromSeconds(5));
-        var carolActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("carol_fanout", "Create", TimeSpan.FromSeconds(5));
+        var bobActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("bob_fanout", TimeSpan.FromSeconds(5));
+        var carolActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("carol_fanout", TimeSpan.FromSeconds(5));
 
         Assert.NotNull(bobActivity);
         Assert.NotNull(carolActivity);

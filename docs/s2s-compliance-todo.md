@@ -11,83 +11,6 @@ Last reviewed: 2026-02-28. Mastodon is the primary target for interop, with seco
 **Medium priority items:** 5 remaining  
 **Low priority items:** 2 remaining
 
----
-
-## ✅ Completed Items
-
-### ~~C5~~ · ~~`Reject` and `Undo` IRI-reference objects (`ILink`)~~ ✅
-
-**Status:** COMPLETED with tests  
-**Files:** `InboxProcessor.cs`, `OutboxProcessor.cs`  
-Both `HandleUndoAsync` and `HandleRejectAsync` now properly handle ILink references for Mastodon compatibility.  
-**Tests:** `ServerToServerTests.S2S_UserUndoesFollow_FollowerRemovedOnRemoteServer`, `ClientToServerTests.C2S_UndoFollowByIriReference_FollowingRemoved`, `ClientToServerTests.C2S_RejectFollowByIriReference_PendingFollowerRemoved`
-
----
-
-### ~~H1~~ · ~~Clock-skew validation on incoming HTTP signatures~~ ✅
-
-**Status:** COMPLETED with tests  
-**File:** `ActivityPubControllerBase.cs` → `ValidateRequestClockSkew`  
-All inbox endpoints now validate Date/Created headers against a 12-hour past / 5-minute future window.  
-**Tests:** `ServerToServerTests` includes clock skew validation tests
-
----
-
-### ~~H2~~ · ~~Follower-fan-out delivery shared inbox grouping~~ ✅
-
-**Status:** COMPLETED with tests  
-**File:** `ActivityDeliveryService.cs` → `QueueActivityForDeliveryAsync`  
-Followers are now grouped by `sharedInbox ?? personalInbox` to minimize redundant deliveries.  
-**Tests:** `SharedInboxTests.FollowerFanOut_MultipleFollowersSameServer_UsesSharedInbox`
-
----
-
-### ~~H3~~ · ~~Outbox `POST` endpoint authentication~~ ✅
-
-**Status:** COMPLETED with tests  
-**File:** `OutboxController.cs` → `VerifyCallerSignatureAsync`  
-Outbox POST now requires HTTP signature verification when `RequireHttpSignatures` is enabled.  
-**Tests:** `OutboxAuthenticationTests.cs`
-
----
-
-### ~~H4~~ · ~~`Update{Actor}` from remote servers~~ ✅
-
-**Status:** COMPLETED with tests  
-**File:** `InboxProcessor.cs` → `HandleIncomingUpdateAsync`  
-Remote profile updates are now processed with security checks (sender must match updated actor, only updates cached actors).  
-**Tests:** `ServerToServerTests.S2S_UpdatePerson_RefreshesLocalCachedActor`, `S2S_UpdatePerson_IgnoredWhenActorNotCached`
-
----
-
-### ~~H5~~ · ~~Shared inbox `Digest` header validation~~ ✅
-
-**Status:** COMPLETED  
-**File:** `SharedInboxController.cs` → `VerifySignatureAsync`  
-Digest header is now validated against body hash for shared inbox POST requests.
-
----
-
-### ~~L1~~ · ~~`410 Gone` for deleted resources~~ ✅
-
-**Status:** COMPLETED  
-**File:** `ObjectController.cs`  
-Returns `410 Gone` when accessing deleted objects instead of `404 Not Found`.
-
----
-
-### ~~L3~~ · ~~Concrete `Link` type in pattern-matches~~ ✅
-
-**Status:** COMPLETED  
-All pattern-matches now use `is ILink` (interface) instead of `is Link` (concrete type) per project guidelines.
-
----
-
-## 🟠 High — Spec Violations / Interop Issues
-
-*All high priority items have been resolved.*
-
----
 
 ## 🟡 Medium — Missing Features / Spec Gaps
 
@@ -139,35 +62,7 @@ For locked accounts (`manuallyApprovesFollowers = true`) this leaks the full soc
 
 ---
 
-### M5 · `NodeInfo` usage stats return hardcoded values
-
-**File:** `NodeInfoService.cs` → `GetInstanceStatsAsync`
-
-Many relay servers and crawlers use `totalUsers`, `activeHalfyear`, and `activeMonth` to decide whether to federate. Currently returns hardcoded values (1, 1, 1, 0) with a TODO comment.
-
-**Fix:** Implement real stats by adding count methods to `IActorRepository` and `IActivityRepository`:
-- `TotalUsers`: count all actors
-- `ActiveUsersMonth`: count actors with outbox activity in past 30 days
-- `ActiveUsersHalfYear`: count actors with outbox activity in past 180 days
-- `LocalPosts`: count Create activities in all outboxes
-
-**Priority:** Medium - affects relay/instance discovery.
-
----
-
 ## 🟢 Low / Cosmetic
-
-### L2 · `application/ld+json; profile=…` content-type handling
-
-**Files:** All controllers with `[Consumes]` / `[Produces]` attributes
-
-Mastodon sends `Content-Type: application/ld+json; profile="https://www.w3.org/ns/activitystreams"`. ASP.NET Core may not match this against `"application/ld+json"` depending on version and configuration.
-
-**Fix:** Validate with live Mastodon instance. If needed, add explicit media-type handling or a custom input formatter.
-
-**Priority:** Low - most modern ASP.NET Core versions handle this correctly.
-
----
 
 ### L4 · HTTP signature `ParseSignatureParts` splits on first `=` only
 

@@ -9,7 +9,7 @@ namespace Broca.ActivityPub.Persistence.InMemory;
 /// <summary>
 /// In-memory implementation of actor repository for testing and development
 /// </summary>
-public class InMemoryActorRepository : IActorRepository
+public class InMemoryActorRepository : IActorRepository, IActorStatistics
 {
     private readonly ConcurrentDictionary<string, Actor> _actors = new();
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _followers = new();
@@ -245,5 +245,12 @@ public class InMemoryActorRepository : IActorRepository
             }
         }
         return Task.CompletedTask;
+    }
+
+    public Task<int> CountLocalActorsAsync(CancellationToken cancellationToken = default)
+    {
+        // Exclude system actors (like 'sys') from user count
+        var count = _actors.Keys.Count(username => username != "sys");
+        return Task.FromResult(count);
     }
 }

@@ -9,7 +9,7 @@ namespace Broca.ActivityPub.Persistence.FileSystem;
 /// <summary>
 /// File system implementation of activity repository
 /// </summary>
-public class FileSystemActivityRepository : IActivityRepository
+public class FileSystemActivityRepository : IActivityRepository, IActivityStatistics
 {
     private readonly string _dataPath;
     private readonly ILogger<FileSystemActivityRepository> _logger;
@@ -644,5 +644,119 @@ public class FileSystemActivityRepository : IActivityRepository
         }
         
         return sanitized;
+    }
+
+    public async Task<int> CountCreateActivitiesSinceAsync(DateTime since, CancellationToken cancellationToken = default)
+    {
+        var activitiesDir = Path.Combine(_dataPath, "activities");
+        if (!Directory.Exists(activitiesDir))
+        {
+            return 0;
+        }
+
+        var count = 0;
+        try
+        {
+            var userDirs = Directory.GetDirectories(activitiesDir);
+            foreach (var userDir in userDirs)
+            {
+                var outboxDir = Path.Combine(userDir, "outbox");
+                if (!Directory.Exists(outboxDir))
+                {
+                    continue;
+                }
+
+                var files = Directory.GetFiles(outboxDir, "*.json");
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        // Use file creation time as a quick filter
+                        var fileTime = File.GetLastWriteTimeUtc(file);
+                        if (fileTime < since)
+                        {
+                            continue;
+                        }
+
+                        // Read and check if it's a Create activity
+                        var json = await File.ReadAllTextAsync(file, cancellationToken);
+                        var activity = JsonSerializer.Deserialize<IObjectOrLink>(json, _jsonOptions);
+                        
+                        if (activity is Create)
+                        {
+                            count++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error reading activity file {Path} for counting", file);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error counting Create activities");
+        }
+
+        return count;
+    }
+
+    public async Task<int> CountActiveActorsSinceAsync(DateTime since, CancellationToken cancellationToken = default)
+    {
+        var activitiesDir = Path.Combine(_dataPath, "activities");
+        if (!Directory.Exists(activitiesDir))
+        {
+            return 0;
+        }
+
+        var activeUsernames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var userDirs = Directory.GetDirectories(activitiesDir);
+            foreach (var userDir in userDirs)
+            {
+                var username = Path.GetFileName(userDir);
+                var outboxDir = Path.Combine(userDir, "outbox");
+                if (!Directory.Exists(outboxDir))
+                {
+                    continue;
+                }
+
+                var files = Directory.GetFiles(outboxDir, "*.json");
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        // Use file creation time as a quick filter
+                        var fileTime = File.GetLastWriteTimeUtc(file);
+                        if (fileTime < since)
+                        {
+                            continue;
+                        }
+
+                        // Read and check if it's a Create activity
+                        var json = await File.ReadAllTextAsync(file, cancellationToken);
+                        var activity = JsonSerializer.Deserialize<IObjectOrLink>(json, _jsonOptions);
+                        
+                        if (activity is Create)
+                        {
+                            activeUsernames.Add(username);
+                            break; // This user is active, no need to check more files
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error reading activity file {Path} for counting", file);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error counting active actors");
+        }
+
+        return activeUsernames.Count;
     }
 }

@@ -212,14 +212,11 @@ public class BlobStorageTests : TwoServerFixture
         // Wait for delivery to Bob on Server B
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
         
-        var deliveredActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync("bob", "Create", TimeSpan.FromSeconds(10));
+        var deliveredActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("bob", TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredActivity);
         
         // Extract the attachment URL from the delivered activity
-        var createActivity = deliveredActivity as Create;
-        Assert.NotNull(createActivity);
-        
-        var objectList = createActivity.Object as IEnumerable<IObjectOrLink>;
+        var objectList = deliveredActivity.Object as IEnumerable<IObjectOrLink>;
         var note = objectList?.FirstOrDefault() as Note;
         Assert.NotNull(note);
         Assert.NotNull(note.Attachment);

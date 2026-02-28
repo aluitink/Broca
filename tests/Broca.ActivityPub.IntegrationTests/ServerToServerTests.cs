@@ -55,13 +55,11 @@ public class ServerToServerTests : TwoServerFixture
         
         try
         {
-            var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+            var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>(
                 "bob", 
-                "Follow",
                 TimeSpan.FromSeconds(10));
 
             Assert.NotNull(deliveredFollow);
-            Assert.Equal("Follow", deliveredFollow.Type?.FirstOrDefault());
         }
         catch (TimeoutException)
         {
@@ -125,9 +123,8 @@ public class ServerToServerTests : TwoServerFixture
         // Wait for the Follow to be delivered to Bob's inbox
         // Pass ServerA as the sending server to get diagnostics from both sides if it times out
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
-        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>(
             "bob", 
-            "Follow",
             TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredFollow);
 
@@ -139,13 +136,11 @@ public class ServerToServerTests : TwoServerFixture
         await s2sHelperB.ProcessPendingDeliveriesAsync();
 
         // Wait for the note to be delivered to Alice's inbox on Server A
-        var deliveredCreate = await s2sHelperA.WaitForInboxActivityByTypeAsync(
+        var deliveredCreate = await s2sHelperA.WaitForInboxActivityByTypeAsync<Create>(
             "alice", 
-            "Create",
             TimeSpan.FromSeconds(10));
 
         Assert.NotNull(deliveredCreate);
-        Assert.Equal("Create", deliveredCreate.Type?.FirstOrDefault());
     }
 
     [Fact]
@@ -237,7 +232,7 @@ public class ServerToServerTests : TwoServerFixture
         var s2sHelperB = new ServerToServerHelper(ServerB, sendingServer: ServerA);
         var deliveredActivity = await s2sHelperB.WaitForInboxActivityAsync(
             "bob",
-            activity => activity.Type?.Contains("Follow") == true,
+            activity => activity is Follow,
             TimeSpan.FromSeconds(10));
 
         var deliveryTime = DateTime.UtcNow - startTime;
@@ -282,9 +277,8 @@ public class ServerToServerTests : TwoServerFixture
 
         // Wait for the Follow to be delivered to Bob's inbox
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
-        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>(
             "bob", 
-            "Follow",
             TimeSpan.FromSeconds(10));
         
         Assert.NotNull(deliveredFollow);
@@ -306,14 +300,12 @@ public class ServerToServerTests : TwoServerFixture
         await s2sHelperA.ProcessPendingDeliveriesAsync();
 
         // Wait for the Undo to be delivered to Bob's inbox
-        var deliveredUndo = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredUndo = await s2sHelperB.WaitForInboxActivityByTypeAsync<Undo>(
             "bob", 
-            "Undo",
             TimeSpan.FromSeconds(10));
 
         // Assert - Verify the Undo was delivered
         Assert.NotNull(deliveredUndo);
-        Assert.Equal("Undo", deliveredUndo.Type?.FirstOrDefault());
 
         // Verify Bob's followers collection no longer includes Alice
         using (var scopeB = ServerB.Services.CreateScope())
@@ -391,9 +383,8 @@ public class ServerToServerTests : TwoServerFixture
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
         
         await s2sHelperA.ProcessPendingDeliveriesAsync();
-        var deliveredLike = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredLike = await s2sHelperB.WaitForInboxActivityByTypeAsync<Like>(
             "bob", 
-            "Like",
             TimeSpan.FromSeconds(10));
         
         Assert.NotNull(deliveredLike);
@@ -417,14 +408,12 @@ public class ServerToServerTests : TwoServerFixture
         await s2sHelperA.ProcessPendingDeliveriesAsync();
 
         // Wait for the Undo to be delivered to Bob's inbox
-        var deliveredUndo = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredUndo = await s2sHelperB.WaitForInboxActivityByTypeAsync<Undo>(
             "bob", 
-            "Undo",
             TimeSpan.FromSeconds(10));
 
         // Assert - Verify the Undo was delivered
         Assert.NotNull(deliveredUndo);
-        Assert.Equal("Undo", deliveredUndo.Type?.FirstOrDefault());
 
         // Verify Bob's note no longer has the like
         using (var scopeB = ServerB.Services.CreateScope())
@@ -505,9 +494,8 @@ public class ServerToServerTests : TwoServerFixture
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
         
         await s2sHelperA.ProcessPendingDeliveriesAsync();
-        var deliveredAnnounce = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredAnnounce = await s2sHelperB.WaitForInboxActivityByTypeAsync<Announce>(
             "bob", 
-            "Announce",
             TimeSpan.FromSeconds(10));
         
         Assert.NotNull(deliveredAnnounce);
@@ -531,14 +519,12 @@ public class ServerToServerTests : TwoServerFixture
         await s2sHelperA.ProcessPendingDeliveriesAsync();
 
         // Wait for the Undo to be delivered to Bob's inbox
-        var deliveredUndo = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredUndo = await s2sHelperB.WaitForInboxActivityByTypeAsync<Undo>(
             "bob", 
-            "Undo",
             TimeSpan.FromSeconds(10));
 
         // Assert - Verify the Undo was delivered
         Assert.NotNull(deliveredUndo);
-        Assert.Equal("Undo", deliveredUndo.Type?.FirstOrDefault());
 
         // Verify Bob's note no longer has the announce
         using (var scopeB = ServerB.Services.CreateScope())
@@ -596,9 +582,8 @@ public class ServerToServerTests : TwoServerFixture
 
         // Wait for the Follow to be delivered to Bob's inbox
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
-        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>(
             "bob", 
-            "Follow",
             TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredFollow);
 
@@ -671,9 +656,8 @@ public class ServerToServerTests : TwoServerFixture
         await c2sHelper.PostToOutboxAsync(followActivity);
 
         // Wait for delivery
-        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>(
             "bob", 
-            "Follow",
             TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredFollow);
 
@@ -700,9 +684,8 @@ public class ServerToServerTests : TwoServerFixture
         await s2sHelperA.ProcessPendingDeliveriesAsync();
 
         // Wait for Undo to be delivered
-        var deliveredUndo = await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        var deliveredUndo = await s2sHelperB.WaitForInboxActivityByTypeAsync<Undo>(
             "bob", 
-            "Undo",
             TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredUndo);
 
@@ -765,9 +748,8 @@ public class ServerToServerTests : TwoServerFixture
         await c2sHelper.PostToOutboxAsync(followActivity);
 
         // Wait for delivery
-        await s2sHelperB.WaitForInboxActivityByTypeAsync(
+        await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>(
             "bob", 
-            "Follow",
             TimeSpan.FromSeconds(10));
 
         // Assert - Fetch Alice's following collection via HTTP
@@ -816,7 +798,7 @@ public class ServerToServerTests : TwoServerFixture
 
         // Wait for the Follow to be delivered to Bob's inbox
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
-        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync("bob", "Follow", TimeSpan.FromSeconds(10));
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>("bob", TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredFollow);
 
         // Assert - Bob's followers should NOT include Alice yet (manual approval required)
@@ -871,7 +853,7 @@ public class ServerToServerTests : TwoServerFixture
         var followActivity = TestDataSeeder.CreateFollow(aliceId, bobId);
         await c2sHelperAlice.PostToOutboxAsync(followActivity);
 
-        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync("bob", "Follow", TimeSpan.FromSeconds(10));
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>("bob", TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredFollow);
 
         // Step 2: Bob manually sends Accept via C2S
@@ -894,7 +876,7 @@ public class ServerToServerTests : TwoServerFixture
         }
 
         // Assert - Accept should be delivered to Alice's inbox
-        var deliveredAccept = await s2sHelperA.WaitForInboxActivityByTypeAsync("alice", "Accept", TimeSpan.FromSeconds(10));
+        var deliveredAccept = await s2sHelperA.WaitForInboxActivityByTypeAsync<Accept>("alice", TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredAccept);
     }
 
@@ -938,7 +920,7 @@ public class ServerToServerTests : TwoServerFixture
         var followActivity = TestDataSeeder.CreateFollow(aliceId, bobId);
         await c2sHelperAlice.PostToOutboxAsync(followActivity);
 
-        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync("bob", "Follow", TimeSpan.FromSeconds(10));
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>("bob", TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredFollow);
 
         using (var scopeA = ServerA.Services.CreateScope())
@@ -968,7 +950,7 @@ public class ServerToServerTests : TwoServerFixture
         }
 
         // Assert - Reject should be delivered to Alice's inbox and Alice should no longer follow Bob
-        var deliveredReject = await s2sHelperA.WaitForInboxActivityByTypeAsync("alice", "Reject", TimeSpan.FromSeconds(10));
+        var deliveredReject = await s2sHelperA.WaitForInboxActivityByTypeAsync<Reject>("alice", TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredReject);
 
         using (var scopeA = ServerA.Services.CreateScope())
@@ -1024,14 +1006,14 @@ public class ServerToServerTests : TwoServerFixture
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
         await s2sHelperA.ProcessPendingDeliveriesAsync();
-        await s2sHelperB.WaitForInboxActivityByTypeAsync("bob", "Follow", TimeSpan.FromSeconds(10));
+        await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>("bob", TimeSpan.FromSeconds(10));
 
         // Step 2: Bob creates a note
         var createActivity = TestDataSeeder.CreateCreateActivity(bobId, "Note to be deleted");
         await c2sHelperBob.PostToOutboxAsync(createActivity);
 
         await s2sHelperB.ProcessPendingDeliveriesAsync();
-        var deliveredCreate = await s2sHelperA.WaitForInboxActivityByTypeAsync("alice", "Create", TimeSpan.FromSeconds(10));
+        var deliveredCreate = await s2sHelperA.WaitForInboxActivityByTypeAsync<Create>("alice", TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredCreate);
 
         // Extract the object ID from the Create activity
@@ -1051,7 +1033,7 @@ public class ServerToServerTests : TwoServerFixture
         await s2sHelperB.ProcessPendingDeliveriesAsync();
         
         // Assert - Delete should be delivered to Alice's inbox
-        var deliveredDelete = await s2sHelperA.WaitForInboxActivityByTypeAsync("alice", "Delete", TimeSpan.FromSeconds(10));
+        var deliveredDelete = await s2sHelperA.WaitForInboxActivityByTypeAsync<Delete>("alice", TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredDelete);
 
         // Verify the object is now a Tombstone in Alice's repository

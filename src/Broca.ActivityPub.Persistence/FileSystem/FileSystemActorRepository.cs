@@ -11,7 +11,7 @@ namespace Broca.ActivityPub.Persistence.FileSystem;
 /// <summary>
 /// File system implementation of actor repository
 /// </summary>
-public class FileSystemActorRepository : IActorRepository
+public class FileSystemActorRepository : IActorRepository, IActorStatistics
 {
     private readonly string _dataPath;
     private readonly ILogger<FileSystemActorRepository> _logger;
@@ -493,6 +493,29 @@ public class FileSystemActorRepository : IActorRepository
         finally
         {
             _writeLock.Release();
+        }
+    }
+
+    public Task<int> CountLocalActorsAsync(CancellationToken cancellationToken = default)
+    {
+        var actorsDir = Path.Combine(_dataPath, "actors");
+        if (!Directory.Exists(actorsDir))
+        {
+            return Task.FromResult(0);
+        }
+
+        try
+        {
+            var count = Directory.GetDirectories(actorsDir)
+                .Select(Path.GetFileName)
+                .Where(name => !string.IsNullOrEmpty(name) && name != "sys")
+                .Count();
+            return Task.FromResult(count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error counting local actors");
+            return Task.FromResult(0);
         }
     }
 }

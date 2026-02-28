@@ -122,6 +122,23 @@ public class ActivityBuilder : IActivityBuilder
         };
     }
 
+    public Undo UndoByReference(string activityId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(activityId);
+
+        _logger.LogDebug("Creating Undo activity by reference: {ActorId} undoes {ActivityId}", _actorId, activityId);
+
+        return new Undo
+        {
+            JsonLDContext = new List<ITermDefinition> { new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) },
+            Id = GenerateActivityId("undo"),
+            Type = new[] { "Undo" },
+            Actor = new List<IObjectOrLink> { new Link { Href = new Uri(_actorId) } },
+            Object = new List<IObjectOrLink> { new Link { Href = new Uri(activityId) } },
+            Published = DateTime.UtcNow
+        };
+    }
+
     public Like Like(string objectId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(objectId);
@@ -187,6 +204,23 @@ public class ActivityBuilder : IActivityBuilder
             Type = new[] { "Reject" },
             Actor = new List<IObjectOrLink> { new Link { Href = new Uri(_actorId) } },
             Object = new List<IObjectOrLink> { originalActivity },
+            Published = DateTime.UtcNow
+        };
+    }
+
+    public Reject RejectByReference(string activityId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(activityId);
+
+        _logger.LogDebug("Creating Reject activity by reference: {ActorId} rejects {ActivityId}", _actorId, activityId);
+
+        return new Reject
+        {
+            JsonLDContext = new List<ITermDefinition> { new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) },
+            Id = GenerateActivityId("reject"),
+            Type = new[] { "Reject" },
+            Actor = new List<IObjectOrLink> { new Link { Href = new Uri(_actorId) } },
+            Object = new List<IObjectOrLink> { new Link { Href = new Uri(activityId) } },
             Published = DateTime.UtcNow
         };
     }

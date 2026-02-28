@@ -8,7 +8,7 @@ namespace Broca.ActivityPub.Persistence.InMemory;
 /// <summary>
 /// In-memory implementation of activity repository for testing and development
 /// </summary>
-public class InMemoryActivityRepository : IActivityRepository
+public class InMemoryActivityRepository : IActivityRepository, IActivityStatistics
 {
     private readonly ConcurrentDictionary<string, List<(string Id, IObjectOrLink Activity, DateTime Timestamp)>> _inboxes = new();
     private readonly ConcurrentDictionary<string, List<(string Id, IObjectOrLink Activity, DateTime Timestamp)>> _outboxes = new();
@@ -619,6 +619,56 @@ public class InMemoryActivityRepository : IActivityRepository
         _likes.Clear();
         _shares.Clear();
         _replies.Clear();
+    }
+
+    public Task<int> CountCreateActivitiesSinceAsync(DateTime since, CancellationToken cancellationToken = default)
+    {
+        var count = 0;
+        foreach (var outbox in _outboxes.Values)
+        {
+            lock (outbox)
+            {
+                count += outbox.Count(entry =>
+                {
+                    if (entry.Activity is not Create createActivity)
+                        return false;
+                    
+                    // Use Published date if available, otherwise fall back to storage timestamp
+                    var activityDate = createActivity.Published ?? entry.Timestamp;
+                    return activityDate >= since;
+                });
+            }
+        }
+        return Task.FromResult(count);
+    }
+
+    public Task<int> CountActiveActorsSinceAsync(DateTime since, CancellationToken cancellationToken = default)
+    {
+        var activeUsernames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in _outboxes)
+        {
+            var username = kvp.Key;
+            var outbox = kvp.Value;
+            
+            lock (outbox)
+            {
+                var hasCreateActivity = outbox.Any(entry =>
+                {
+                    if (entry.Activity is not Create createActivity)
+                        return false;
+                    
+                    // Use Published date if available, otherwise fall back to storage timestamp
+                    var activityDate = createActivity.Published ?? entry.Timestamp;
+                    return activityDate >= since;
+                });
+                
+                if (hasCreateActivity)
+                {
+                    activeUsernames.Add(username);
+                }
+            }
+        }
+        return Task.FromResult(activeUsernames.Count);
     }
 }
 

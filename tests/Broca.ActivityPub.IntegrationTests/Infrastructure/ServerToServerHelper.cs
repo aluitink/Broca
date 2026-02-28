@@ -122,8 +122,9 @@ public class ServerToServerHelper
     }
 
     /// <summary>
-    /// Polls the inbox until an activity of the specified type is found
+    /// Polls the inbox until an activity of the specified type is found (string-based, prefer generic version)
     /// </summary>
+    [Obsolete("Use WaitForInboxActivityByTypeAsync<T>() instead for better type safety")]
     public async Task<Activity> WaitForInboxActivityByTypeAsync(
         string username, 
         string activityType,
@@ -133,6 +134,44 @@ public class ServerToServerHelper
             username,
             activity => activity.Type?.Contains(activityType) == true,
             timeout);
+    }
+
+    /// <summary>
+    /// Polls the inbox until an activity of the specified type is found (type-safe)
+    /// </summary>
+    /// <typeparam name="T">The activity type to wait for (e.g., Create, Follow, Like)</typeparam>
+    public async Task<T> WaitForInboxActivityByTypeAsync<T>(
+        string username,
+        TimeSpan? timeout = null) where T : Activity
+    {
+        var actualTimeout = timeout ?? _defaultTimeout;
+        var endTime = DateTime.UtcNow + actualTimeout;
+
+        while (DateTime.UtcNow < endTime)
+        {
+            using var scope = _server.Services.CreateScope();
+            var activityRepo = scope.ServiceProvider.GetRequiredService<IActivityRepository>();
+
+            var inboxActivities = await activityRepo.GetInboxActivitiesAsync(username, 100);
+            
+            var match = inboxActivities.OfType<T>().FirstOrDefault();
+            if (match != null)
+            {
+                return match;
+            }
+
+            await Task.Delay(_pollInterval);
+        }
+
+        // Collect diagnostic information on timeout
+        var diagnostics = await CollectDiagnosticsAsync(username);
+        var crossServerDiagnostics = _sendingServer != null 
+            ? await CollectCrossServerDiagnosticsAsync(_sendingServer) 
+            : string.Empty;
+        
+        throw new TimeoutException(
+            $"Activity of type {typeof(T).Name} not found in {username}'s inbox within {actualTimeout.TotalSeconds} seconds\n" +
+            $"Diagnostic Information:\n{diagnostics}{crossServerDiagnostics}");
     }
 
     /// <summary>
@@ -238,7 +277,7 @@ public class ServerToServerHelper
                 var inboxCount = inboxActivities.Count();
                 var inboxTypes = inboxActivities
                     .OfType<Activity>()
-                    .Select(a => a.Type?.FirstOrDefault() ?? "unknown")
+                    .Select(a => a.GetType().Name)
                     .GroupBy(t => t)
                     .Select(g => $"{g.Key}({g.Count()})")
                     .ToList();
@@ -252,13 +291,8 @@ Inbox Summary:
 Recent Inbox Activities (first 5):
 {string.Join("\n", inboxActivities.OfType<Activity>().Take(5).Select(a =>
 {
-    var actorId = a.Actor?.FirstOrDefault() switch
-    {
-        Link link => link.Href?.ToString(),
-        IObject obj => obj.Id,
-        _ => "unknown"
-    };
-    return $"  - Type: {a.Type?.FirstOrDefault()}, Id: {a.Id}, Actor: {actorId}";
+    var actorId = a.Actor.GetFirstId() ?? "unknown";
+    return $"  - Type: {a.GetType().Name}, Id: {a.Id}, Actor: {actorId}";
 }))}
 ";
             }
@@ -270,13 +304,7 @@ Recent Inbox Activities (first 5):
             var pending = await deliveryQueue.GetPendingDeliveriesAsync(100);
             var pendingList = pending.Select(d => 
             {
-                var activityId = d.Activity switch
-                {
-                    Activity act => act.Id,
-                    Link link => link.Href?.ToString(),
-                    IObject obj => obj.Id,
-                    _ => "unknown"
-                };
+                var activityId = d.Activity.GetId() ?? "unknown";
                 return $"  - Activity: {activityId}, To: {d.InboxUrl}, Status: {d.Status}, Attempts: {d.AttemptCount}";
             }).ToList();
 
@@ -296,17 +324,7 @@ Delivery Queue Stats:
                 diagnosticInfo += $"\nSearching for Activity ID: {activityId}\n";
                 
                 // Check if it's in the pending deliveries
-                var relatedDeliveries = pending.Where(d => 
-                {
-                    var id = d.Activity switch
-                    {
-                        Activity act => act.Id,
-                        Link link => link.Href?.ToString(),
-                        IObject obj => obj.Id,
-                        _ => null
-                    };
-                    return id == activityId;
-                }).ToList();
+                var relatedDeliveries = pending.Where(d => d.Activity.GetId() == activityId).ToList();
                 
                 if (relatedDeliveries.Any())
                 {
@@ -347,13 +365,7 @@ Delivery Queue Stats:
                 .ThenByDescending(d => d.CreatedAt)
                 .Select(d => 
                 {
-                    var activityId = d.Activity switch
-                    {
-                        Activity act => act.Id,
-                        Link link => link.Href?.ToString(),
-                        IObject obj => obj.Id,
-                        _ => "unknown"
-                    };
+                    var activityId = d.Activity.GetId() ?? "unknown";
                     var errorInfo = !string.IsNullOrEmpty(d.LastError) ? $", Error: {d.LastError}" : "";
                     return $"  - [{d.Status}] Activity: {activityId}, To: {d.InboxUrl}, Attempts: {d.AttemptCount}{errorInfo}";
                 }).ToList();

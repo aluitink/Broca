@@ -38,6 +38,13 @@ public interface IActivityBuilder
     Undo Undo(Activity originalActivity);
 
     /// <summary>
+    /// Creates an Undo activity referencing an activity by IRI (Mastodon-style)
+    /// </summary>
+    /// <param name="activityId">The IRI of the activity to undo</param>
+    /// <returns>Undo activity with object as ILink reference</returns>
+    Undo UndoByReference(string activityId);
+
+    /// <summary>
     /// Creates a Like activity
     /// </summary>
     /// <param name="objectId">The object to like</param>
@@ -64,6 +71,13 @@ public interface IActivityBuilder
     /// <param name="originalActivity">The activity to reject</param>
     /// <returns>Reject activity</returns>
     Reject Reject(Activity originalActivity);
+
+    /// <summary>
+    /// Creates a Reject activity referencing an activity by IRI (Mastodon-style)
+    /// </summary>
+    /// <param name="activityId">The IRI of the activity to reject</param>
+    /// <returns>Reject activity with object as ILink reference</returns>
+    Reject RejectByReference(string activityId);
 
     /// <summary>
     /// Creates a TentativeAccept activity (e.g., pending approval)
