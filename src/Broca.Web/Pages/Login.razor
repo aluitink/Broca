@@ -1,7 +1,9 @@
 @page "/login"
 @using Broca.Web.Services
+@using Broca.ActivityPub.Core.Interfaces
 @inject AuthenticationStateService AuthState
 @inject NavigationManager Navigation
+@inject IActivityPubClient ActivityPubClient
 
 <PageTitle>Login - Broca</PageTitle>
 
@@ -23,8 +25,8 @@
             <div class="form-field">
                 <FluentTextField 
                     @bind-Value="_loginModel.ActorId"
-                    Label="Actor ID"
-                    Placeholder="https://example.com/users/alice"
+                    Label="Username"
+                    Placeholder="admin or admin@example.com"
                     Required="true"
                     Style="width: 100%;"
                     Disabled="@_isLoading">
@@ -93,17 +95,17 @@
 
         try
         {
-            var success = await AuthState.LoginAsync(_loginModel.ActorId!, _loginModel.ApiKey!);
+            var resolvedActorId = await ResolveActorIdAsync(_loginModel.ActorId!.Trim());
+            var success = await AuthState.LoginAsync(resolvedActorId, _loginModel.ApiKey!);
 
             if (success)
             {
-                // Navigate to return URL or home
                 var destination = string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : ReturnUrl;
                 Navigation.NavigateTo(destination);
             }
             else
             {
-                _errorMessage = "Authentication failed. Please check your Actor ID and API Key.";
+                _errorMessage = "Authentication failed. Please check your username and API key.";
             }
         }
         catch (Exception ex)
@@ -115,6 +117,23 @@
             _isLoading = false;
             StateHasChanged();
         }
+    }
+
+    private async Task<string> ResolveActorIdAsync(string input)
+    {
+        if (Uri.TryCreate(input, UriKind.Absolute, out _))
+            return input;
+
+        if (input.Contains('@'))
+        {
+            var actor = await ActivityPubClient.GetActorByAliasAsync(input);
+            return actor.Id ?? throw new InvalidOperationException($"Actor ID not found for alias '{input}'");
+        }
+
+        // Bare username — resolve against the local instance
+        var baseUri = new Uri(Navigation.BaseUri);
+        var actorUri = new Uri(baseUri, $"ap/users/{Uri.EscapeDataString(input)}");
+        return actorUri.ToString();
     }
 
     private class LoginModel
