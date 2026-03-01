@@ -31,7 +31,7 @@
                     <div class="follower-item">
                         <ObjectDisplay Object="@follower" />
                         
-                        @if (ShowFollowButton && Client.ActorId != null)
+                        @if (ShowFollowButton && Client.ActorId != null && follower.Id != Client.ActorId)
                         {
                             <div class="follower-actions">
                                 @if (IsFollowing(follower))
@@ -47,7 +47,7 @@
                                     <button class="follow-button" 
                                             @onclick="() => HandleFollowClick(follower)"
                                             disabled="@IsProcessing(follower)">
-                                        Follow Back
+                                        @(IsOwnProfile ? "Follow Back" : "Follow")
                                     </button>
                                 }
                             </div>
@@ -138,6 +138,13 @@
     /// </summary>
     [Parameter]
     public bool ShowFollowButton { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether the followers list belongs to the current user's own profile.
+    /// When true, the follow button is labelled "Follow Back"; otherwise it reads "Follow".
+    /// </summary>
+    [Parameter]
+    public bool IsOwnProfile { get; set; } = false;
 
     /// <summary>
     /// Gets or sets additional CSS classes.

@@ -139,7 +139,8 @@
                             @if (currentActor is Actor actor && actor.Followers != null)
                             {
                                 <FollowersList Actor="@actor" 
-                                             FollowersUrl="@actor.Followers.Href" />
+                                             FollowersUrl="@actor.Followers.Href"
+                                             IsOwnProfile="@IsViewingSelf" />
                             }
                             else
                             {
@@ -280,6 +281,11 @@
     /// </summary>
     [Parameter]
     public EventCallback<bool> OnFollowStateChanged { get; set; }
+
+    private bool IsViewingSelf =>
+        currentActor?.Id != null &&
+        !string.IsNullOrEmpty(Client.ActorId) &&
+        currentActor.Id == Client.ActorId;
 
     /// <summary>
     /// Determines if this is an external actor (not on the current instance)
