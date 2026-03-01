@@ -71,11 +71,33 @@ public class InboxController : ActivityPubControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var activities = await _activityRepository.GetInboxActivitiesAsync(username, limit, offset);
-            
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
-            
+
+            IEnumerable<IObjectOrLink> activities;
+            int totalCount;
+            bool itemsAlreadyPaginated;
+
+            if (search?.HasSearchCriteria == true && _activityRepository is ISearchableActivityRepository searchableRepo)
+            {
+                activities = await searchableRepo.GetInboxActivitiesAsync(username, search, limit, offset);
+                totalCount = await searchableRepo.GetInboxCountAsync(username, search);
+                itemsAlreadyPaginated = true;
+            }
+            else if (search?.HasSearchCriteria == true)
+            {
+                activities = await _activityRepository.GetInboxActivitiesAsync(username, int.MaxValue, 0);
+                totalCount = activities.Count();
+                itemsAlreadyPaginated = false;
+            }
+            else
+            {
+                activities = await _activityRepository.GetInboxActivitiesAsync(username, limit, offset);
+                totalCount = await _activityRepository.GetInboxCountAsync(username);
+                itemsAlreadyPaginated = true;
+            }
+
             // Rewrite attachment URLs and enrich with collection metadata
             foreach (var activity in activities)
             {
@@ -87,52 +109,13 @@ public class InboxController : ActivityPubControllerBase
                 // Enrich activities with collection information (replies, likes, shares counts)
                 await _enrichmentService.EnrichActivityAsync(activity, baseUrl);
             }
-            
-            var totalCount = await _activityRepository.GetInboxCountAsync(username);
 
-            // Check if pagination parameters were explicitly provided
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
-
-            if (!hasPageParam && !hasLimitParam)
-            {
-                // Return the collection wrapper when no pagination params provided
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/inbox",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/inbox?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
-            }
-            else
-            {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/inbox?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/inbox") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = activities.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/inbox?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/inbox?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
-            }
+            var collectionUrl = $"{baseUrl}/users/{username}/inbox";
+            return BuildCollectionResponse(collectionUrl, activities, totalCount, page, limit, search, itemsAlreadyPaginated);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {

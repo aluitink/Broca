@@ -29,6 +29,17 @@ public static class FluentRendererExtensions
         registry.RegisterRenderer(typeof(Video), new FluentVideoRendererProxy());
         registry.RegisterRenderer(typeof(Document), new FluentDocumentRendererProxy());
         registry.RegisterRenderer(typeof(Link), new FluentLinkRendererProxy());
+        registry.RegisterRenderer(typeof(Question), new FluentQuestionRendererProxy());
+        registry.RegisterRenderer(typeof(Audio), new FluentAudioRendererProxy());
+        registry.RegisterRenderer(typeof(Event), new FluentEventRendererProxy());
+        registry.RegisterRenderer(typeof(Place), new FluentPlaceRendererProxy());
+        registry.RegisterRenderer(typeof(Page), new FluentPageRendererProxy());
+        
+        // Activity type renderers
+        registry.RegisterRenderer(typeof(Update), new FluentUpdateRendererProxy());
+        registry.RegisterRenderer(typeof(Delete), new FluentDeleteRendererProxy());
+        registry.RegisterRenderer(typeof(Block), new FluentBlockRendererProxy());
+        registry.RegisterRenderer(typeof(Undo), new FluentUndoRendererProxy());
     }
 }
 
@@ -219,6 +230,150 @@ internal class FluentLinkRendererProxy : ObjectRendererBase<Link>
         {
             builder.OpenComponent<FluentLinkRenderer>(0);
             builder.AddAttribute(1, "Link", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Question objects using FluentQuestionRenderer.
+/// </summary>
+internal class FluentQuestionRendererProxy : ObjectRendererBase<Question>
+{
+    protected override RenderFragment Render(Question obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentQuestionRenderer>(0);
+            builder.AddAttribute(1, "Question", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Audio objects using FluentAudioRenderer.
+/// </summary>
+internal class FluentAudioRendererProxy : ObjectRendererBase<Audio>
+{
+    protected override RenderFragment Render(Audio obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentAudioRenderer>(0);
+            builder.AddAttribute(1, "Audio", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Event objects using FluentEventRenderer.
+/// </summary>
+internal class FluentEventRendererProxy : ObjectRendererBase<Event>
+{
+    protected override RenderFragment Render(Event obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentEventRenderer>(0);
+            builder.AddAttribute(1, "Event", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Place objects using FluentPlaceRenderer.
+/// </summary>
+internal class FluentPlaceRendererProxy : ObjectRendererBase<Place>
+{
+    protected override RenderFragment Render(Place obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentPlaceRenderer>(0);
+            builder.AddAttribute(1, "Place", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Page objects using FluentPageRenderer.
+/// </summary>
+internal class FluentPageRendererProxy : ObjectRendererBase<Page>
+{
+    protected override RenderFragment Render(Page obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentPageRenderer>(0);
+            builder.AddAttribute(1, "Page", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Update activities using FluentUpdateRenderer.
+/// </summary>
+internal class FluentUpdateRendererProxy : ObjectRendererBase<Update>
+{
+    protected override RenderFragment Render(Update obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentUpdateRenderer>(0);
+            builder.AddAttribute(1, "Update", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Delete activities using FluentDeleteRenderer.
+/// </summary>
+internal class FluentDeleteRendererProxy : ObjectRendererBase<Delete>
+{
+    protected override RenderFragment Render(Delete obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentDeleteRenderer>(0);
+            builder.AddAttribute(1, "Delete", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Block activities using FluentBlockRenderer.
+/// </summary>
+internal class FluentBlockRendererProxy : ObjectRendererBase<Block>
+{
+    protected override RenderFragment Render(Block obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentBlockRenderer>(0);
+            builder.AddAttribute(1, "Block", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Undo activities using FluentUndoRenderer.
+/// </summary>
+internal class FluentUndoRendererProxy : ObjectRendererBase<Undo>
+{
+    protected override RenderFragment Render(Undo obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentUndoRenderer>(0);
+            builder.AddAttribute(1, "Undo", obj);
             builder.CloseComponent();
         };
     }

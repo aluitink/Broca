@@ -1,0 +1,300 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components.Services
+@inject ActorResolutionService ActorResolver
+@inject NavigationManager Navigation
+@inherits ComponentBase
+
+<FluentCard Class="@($"fluent-block-card {CssClass}")">
+    @if (Block != null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            @* Header with actor and timestamp *@
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="block-header">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    @if (Block.Actor?.Any() == true)
+                    {
+                        <div class="actor-info-clickable" @onclick="NavigateToActor" style="cursor: pointer;">
+                            <FluentPersona Name="@GetActorDisplay()"
+                                           Image="@GetActorImageUrl()"
+                                           ImageSize="32px"
+                                           TextPosition="@TextPosition.End">
+                                @if (!string.IsNullOrEmpty(GetActorUsername()))
+                                {
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                        @@@GetActorUsername()
+                                    </FluentLabel>
+                                }
+                            </FluentPersona>
+                        </div>
+                    }
+
+                    <FluentBadge Appearance="Appearance.Neutral" BackgroundColor="var(--error)">
+                        🚫 Blocked
+                    </FluentBadge>
+                </FluentStack>
+                
+                @if (Block.Published.HasValue)
+                {
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="block-timestamp">
+                        <time datetime="@Block.Published.Value.ToString("o")" title="@Block.Published.Value.ToString("f")">
+                            @FormatDateTime(Block.Published.Value)
+                        </time>
+                    </FluentLabel>
+                }
+            </FluentStack>
+
+            @* Show blocked target *@
+            @if (ShowTarget && Block.Object?.Any() == true)
+            {
+                <FluentDivider Style="margin: 0;" />
+                <div class="block-target">
+                    @if (targetInfo != null)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.PersonProhibited())" Color="Color.Neutral" />
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                                <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                                    @targetInfo.Name
+                                </FluentLabel>
+                                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                    @@@targetInfo.PreferredUsername
+                                </FluentLabel>
+                            </FluentStack>
+                        </FluentStack>
+                    }
+                    else
+                    {
+                        var targetRef = Block.Object.First();
+                        var targetDisplay = GetTargetDisplay(targetRef);
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.PersonProhibited())" Color="Color.Neutral" />
+                            <FluentLabel Typo="Typography.Body">
+                                @targetDisplay
+                            </FluentLabel>
+                        </FluentStack>
+                    }
+                </div>
+            }
+
+            @* Show reason if available *@
+            @if (ShowReason && !string.IsNullOrEmpty(GetBlockReason()))
+            {
+                <FluentDivider Style="margin: 0;" />
+                <div class="block-reason">
+                    <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                        Reason:
+                    </FluentLabel>
+                    <FluentLabel Typo="Typography.Body">
+                        @GetBlockReason()
+                    </FluentLabel>
+                </div>
+            }
+
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Block)
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    private ActorInfo? actorInfo;
+    private ActorInfo? targetInfo;
+
+    [Parameter]
+    public Block? Block { get; set; }
+
+    [Parameter]
+    public bool ShowTarget { get; set; } = true;
+
+    [Parameter]
+    public bool ShowReason { get; set; } = false;
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public RenderFragment<Block>? AdditionalContent { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadActorInfo();
+        await LoadTargetInfo();
+    }
+
+    private async Task LoadActorInfo()
+    {
+        if (Block?.Actor?.Any() == true)
+        {
+            var actorRef = Block.Actor.First();
+            string? actorId = null;
+
+            if (actorRef is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
+                actorId = actorObj.Id;
+            else if (actorRef is Link link && link.Href != null)
+                actorId = link.Href.ToString();
+
+            if (!string.IsNullOrEmpty(actorId))
+            {
+                try
+                {
+                    var actorLinkObj = new Link { Href = new Uri(actorId) };
+                    actorInfo = await ActorResolver.ResolveActorAsync(actorLinkObj);
+                }
+                catch
+                {
+                    // Ignore errors in actor resolution
+                }
+            }
+        }
+    }
+
+    private async Task LoadTargetInfo()
+    {
+        if (Block?.Object?.Any() == true)
+        {
+            var targetRef = Block.Object.First();
+            string? targetId = null;
+
+            if (targetRef is IObject targetObj && !string.IsNullOrEmpty(targetObj.Id))
+                targetId = targetObj.Id;
+            else if (targetRef is Link link && link.Href != null)
+                targetId = link.Href.ToString();
+
+            if (!string.IsNullOrEmpty(targetId))
+            {
+                try
+                {
+                    var targetLinkObj = new Link { Href = new Uri(targetId) };
+                    targetInfo = await ActorResolver.ResolveActorAsync(targetLinkObj);
+                }
+                catch
+                {
+                    // Ignore errors in target resolution
+                }
+            }
+        }
+    }
+
+    private string GetBlockReason()
+    {
+        if (Block?.Summary?.Any() == true)
+        {
+            return Block.Summary.First();
+        }
+        if (Block?.Content?.Any() == true)
+        {
+            return Block.Content.First();
+        }
+        return string.Empty;
+    }
+
+    private string GetTargetDisplay(object? targetRef)
+    {
+        if (targetRef == null) return "Unknown";
+
+        if (targetRef is Actor actor && actor.Name?.Any() == true)
+            return actor.Name.First();
+
+        if (targetRef is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true)
+                return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id))
+                return obj.Id;
+        }
+
+        if (targetRef is Link link && link.Href != null)
+            return link.Href.ToString();
+
+        return "Unknown";
+    }
+
+    private string GetActorDisplay()
+    {
+        if (actorInfo != null)
+            return actorInfo.Name;
+
+        var actorRef = Block?.Actor?.FirstOrDefault();
+        if (actorRef == null) return "Unknown";
+
+        if (actorRef is Actor actor && actor.Name?.Any() == true)
+            return actor.Name.First();
+
+        if (actorRef is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true)
+                return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id))
+                return obj.Id;
+        }
+
+        if (actorRef is Link link && link.Href != null)
+            return link.Href.ToString();
+
+        return "Unknown";
+    }
+
+    private string GetActorImageUrl()
+    {
+        if (actorInfo?.IconUrl != null)
+            return actorInfo.IconUrl;
+
+        var actorRef = Block?.Actor?.FirstOrDefault();
+        if (actorRef == null) return string.Empty;
+
+        if (actorRef is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                if (url is Link link && link.Href != null)
+                    return link.Href.ToString();
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string GetActorUsername()
+    {
+        if (actorInfo != null)
+            return actorInfo.PreferredUsername;
+
+        var actorRef = Block?.Actor?.FirstOrDefault();
+        if (actorRef == null) return string.Empty;
+
+        if (actorRef is Person person && !string.IsNullOrEmpty(person.PreferredUsername))
+            return person.PreferredUsername;
+
+        return string.Empty;
+    }
+
+    private void NavigateToActor()
+    {
+        if (actorInfo != null)
+        {
+            Navigation.NavigateTo($"/actor?id={Uri.EscapeDataString(actorInfo.Id)}");
+        }
+    }
+
+    private string FormatDateTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (timeSpan.TotalMinutes < 1)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays}d ago";
+
+        return dateTime.ToString("MMM d, yyyy");
+    }
+}

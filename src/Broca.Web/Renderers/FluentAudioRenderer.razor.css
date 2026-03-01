@@ -1,0 +1,33 @@
+.fluent-audio-card {
+    padding: 1rem;
+}
+
+.audio-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.audio-info {
+    flex: 1;
+}
+
+.audio-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.audio-player {
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
+.audio-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--neutral-foreground-hint);
+}

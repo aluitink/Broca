@@ -1,0 +1,306 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@using Broca.ActivityPub.Components.Services
+@using Broca.ActivityPub.Core.Interfaces
+@inject ActorResolutionService ActorResolver
+@inject NavigationManager Navigation
+@inject IActivityPubClient? ActivityPubClient
+@inherits ComponentBase
+
+<FluentCard Class="@($"fluent-update-card {CssClass}")">
+    @if (Update != null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            @* Header with actor and timestamp *@
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="update-header">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    @if (Update.Actor?.Any() == true)
+                    {
+                        <div class="actor-info-clickable" @onclick="NavigateToActor" style="cursor: pointer;">
+                            <FluentPersona Name="@GetActorDisplay()"
+                                           Image="@GetActorImageUrl()"
+                                           ImageSize="32px"
+                                           TextPosition="@TextPosition.End">
+                                @if (!string.IsNullOrEmpty(GetActorUsername()))
+                                {
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                        @@@GetActorUsername()
+                                    </FluentLabel>
+                                }
+                            </FluentPersona>
+                        </div>
+                    }
+
+                    <FluentBadge Appearance="Appearance.Accent" BackgroundColor="var(--accent-fill-rest)">
+                        ✏️ Updated @GetObjectTypeDisplay()
+                    </FluentBadge>
+                </FluentStack>
+                
+                @if (Update.Published.HasValue)
+                {
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="update-timestamp">
+                        <time datetime="@Update.Published.Value.ToString("o")" title="@Update.Published.Value.ToString("f")">
+                            @FormatDateTime(Update.Published.Value)
+                        </time>
+                    </FluentLabel>
+                }
+            </FluentStack>
+
+            @* Show updated object *@
+            @if (ShowObject && Update.Object?.Any() == true)
+            {
+                <FluentDivider Style="margin: 0;" />
+                <div class="update-object">
+                    @if (objectToRender != null)
+                    {
+                        <ObjectDisplay Object="@objectToRender" />
+                    }
+                    else if (!isLoading && Update.Object.First() is Link link)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Link())" Color="Color.Neutral" />
+                            <FluentAnchor Href="@(link.Href?.ToString() ?? "#")" Target="_blank" Appearance="Appearance.Hypertext">
+                                @(link.Name?.FirstOrDefault() ?? link.Href?.ToString() ?? "View object")
+                            </FluentAnchor>
+                        </FluentStack>
+                    }
+                    else if (!isLoading)
+                    {
+                        var urlString = Update.Object.First()?.ToString();
+                        if (!string.IsNullOrEmpty(urlString))
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Link())" Color="Color.Neutral" />
+                                <FluentAnchor Href="@urlString" Target="_blank" Appearance="Appearance.Hypertext">
+                                    @urlString
+                                </FluentAnchor>
+                            </FluentStack>
+                        }
+                    }
+                    else if (isLoading)
+                    {
+                        <FluentProgressRing Style="width: 24px; height: 24px;" />
+                    }
+                </div>
+            }
+
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Update)
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    private ActorInfo? actorInfo;
+    private object? objectToRender;
+    private bool isLoading = false;
+
+    [Parameter]
+    public Update? Update { get; set; }
+
+    [Parameter]
+    public bool ShowObject { get; set; } = true;
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public RenderFragment<Update>? AdditionalContent { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadActorInfo();
+        await LoadLinkedObject();
+    }
+
+    private async Task LoadActorInfo()
+    {
+        if (Update?.Actor?.Any() == true)
+        {
+            var actorRef = Update.Actor.First();
+            string? actorId = null;
+
+            if (actorRef is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
+                actorId = actorObj.Id;
+            else if (actorRef is Link link && link.Href != null)
+                actorId = link.Href.ToString();
+
+            if (!string.IsNullOrEmpty(actorId))
+            {
+                try
+                {
+                    var actorLinkObj = new Link { Href = new Uri(actorId) };
+                    actorInfo = await ActorResolver.ResolveActorAsync(actorLinkObj);
+                }
+                catch
+                {
+                    // Ignore errors in actor resolution
+                }
+            }
+        }
+    }
+
+    private async Task LoadLinkedObject()
+    {
+        if (ActivityPubClient == null || !ShowObject || Update?.Object?.Any() != true)
+            return;
+
+        var objRef = Update.Object.First();
+        
+        if (objRef is IObject obj && obj is not Link)
+        {
+            objectToRender = obj;
+            return;
+        }
+
+        Uri? urlToFetch = null;
+        
+        if (objRef is Link link && link.Href != null)
+        {
+            urlToFetch = link.Href;
+        }
+        else
+        {
+            var urlString = objRef?.ToString();
+            if (!string.IsNullOrEmpty(urlString) && Uri.TryCreate(urlString, UriKind.Absolute, out var uri))
+            {
+                urlToFetch = uri;
+            }
+        }
+
+        if (urlToFetch != null)
+        {
+            try
+            {
+                isLoading = true;
+                StateHasChanged();
+
+                var fetchedObject = await ActivityPubClient.GetAsync<KristofferStrube.ActivityStreams.Object>(
+                    urlToFetch, 
+                    useCache: true);
+                
+                if (fetchedObject != null)
+                {
+                    objectToRender = fetchedObject;
+                }
+            }
+            catch
+            {
+                // If fetch fails, we'll just show the link
+            }
+            finally
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private string GetObjectTypeDisplay()
+    {
+        if (Update?.Object?.Any() == true)
+        {
+            var obj = Update.Object.First();
+            if (obj is IObject objectItem && objectItem.Type?.Any() == true)
+            {
+                var objType = objectItem.Type.First();
+                return objType.ToLower() switch
+                {
+                    "person" => "profile",
+                    "note" => "post",
+                    _ => objType.ToLower()
+                };
+            }
+        }
+        return "content";
+    }
+
+    private string GetActorDisplay()
+    {
+        if (actorInfo != null)
+            return actorInfo.Name;
+
+        var actorRef = Update?.Actor?.FirstOrDefault();
+        if (actorRef == null) return "Unknown";
+
+        if (actorRef is Actor actor && actor.Name?.Any() == true)
+            return actor.Name.First();
+
+        if (actorRef is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true)
+                return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id))
+                return obj.Id;
+        }
+
+        if (actorRef is Link link && link.Href != null)
+            return link.Href.ToString();
+
+        return "Unknown";
+    }
+
+    private string GetActorImageUrl()
+    {
+        if (actorInfo?.IconUrl != null)
+            return actorInfo.IconUrl;
+
+        var actorRef = Update?.Actor?.FirstOrDefault();
+        if (actorRef == null) return string.Empty;
+
+        if (actorRef is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                if (url is Link link && link.Href != null)
+                    return link.Href.ToString();
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string GetActorUsername()
+    {
+        if (actorInfo != null)
+            return actorInfo.PreferredUsername;
+
+        var actorRef = Update?.Actor?.FirstOrDefault();
+        if (actorRef == null) return string.Empty;
+
+        if (actorRef is Person person && !string.IsNullOrEmpty(person.PreferredUsername))
+            return person.PreferredUsername;
+
+        return string.Empty;
+    }
+
+    private void NavigateToActor()
+    {
+        if (actorInfo != null)
+        {
+            Navigation.NavigateTo($"/actor?id={Uri.EscapeDataString(actorInfo.Id)}");
+        }
+    }
+
+    private string FormatDateTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (timeSpan.TotalMinutes < 1)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays}d ago";
+
+        return dateTime.ToString("MMM d, yyyy");
+    }
+}

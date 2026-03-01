@@ -1,0 +1,235 @@
+.fluent-conversation-view {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+}
+
+/* Cards */
+.loading-card,
+.empty-card {
+    padding: 2rem;
+    text-align: center;
+}
+
+.participants-card,
+.metadata-card {
+    padding: 1rem;
+}
+
+.metadata-card {
+    background: var(--neutral-layer-2, #f5f5f5);
+}
+
+/* Conversation posts container */
+.conversation-posts-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Post cards */
+.post-card,
+.context-post-card,
+.focal-post-card,
+.reply-post-card {
+    padding: 1rem;
+    transition: all 0.2s ease;
+}
+
+.post-card:hover,
+.context-post-card:hover,
+.reply-post-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    transform: translateY(-1px);
+}
+
+.context-post-card {
+    background: var(--neutral-layer-2, #f9f9f9);
+    border-left: 3px solid var(--neutral-stroke-strong, #ccc);
+    opacity: 0.9;
+}
+
+.focal-post-card {
+    background: var(--accent-fill-rest-10, #e8f4ff);
+    border: 2px solid var(--accent-fill-rest, #0078d4);
+    box-shadow: 0 2px 12px rgba(0, 120, 212, 0.15);
+}
+
+.focal-post-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 120, 212, 0.2);
+    transform: none; /* Don't lift focal post on hover */
+}
+
+.focal-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--accent-stroke-control-default, #c7e0f4);
+}
+
+/* Chronological timeline */
+.chronological-timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.chronological-timeline::before {
+    content: "";
+    position: absolute;
+    left: 0.75rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--neutral-stroke-strong, #e0e0e0);
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+.timeline-item:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -1.5rem;
+    top: 1.5rem;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--neutral-fill-rest, #fff);
+    border: 2px solid var(--accent-fill-rest, #0078d4);
+    box-shadow: 0 0 0 3px var(--neutral-fill-rest, #fff);
+    z-index: 1;
+}
+
+.timeline-marker.focal-marker {
+    width: 16px;
+    height: 16px;
+    left: -1.7rem;
+    background: var(--accent-fill-rest, #0078d4);
+    border-width: 3px;
+    box-shadow: 0 0 0 4px var(--neutral-fill-rest, #fff), 0 0 0 6px var(--accent-fill-rest-20, rgba(0, 120, 212, 0.2));
+}
+
+/* Parent chain section */
+.parent-chain-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-left: 1rem;
+    border-left: 3px solid var(--neutral-stroke-strong, #e0e0e0);
+    margin-bottom: 1.5rem;
+}
+
+.parent-chain-section .context-post-card {
+    border-left: none;
+}
+
+/* Replies section */
+.replies-section {
+    margin-top: 1.5rem;
+    padding-left: 1rem;
+    border-left: 3px solid var(--neutral-stroke-strong, #e0e0e0);
+}
+
+.conversation-replies {
+    margin-top: 0.75rem;
+}
+
+.reply-post-card {
+    background: var(--neutral-layer-1, #fff);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .fluent-conversation-view {
+        gap: 0.75rem;
+    }
+
+    .participants-card,
+    .metadata-card {
+        padding: 0.75rem;
+    }
+
+    .post-card,
+    .context-post-card,
+    .focal-post-card,
+    .reply-post-card {
+        padding: 0.75rem;
+    }
+
+    .chronological-timeline {
+        padding-left: 1.5rem;
+    }
+
+    .chronological-timeline::before {
+        left: 0.5rem;
+    }
+
+    .timeline-marker {
+        width: 10px;
+        height: 10px;
+        left: -1.25rem;
+    }
+
+    .timeline-marker.focal-marker {
+        width: 12px;
+        height: 12px;
+        left: -1.35rem;
+    }
+
+    .parent-chain-section,
+    .replies-section {
+        padding-left: 0.5rem;
+        border-left-width: 2px;
+    }
+
+    .focal-indicator {
+        font-size: 0.875rem;
+    }
+}
+
+/* Dark mode support (if using Fluent UI theme variables) */
+@media (prefers-color-scheme: dark) {
+    .metadata-card {
+        background: var(--neutral-layer-3, #2d2d2d);
+    }
+
+    .context-post-card {
+        background: var(--neutral-layer-3, #2d2d2d);
+    }
+
+    .focal-post-card {
+        background: rgba(0, 120, 212, 0.1);
+        border-color: var(--accent-fill-rest, #60a9d7);
+    }
+
+    .reply-post-card {
+        background: var(--neutral-layer-2, #1f1f1f);
+    }
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.timeline-item,
+.context-post-card,
+.focal-post-card,
+.reply-post-card {
+    animation: fadeIn 0.3s ease-out;
+}

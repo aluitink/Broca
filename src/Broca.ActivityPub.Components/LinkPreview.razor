@@ -1,0 +1,251 @@
+@using System.Text.RegularExpressions
+@inject HttpClient HttpClient
+@implements IDisposable
+
+<div class="activitypub-link-preview @CssClass">
+    @if (linkPreview != null && !IsDismissed)
+    {
+        @if (PreviewTemplate != null)
+        {
+            @PreviewTemplate(linkPreview)
+        }
+        else
+        {
+            <div class="link-preview-card">
+                <button class="dismiss-button" @onclick="Dismiss" title="Remove preview">&times;</button>
+                
+                @if (!string.IsNullOrEmpty(linkPreview.ImageUrl))
+                {
+                    <div class="preview-image">
+                        <img src="@linkPreview.ImageUrl" alt="@linkPreview.Title" loading="lazy" />
+                    </div>
+                }
+                
+                <div class="preview-content">
+                    @if (!string.IsNullOrEmpty(linkPreview.SiteName))
+                    {
+                        <div class="preview-site">@linkPreview.SiteName</div>
+                    }
+                    
+                    <div class="preview-title">
+                        <a href="@linkPreview.Url" target="_blank" rel="noopener noreferrer">
+                            @linkPreview.Title
+                        </a>
+                    </div>
+                    
+                    @if (!string.IsNullOrEmpty(linkPreview.Description))
+                    {
+                        <div class="preview-description">@linkPreview.Description</div>
+                    }
+                    
+                    <div class="preview-url">@GetDomain(linkPreview.Url)</div>
+                </div>
+            </div>
+        }
+    }
+    else if (isLoading)
+    {
+        <div class="link-preview-loading">
+            <span>Loading preview...</span>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(error))
+    {
+        <div class="link-preview-error">
+            <span>Failed to load preview</span>
+        </div>
+    }
+</div>
+
+@code {
+    private LinkPreviewData? linkPreview;
+    private bool isLoading;
+    private string? error;
+    private System.Threading.Timer? _debounceTimer;
+    private static readonly Regex UrlRegex = new(
+        @"https?://[^\s<>""]+[^\s<>"".,;:!?]",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public int DebounceMilliseconds { get; set; } = 500;
+
+    [Parameter]
+    public bool IsDismissed { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> IsDismissedChanged { get; set; }
+
+    [Parameter]
+    public RenderFragment<LinkPreviewData>? PreviewTemplate { get; set; }
+
+    [Parameter]
+    public EventCallback<LinkPreviewData> OnPreviewLoaded { get; set; }
+
+    /// <summary>
+    /// Extracts and previews the first URL from the text.
+    /// </summary>
+    public void ExtractAndPreview(string text)
+    {
+        _debounceTimer?.Dispose();
+        _debounceTimer = null;
+
+        var match = UrlRegex.Match(text);
+        if (match.Success)
+        {
+            var url = match.Value;
+            _debounceTimer = new System.Threading.Timer(
+                _ => InvokeAsync(async () => await LoadPreviewAsync(url)),
+                null,
+                DebounceMilliseconds,
+                System.Threading.Timeout.Infinite);
+        }
+        else
+        {
+            ClearPreview();
+        }
+    }
+
+    /// <summary>
+    /// Loads preview for a specific URL.
+    /// </summary>
+    public async Task LoadPreviewAsync(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return;
+        }
+
+        isLoading = true;
+        error = null;
+        linkPreview = null;
+        StateHasChanged();
+
+        try
+        {
+            // In a real implementation, this would call a backend service
+            // that fetches and parses OpenGraph/Twitter Card metadata
+            // For now, create a basic preview from the URL
+            linkPreview = await FetchLinkMetadataAsync(uri);
+            
+            if (OnPreviewLoaded.HasDelegate && linkPreview != null)
+            {
+                await OnPreviewLoaded.InvokeAsync(linkPreview);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Clears the current preview.
+    /// </summary>
+    public void ClearPreview()
+    {
+        linkPreview = null;
+        isLoading = false;
+        error = null;
+        StateHasChanged();
+    }
+
+    private async Task Dismiss()
+    {
+        IsDismissed = true;
+        if (IsDismissedChanged.HasDelegate)
+        {
+            await IsDismissedChanged.InvokeAsync(true);
+        }
+    }
+
+    private async Task<LinkPreviewData?> FetchLinkMetadataAsync(Uri url)
+    {
+        try
+        {
+            // Basic implementation - fetch HTML and parse meta tags
+            // In production, this should be done server-side for security
+            var html = await HttpClient.GetStringAsync(url);
+            
+            var preview = new LinkPreviewData
+            {
+                Url = url.ToString(),
+                Title = ExtractMetaTag(html, "og:title") ?? ExtractTitle(html) ?? url.Host,
+                Description = ExtractMetaTag(html, "og:description") ?? ExtractMetaTag(html, "description"),
+                ImageUrl = ExtractMetaTag(html, "og:image"),
+                SiteName = ExtractMetaTag(html, "og:site_name") ?? url.Host
+            };
+
+            return preview;
+        }
+        catch
+        {
+            // Fallback to basic info from URL
+            return new LinkPreviewData
+            {
+                Url = url.ToString(),
+                Title = url.Host,
+                SiteName = url.Host
+            };
+        }
+    }
+
+    private string? ExtractMetaTag(string html, string property)
+    {
+        // Simple regex-based extraction (in production, use HTML parser)
+        var patterns = new[]
+        {
+            $@"<meta\s+property=""{property}""\s+content=""([^""]*)""\s*/?>",
+            $@"<meta\s+name=""{property}""\s+content=""([^""]*)""\s*/?>",
+            $@"<meta\s+content=""([^""]*)""\s+property=""{property}""\s*/?>",
+            $@"<meta\s+content=""([^""]*)""\s+name=""{property}""\s*/?>"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase);
+            if (match.Success && match.Groups.Count > 1)
+            {
+                return System.Net.WebUtility.HtmlDecode(match.Groups[1].Value);
+            }
+        }
+
+        return null;
+    }
+
+    private string? ExtractTitle(string html)
+    {
+        var match = Regex.Match(html, @"<title>([^<]+)</title>", RegexOptions.IgnoreCase);
+        return match.Success ? System.Net.WebUtility.HtmlDecode(match.Groups[1].Value) : null;
+    }
+
+    private string GetDomain(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return uri.Host;
+        }
+        return url;
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+    }
+
+    public class LinkPreviewData
+    {
+        public string Url { get; set; } = string.Empty;
+        public string? Title { get; set; }
+        public string? Description { get; set; }
+        public string? ImageUrl { get; set; }
+        public string? SiteName { get; set; }
+    }
+}

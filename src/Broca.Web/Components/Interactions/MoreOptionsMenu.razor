@@ -1,0 +1,148 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<div class="more-options-menu @CssClass">
+    <FluentButton Appearance="Appearance.Stealth"
+                  IconOnly="true"
+                  Title="More options"
+                  aria-label="More options"
+                  aria-expanded="@_isOpen"
+                  OnClick="@ToggleMenu"
+                  id="@_buttonId">
+        <FluentIcon Value="@(new Icons.Regular.Size20.MoreHorizontal())" />
+    </FluentButton>
+
+    <FluentMenu Anchor="@_buttonId"
+                Open="@_isOpen"
+                OpenChanged="@((bool v) => _isOpen = v)"
+                VerticalThreshold="170">
+        @if (ShowCopyLink && !string.IsNullOrEmpty(ObjectUrl))
+        {
+            <FluentMenuItem OnClick="@HandleCopyLink">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Link())" Slot="start" />
+                Copy link
+            </FluentMenuItem>
+        }
+
+        @if (AdditionalItems != null)
+        {
+            @AdditionalItems
+        }
+
+        @if ((ShowCopyLink && !string.IsNullOrEmpty(ObjectUrl)) && (ShowMute || ShowBlock || ShowReport))
+        {
+            <FluentDivider Role="DividerRole.Separator" />
+        }
+
+        @if (ShowMute)
+        {
+            <FluentMenuItem OnClick="@HandleMute">
+                <FluentIcon Value="@(new Icons.Regular.Size20.SpeakerOff())" Slot="start" />
+                @(IsMuted ? "Unmute" : "Mute") @ActorDisplayName
+            </FluentMenuItem>
+        }
+
+        @if (ShowBlock)
+        {
+            <FluentMenuItem OnClick="@HandleBlock">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Prohibited())" Slot="start" />
+                @(IsBlocked ? "Unblock" : "Block") @ActorDisplayName
+            </FluentMenuItem>
+        }
+
+        @if (ShowReport)
+        {
+            <FluentMenuItem OnClick="@HandleReport">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Flag())" Slot="start" />
+                Report
+            </FluentMenuItem>
+        }
+    </FluentMenu>
+</div>
+
+@code {
+    private bool _isOpen;
+    private readonly string _buttonId = $"more-options-{Guid.NewGuid():N}";
+
+    [Parameter]
+    public string? ActorId { get; set; }
+
+    [Parameter]
+    public string? ActorDisplayName { get; set; }
+
+    [Parameter]
+    public string? ObjectId { get; set; }
+
+    [Parameter]
+    public string? ObjectUrl { get; set; }
+
+    [Parameter]
+    public bool IsMuted { get; set; }
+
+    [Parameter]
+    public bool IsBlocked { get; set; }
+
+    [Parameter]
+    public bool ShowMute { get; set; } = true;
+
+    [Parameter]
+    public bool ShowBlock { get; set; } = true;
+
+    [Parameter]
+    public bool ShowReport { get; set; } = true;
+
+    [Parameter]
+    public bool ShowCopyLink { get; set; } = true;
+
+    [Parameter]
+    public RenderFragment? AdditionalItems { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnMute { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnBlock { get; set; }
+
+    [Parameter]
+    public EventCallback OnReport { get; set; }
+
+    [Parameter]
+    public EventCallback OnCopyLink { get; set; }
+
+    private void ToggleMenu() => _isOpen = !_isOpen;
+
+    private async Task HandleMute()
+    {
+        _isOpen = false;
+        IsMuted = !IsMuted;
+        await OnMute.InvokeAsync(IsMuted);
+    }
+
+    private async Task HandleBlock()
+    {
+        _isOpen = false;
+        IsBlocked = !IsBlocked;
+        await OnBlock.InvokeAsync(IsBlocked);
+    }
+
+    private async Task HandleReport()
+    {
+        _isOpen = false;
+        await OnReport.InvokeAsync();
+    }
+
+    private async Task HandleCopyLink()
+    {
+        _isOpen = false;
+        if (!string.IsNullOrEmpty(ObjectUrl))
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", ObjectUrl);
+        }
+        await OnCopyLink.InvokeAsync();
+    }
+}

@@ -1,0 +1,213 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Components
+@inherits ComponentBase
+
+<div class="activitypub-undo @CssClass">
+    @if (Undo != null)
+    {
+        <div class="undo-header">
+            @if (ShowActor && Undo.Actor?.Any() == true)
+            {
+                var actorRef = Undo.Actor.FirstOrDefault();
+                <span class="undo-actor">
+                    @if (actorRef is IObject actorObj && actorObj.Name?.Any() == true)
+                    {
+                        @actorObj.Name.First()
+                    }
+                    else if (actorRef is ILink link)
+                    {
+                        @link.Href?.ToString()
+                    }
+                    else if (actorRef != null)
+                    {
+                        @actorRef.ToString()
+                    }
+                </span>
+            }
+            <span class="undo-action"> undid 
+                @if (Undo.Object?.Any() == true)
+                {
+                    var obj = Undo.Object.FirstOrDefault();
+                    var activityType = GetActivityType(obj);
+                    @if (!string.IsNullOrEmpty(activityType))
+                    {
+                        <span class="undo-activity-type">@GetActivityTypeDisplay(activityType)</span>
+                    }
+                    else
+                    {
+                        <span class="undo-activity-type">an action</span>
+                    }
+                }
+            </span>
+            
+            @if (ShowTimestamp && Undo.Published.HasValue)
+            {
+                <time class="undo-timestamp" datetime="@Undo.Published.Value.ToString("o")" title="@Undo.Published.Value.ToString("f")">
+                    @Undo.Published.Value.ToString("g")
+                </time>
+            }
+        </div>
+
+        @if (ShowObject && Undo.Object?.Any() == true)
+        {
+            <div class="undo-object">
+                @foreach (var obj in Undo.Object)
+                {
+                    @if (ShowContext)
+                    {
+                        <div class="undo-context">
+                            @GetUndoContext(obj)
+                        </div>
+                    }
+
+                    @if (ShowOriginalActivity)
+                    {
+                        @if (ObjectRenderer != null)
+                        {
+                            @ObjectRenderer(obj)
+                        }
+                        else if (obj is IObject)
+                        {
+                            <ObjectDisplay Object="@obj" 
+                                         ShowMissingRenderer="@ShowMissingRenderer"
+                                         AutoResolveLinks="true" />
+                        }
+                        else if (obj is ILink link)
+                        {
+                            <div class="undo-link">
+                                <span class="undo-link-text">Undid activity: </span>
+                                <a href="@link.Href?.ToString()" target="_blank" rel="noopener noreferrer">
+                                    @(link.Name?.FirstOrDefault() ?? link.Href?.ToString() ?? "View activity")
+                                </a>
+                            </div>
+                        }
+                    }
+                }
+            </div>
+        }
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Undo)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Undo activity to render.
+    /// </summary>
+    [Parameter]
+    public Undo? Undo { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the actor who performed the undo.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the undone object/activity.
+    /// </summary>
+    [Parameter]
+    public bool ShowObject { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show context about what was undone.
+    /// </summary>
+    [Parameter]
+    public bool ShowContext { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the original activity that was undone.
+    /// </summary>
+    [Parameter]
+    public bool ShowOriginalActivity { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show the timestamp of the undo.
+    /// </summary>
+    [Parameter]
+    public bool ShowTimestamp { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show a message when no renderer is available for objects.
+    /// </summary>
+    [Parameter]
+    public bool ShowMissingRenderer { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom renderer for the undone object.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<object>? ObjectRenderer { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render after the undo.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Undo>? AdditionalContent { get; set; }
+
+    private string? GetActivityType(object? obj)
+    {
+        if (obj is IObject activityObj && activityObj.Type?.Any() == true)
+        {
+            return activityObj.Type.First();
+        }
+        return null;
+    }
+
+    private string GetActivityTypeDisplay(string activityType)
+    {
+        return activityType.ToLower() switch
+        {
+            "follow" => "follow",
+            "like" => "like",
+            "announce" => "boost",
+            "block" => "block",
+            "create" => "post",
+            _ => activityType.ToLower()
+        };
+    }
+
+    private string GetUndoContext(object obj)
+    {
+        var activityType = GetActivityType(obj);
+        if (string.IsNullOrEmpty(activityType))
+        {
+            return "Action undone";
+        }
+
+        if (obj is Activity activity && activity.Object?.Any() == true)
+        {
+            var target = activity.Object.FirstOrDefault();
+            var targetDisplay = "something";
+            
+            if (target is IObject targetObj && targetObj.Name?.Any() == true)
+            {
+                targetDisplay = targetObj.Name.First();
+            }
+            else if (target is ILink link && link.Href != null)
+            {
+                targetDisplay = link.Href.ToString();
+            }
+
+            return activityType.ToLower() switch
+            {
+                "follow" => $"Unfollowed {targetDisplay}",
+                "like" => $"Unliked {targetDisplay}",
+                "announce" => $"Un-boosted {targetDisplay}",
+                "block" => $"Unblocked {targetDisplay}",
+                _ => $"Undid {activityType.ToLower()} on {targetDisplay}"
+            };
+        }
+
+        return $"Undid {activityType.ToLower()}";
+    }
+}

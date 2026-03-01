@@ -1,0 +1,330 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Broca.ActivityPub.Components
+@using KristofferStrube.ActivityStreams
+@using static Broca.ActivityPub.Components.BookmarksList
+
+<div class="fluent-bookmarks-list">
+    <div class="bookmarks-header">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
+            <FluentLabel Typo="Typography.H4" Weight="FontWeight.Bold">
+                <FluentIcon Value="@(new Icons.Regular.Size24.Bookmark())" Color="Color.Accent" Style="vertical-align: middle; margin-right: 8px;" />
+                Bookmarks
+            </FluentLabel>
+            
+            <FluentStack Orientation="Orientation.Horizontal" VerticalGap="8">
+                <FluentSearch @bind-Value="@_searchQuery"
+                            @bind-Value:after="HandleSearch"
+                            Placeholder="Search bookmarks..."
+                            Style="width: 250px;" />
+                
+                @if (AllowFolders)
+                {
+                    <FluentButton Appearance="Appearance.Accent" OnClick="ShowNewFolderDialog">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.FolderAdd())" Slot="start" />
+                        New Folder
+                    </FluentButton>
+                }
+                
+                @if (AllowExport)
+                {
+                    <FluentButton Appearance="Appearance.Neutral" OnClick="ExportBookmarks">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.ArrowDownload())" Slot="start" />
+                        Export
+                    </FluentButton>
+                }
+            </FluentStack>
+        </FluentStack>
+    </div>
+
+    <FluentStack Orientation="Orientation.Horizontal" Style="margin-top: 24px; min-height: 500px;">
+        @if (AllowFolders && _folders.Any())
+        {
+            <div class="folders-sidebar">
+                <FluentNavMenu Width="250">
+                    <div class="folder-item @(_selectedFolder == null ? "active" : "")" 
+                         @onclick="@(() => SelectFolder(null))">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.DocumentMultiple())" />
+                        <span>All Bookmarks</span>
+                        <FluentBadge Appearance="Appearance.Lightweight">@_totalCount</FluentBadge>
+                    </div>
+                    
+                    @foreach (var folder in _folders)
+                    {
+                        <div class="folder-item @(_selectedFolder?.Id == folder.Id ? "active" : "")" 
+                             @onclick="@(() => SelectFolder(folder))">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Folder())" />
+                            <span>@folder.Name</span>
+                            <FluentBadge Appearance="Appearance.Lightweight">@folder.Count</FluentBadge>
+                            @if (AllowFolderEdit)
+                            {
+                                <FluentMenuButton Appearance="Appearance.Lightweight" 
+                                                @onclick:stopPropagation="true">
+                                    <FluentMenuItem OnClick="() => EditFolder(folder)">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Edit())" Slot="start" />
+                                        Edit
+                                    </FluentMenuItem>
+                                    <FluentMenuItem OnClick="() => DeleteFolder(folder)">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Color="Color.Error" Slot="start" />
+                                        Delete
+                                    </FluentMenuItem>
+                                </FluentMenuButton>
+                            }
+                        </div>
+                    }
+                </FluentNavMenu>
+            </div>
+        }
+
+        <div class="bookmarks-content" style="flex: 1;">
+            @if (!GetFilteredBookmarks().Any())
+            {
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Style="height: 400px;">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Bookmark())" Color="Color.Lightweight" Style="font-size: 48px;" />
+                    <FluentLabel Typo="Typography.Body">
+                        @(string.IsNullOrWhiteSpace(_searchQuery) ? "No bookmarks yet" : "No bookmarks found")
+                    </FluentLabel>
+                </FluentStack>
+            }
+            else
+            {
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                    @foreach (var bookmark in GetFilteredBookmarks())
+                    {
+                        <FluentCard>
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                                <div style="flex: 1;">
+                                    @if (ItemTemplate != null)
+                                    {
+                                        @ItemTemplate(bookmark)
+                                    }
+                                    else
+                                    {
+                                        <div class="bookmark-content">
+                                            @if (bookmark.Object?.Content?.FirstOrDefault() is string content)
+                                            {
+                                                <FluentLabel Typo="Typography.Body">@content</FluentLabel>
+                                            }
+                                            <FluentStack Orientation="Orientation.Horizontal" VerticalGap="8" Style="margin-top: 8px;">
+                                                <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 0.875rem;">
+                                                    @bookmark.CreatedAt.ToString("MMM d, yyyy")
+                                                </FluentLabel>
+                                                @if (bookmark.Folder != null)
+                                                {
+                                                    <FluentBadge Appearance="Appearance.Lightweight">
+                                                        @bookmark.Folder.Name
+                                                    </FluentBadge>
+                                                }
+                                            </FluentStack>
+                                        </div>
+                                    }
+                                </div>
+                                
+                                <FluentStack Orientation="Orientation.Horizontal" VerticalGap="8">
+                                    @if (AllowFolders)
+                                    {
+                                        <FluentButton Appearance="Appearance.Lightweight" OnClick="() => ShowMoveDialog(bookmark)">
+                                            <FluentIcon Value="@(new Icons.Regular.Size20.FolderArrowRight())" />
+                                        </FluentButton>
+                                    }
+                                    <FluentButton Appearance="Appearance.Lightweight" OnClick="() => RemoveBookmark(bookmark)">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Color="Color.Error" />
+                                    </FluentButton>
+                                </FluentStack>
+                            </FluentStack>
+                        </FluentCard>
+                    }
+
+                    @if (_hasMore)
+                    {
+                        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Style="margin-top: 16px;">
+                            <FluentButton Appearance="Appearance.Neutral" 
+                                        OnClick="LoadMore"
+                                        Disabled="@_isLoadingMore">
+                                @if (_isLoadingMore)
+                                {
+                                    <FluentProgressRing Style="width: 16px; height: 16px;" />
+                                    <span>Loading...</span>
+                                }
+                                else
+                                {
+                                    <span>Load More</span>
+                                }
+                            </FluentButton>
+                        </FluentStack>
+                    }
+                </FluentStack>
+            }
+        </div>
+    </FluentStack>
+</div>
+
+@code {
+    [Parameter] public List<BookmarkItem> Bookmarks { get; set; } = new();
+    [Parameter] public List<BookmarkFolder> Folders { get; set; } = new();
+    [Parameter] public bool AllowFolders { get; set; } = true;
+    [Parameter] public bool AllowFolderEdit { get; set; } = true;
+    [Parameter] public bool AllowExport { get; set; } = true;
+    [Parameter] public int PageSize { get; set; } = 20;
+    [Parameter] public EventCallback<BookmarkItem> OnRemove { get; set; }
+    [Parameter] public EventCallback<(BookmarkItem, BookmarkFolder?)> OnMove { get; set; }
+    [Parameter] public EventCallback<BookmarkFolder> OnCreateFolder { get; set; }
+    [Parameter] public EventCallback<BookmarkFolder> OnEditFolder { get; set; }
+    [Parameter] public EventCallback<BookmarkFolder> OnDeleteFolder { get; set; }
+    [Parameter] public EventCallback OnExport { get; set; }
+    [Parameter] public EventCallback<int> OnLoadMore { get; set; }
+    [Parameter] public RenderFragment<BookmarkItem>? ItemTemplate { get; set; }
+
+    private List<BookmarkItem> _bookmarks = new();
+    private List<BookmarkFolder> _folders = new();
+    private string _searchQuery = "";
+    private BookmarkFolder? _selectedFolder;
+    private bool _isLoadingMore;
+    private bool _hasMore = true;
+    private int _currentPage = 1;
+
+    private int _totalCount => _bookmarks.Count;
+
+    protected override void OnParametersSet()
+    {
+        _bookmarks = Bookmarks;
+        _folders = Folders;
+    }
+
+    private List<BookmarkItem> GetFilteredBookmarks() => _bookmarks
+        .Where(b => (_selectedFolder == null || b.Folder?.Id == _selectedFolder.Id) &&
+                   (string.IsNullOrWhiteSpace(_searchQuery) || MatchesSearch(b)))
+        .OrderByDescending(b => b.CreatedAt)
+        .Take(_currentPage * PageSize)
+        .ToList();
+
+    private bool MatchesSearch(BookmarkItem bookmark)
+    {
+        var query = _searchQuery.ToLowerInvariant();
+        if (bookmark.Object?.Content?.FirstOrDefault() is string content)
+        {
+            return content.ToLowerInvariant().Contains(query);
+        }
+        return false;
+    }
+
+    private void SelectFolder(BookmarkFolder? folder)
+    {
+        _selectedFolder = folder;
+        _currentPage = 1;
+        StateHasChanged();
+    }
+
+    private async Task HandleSearch()
+    {
+        _currentPage = 1;
+        await Task.Delay(300);
+        StateHasChanged();
+    }
+
+    private async Task RemoveBookmark(BookmarkItem bookmark)
+    {
+        if (OnRemove.HasDelegate)
+        {
+            await OnRemove.InvokeAsync(bookmark);
+        }
+        _bookmarks.Remove(bookmark);
+        StateHasChanged();
+    }
+
+    private async Task LoadMore()
+    {
+        _isLoadingMore = true;
+        StateHasChanged();
+
+        try
+        {
+            _currentPage++;
+            if (OnLoadMore.HasDelegate)
+            {
+                await OnLoadMore.InvokeAsync(_currentPage);
+            }
+        }
+        finally
+        {
+            _isLoadingMore = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowNewFolderDialog()
+    {
+    }
+
+    private void EditFolder(BookmarkFolder folder)
+    {
+        if (OnEditFolder.HasDelegate)
+        {
+            OnEditFolder.InvokeAsync(folder);
+        }
+    }
+
+    private void DeleteFolder(BookmarkFolder folder)
+    {
+        if (OnDeleteFolder.HasDelegate)
+        {
+            OnDeleteFolder.InvokeAsync(folder);
+        }
+    }
+
+    private void ShowMoveDialog(BookmarkItem bookmark)
+    {
+    }
+
+    private async Task ExportBookmarks()
+    {
+        if (OnExport.HasDelegate)
+        {
+            await OnExport.InvokeAsync();
+        }
+    }
+}
+
+<style>
+    .fluent-bookmarks-list {
+        padding: 1rem;
+    }
+
+    .bookmarks-header {
+        margin-bottom: 1rem;
+    }
+
+    .folders-sidebar {
+        border-right: 1px solid var(--neutral-stroke-divider-rest);
+        padding-right: 16px;
+        margin-right: 16px;
+    }
+
+    .bookmark-content {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .folder-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+
+    .folder-item:hover {
+        background-color: var(--neutral-fill-hover);
+    }
+
+    .folder-item.active {
+        background-color: var(--neutral-fill-active);
+        font-weight: bold;
+    }
+
+    .folder-item span {
+        flex: 1;
+    }
+</style>

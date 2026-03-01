@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Broca.ActivityPub.Core\Broca.ActivityPub.Core.csproj" />
     <ProjectReference Include="..\..\src\Broca.ActivityPub.Persistence\Broca.ActivityPub.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Broca.ActivityPub.Server\Broca.ActivityPub.Server.csproj" />
     <ProjectReference Include="..\..\src\Broca.ActivityPub.Components\Broca.ActivityPub.Components.csproj" />
   </ItemGroup>
 

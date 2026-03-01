@@ -1,0 +1,154 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Components
+@inherits ComponentBase
+
+<div class="activitypub-delete @CssClass">
+    @if (Delete != null)
+    {
+        <div class="delete-header">
+            @if (ShowActor && Delete.Actor?.Any() == true)
+            {
+                var actorRef = Delete.Actor.FirstOrDefault();
+                <span class="delete-actor">
+                    @if (actorRef is IObject actorObj && actorObj.Name?.Any() == true)
+                    {
+                        @actorObj.Name.First()
+                    }
+                    else if (actorRef is ILink link)
+                    {
+                        @link.Href?.ToString()
+                    }
+                    else if (actorRef != null)
+                    {
+                        @actorRef.ToString()
+                    }
+                </span>
+            }
+            <span class="delete-action"> deleted 
+                @if (Delete.Object?.Any() == true)
+                {
+                    var obj = Delete.Object.FirstOrDefault();
+                    if (obj is IObject objectItem && objectItem.Type?.Any() == true)
+                    {
+                        var objType = objectItem.Type.First();
+                        @if (objType == "Tombstone")
+                        {
+                            <span class="delete-object-type">content</span>
+                        }
+                        else
+                        {
+                            <span class="delete-object-type">@objType.ToLower()</span>
+                        }
+                    }
+                    else
+                    {
+                        <span class="delete-object-type">content</span>
+                    }
+                }
+            </span>
+            
+            @if (ShowTimestamp && Delete.Published.HasValue)
+            {
+                <time class="delete-timestamp" datetime="@Delete.Published.Value.ToString("o")" title="@Delete.Published.Value.ToString("f")">
+                    @Delete.Published.Value.ToString("g")
+                </time>
+            }
+        </div>
+
+        @if (ShowTombstone && Delete.Object?.Any() == true)
+        {
+            <div class="delete-tombstone">
+                @foreach (var obj in Delete.Object)
+                {
+                    @if (obj is IObject objectItem && objectItem.Type?.Contains("Tombstone") == true)
+                    {
+                        <div class="tombstone-indicator">
+                            <span class="tombstone-icon">🪦</span>
+                            <span class="tombstone-message">This content has been deleted</span>
+                            @if (objectItem is Tombstone tombstone && tombstone.Deleted.HasValue)
+                            {
+                                <time class="tombstone-date" datetime="@tombstone.Deleted.Value.ToString("o")">
+                                    Deleted @tombstone.Deleted.Value.ToString("g")
+                                </time>
+                            }
+                        </div>
+                    }
+                    else if (ShowObject)
+                    {
+                        @if (ObjectRenderer != null)
+                        {
+                            @ObjectRenderer(obj)
+                        }
+                        else
+                        {
+                            <ObjectDisplay Object="@obj" 
+                                         ShowMissingRenderer="@ShowMissingRenderer"
+                                         AutoResolveLinks="false" />
+                        }
+                    }
+                }
+            </div>
+        }
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Delete)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Delete activity to render.
+    /// </summary>
+    [Parameter]
+    public Delete? Delete { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the actor who performed the deletion.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the deleted object reference.
+    /// </summary>
+    [Parameter]
+    public bool ShowObject { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show tombstone information.
+    /// </summary>
+    [Parameter]
+    public bool ShowTombstone { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the timestamp of the deletion.
+    /// </summary>
+    [Parameter]
+    public bool ShowTimestamp { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show a message when no renderer is available for objects.
+    /// </summary>
+    [Parameter]
+    public bool ShowMissingRenderer { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom renderer for the deleted object.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<object>? ObjectRenderer { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render after the deletion.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Delete>? AdditionalContent { get; set; }
+}

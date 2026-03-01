@@ -1,0 +1,193 @@
+@using KristofferStrube.ActivityStreams
+
+<div class="activitypub-report-dialog">
+    @if (DialogTemplate != null)
+    {
+        @DialogTemplate(this)
+    }
+    else
+    {
+        <h3>Report @(ReportType == ReportTargetType.Actor ? "User" : "Post")</h3>
+        
+        <div class="report-form">
+            <div class="report-reasons">
+                <label>Why are you reporting this?</label>
+                <div class="reason-options">
+                    @foreach (var reason in ReasonOptions)
+                    {
+                        <label class="reason-option">
+                            <input type="checkbox" 
+                                   checked="@SelectedReasons.Contains(reason.Value)"
+                                   @onchange="(e) => ToggleReason(reason.Value, (bool)e.Value!)" />
+                            <span>@reason.Label</span>
+                        </label>
+                    }
+                </div>
+            </div>
+
+            <div class="report-details">
+                <label for="report-notes">Additional details (optional)</label>
+                <textarea id="report-notes" 
+                          rows="@NotesRows" 
+                          @bind="Notes" 
+                          @bind:event="oninput"
+                          placeholder="Please provide any additional context..."
+                          maxlength="@MaxNotesLength"></textarea>
+                <span class="character-count">@Notes.Length / @MaxNotesLength</span>
+            </div>
+
+            @if (AllowForward && ReportType == ReportTargetType.Post && !IsLocalActor)
+            {
+                <div class="report-forward">
+                    <label>
+                        <input type="checkbox" @bind="ForwardToRemoteServer" />
+                        <span>Forward this report to the remote server</span>
+                    </label>
+                    <p class="help-text">This will send a copy of your report to the server where this content is hosted.</p>
+                </div>
+            }
+
+            @if (AllowBlock)
+            {
+                <div class="report-block">
+                    <label>
+                        <input type="checkbox" @bind="BlockAfterReport" />
+                        <span>Block this @(ReportType == ReportTargetType.Actor ? "user" : "user") after reporting</span>
+                    </label>
+                </div>
+            }
+
+            <div class="report-actions">
+                <button type="button" class="btn-cancel" @onclick="HandleCancel" disabled="@IsSubmitting">
+                    Cancel
+                </button>
+                <button type="button" 
+                        class="btn-submit" 
+                        @onclick="HandleSubmit" 
+                        disabled="@(IsSubmitting || !CanSubmit)">
+                    @if (IsSubmitting)
+                    {
+                        <span>Submitting...</span>
+                    }
+                    else
+                    {
+                        <span>Submit Report</span>
+                    }
+                </button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="report-error" role="alert">
+                    @ErrorMessage
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IObject? TargetObject { get; set; }
+    [Parameter] public Actor? TargetActor { get; set; }
+    [Parameter] public ReportTargetType ReportType { get; set; }
+    [Parameter] public bool IsLocalActor { get; set; }
+    [Parameter] public bool AllowForward { get; set; } = true;
+    [Parameter] public bool AllowBlock { get; set; } = true;
+    [Parameter] public int NotesRows { get; set; } = 4;
+    [Parameter] public int MaxNotesLength { get; set; } = 1000;
+    [Parameter] public EventCallback<ReportSubmission> OnSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public RenderFragment<ReportDialog>? DialogTemplate { get; set; }
+
+    public List<ReportReason> ReasonOptions { get; set; } = new()
+    {
+        new ReportReason { Value = "spam", Label = "Spam" },
+        new ReportReason { Value = "harassment", Label = "Harassment or bullying" },
+        new ReportReason { Value = "hate-speech", Label = "Hate speech or symbols" },
+        new ReportReason { Value = "violence", Label = "Violence or threats" },
+        new ReportReason { Value = "nsfw", Label = "Inappropriate or NSFW content" },
+        new ReportReason { Value = "illegal", Label = "Illegal activity" },
+        new ReportReason { Value = "impersonation", Label = "Impersonation" },
+        new ReportReason { Value = "other", Label = "Other" }
+    };
+
+    public HashSet<string> SelectedReasons { get; set; } = new();
+    public string Notes { get; set; } = "";
+    public bool ForwardToRemoteServer { get; set; }
+    public bool BlockAfterReport { get; set; }
+    public bool IsSubmitting { get; set; }
+    public string? ErrorMessage { get; set; }
+
+    public bool CanSubmit => SelectedReasons.Count > 0 && !IsSubmitting;
+
+    public void ToggleReason(string reason, bool selected)
+    {
+        if (selected)
+            SelectedReasons.Add(reason);
+        else
+            SelectedReasons.Remove(reason);
+        StateHasChanged();
+    }
+
+    public async Task HandleSubmit()
+    {
+        if (!CanSubmit) return;
+
+        IsSubmitting = true;
+        ErrorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var submission = new ReportSubmission
+            {
+                TargetObject = TargetObject,
+                TargetActor = TargetActor,
+                ReportType = ReportType,
+                Reasons = SelectedReasons.ToList(),
+                Notes = Notes,
+                ForwardToRemoteServer = ForwardToRemoteServer,
+                BlockAfterReport = BlockAfterReport
+            };
+
+            await OnSubmit.InvokeAsync(submission);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to submit report: {ex.Message}";
+        }
+        finally
+        {
+            IsSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    public async Task HandleCancel()
+    {
+        await OnCancel.InvokeAsync();
+    }
+
+    public enum ReportTargetType
+    {
+        Post,
+        Actor
+    }
+
+    public class ReportReason
+    {
+        public string Value { get; set; } = "";
+        public string Label { get; set; } = "";
+    }
+
+    public class ReportSubmission
+    {
+        public IObject? TargetObject { get; set; }
+        public Actor? TargetActor { get; set; }
+        public ReportTargetType ReportType { get; set; }
+        public List<string> Reasons { get; set; } = new();
+        public string Notes { get; set; } = "";
+        public bool ForwardToRemoteServer { get; set; }
+        public bool BlockAfterReport { get; set; }
+    }
+}

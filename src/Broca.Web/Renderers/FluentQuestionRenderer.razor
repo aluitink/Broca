@@ -1,5 +1,5 @@
 @* Enhanced question/poll renderer with Fluent UI *@
-<FluentCard Class="question-card">
+<FluentCard Class="fluent-question-card">
     <div class="question-header">
         <FluentIcon Value="@(new Icons.Regular.Size24.QuestionCircle())" Color="Color.Accent" />
         @if (!string.IsNullOrEmpty(Question?.Name?.FirstOrDefault()))
@@ -119,22 +119,3 @@
         finally { _isVoting = false; StateHasChanged(); }
     }
 }
-
-<style>
-    .question-card { padding: 1.5rem; }
-    .question-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
-    .question-title { margin: 0; font-size: 1.125rem; font-weight: 600; }
-    .question-content { margin: 0 0 1.5rem; line-height: 1.6; }
-    .question-options { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
-    .option-button { width: 100%; justify-content: flex-start; text-align: left; padding: 0.875rem 1rem; }
-    .option-result { padding: 0.75rem; background: var(--neutral-layer-2); border-radius: var(--control-corner-radius); }
-    .option-result.winning { background: color-mix(in srgb, var(--accent-fill-rest) 10%, var(--neutral-layer-2)); border: 1px solid var(--accent-fill-rest); }
-    .option-text { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; font-weight: 500; }
-    .option-bar { position: relative; height: 28px; background: var(--neutral-layer-1); border-radius: var(--control-corner-radius); display: flex; align-items: center; padding: 0 0.5rem; gap: 0.5rem; }
-    .option-bar-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--accent-fill-rest); opacity: 0.3; transition: width 0.5s ease; }
-    .option-percentage { position: relative; z-index: 1; font-weight: 600; font-size: 0.875rem; }
-    .option-votes { position: relative; z-index: 1; margin-left: auto; font-size: 0.8125rem; color: var(--neutral-foreground-hint); }
-    .question-meta { display: flex; align-items: center; justify-content: space-between; padding-top: 1rem; border-top: 1px solid var(--neutral-stroke-rest); font-size: 0.875rem; }
-    .question-info { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .question-info span { display: flex; align-items: center; gap: 0.25rem; }
-</style>

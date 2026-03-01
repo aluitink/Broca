@@ -1,0 +1,230 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@using KristofferStrube.ActivityStreams
+@using static Broca.ActivityPub.Components.ConversationView
+
+@* 
+    FluentConversationView - A Fluent UI implementation for displaying full conversation threads.
+    Usage: <ConversationView FocalPostId="..." ViewTemplate="FluentConversationView.Template" />
+*@
+
+<div class="fluent-conversation-view">
+    @if (Context.IsLoading && !Context.AllPosts.Any())
+    {
+        <FluentCard class="loading-card">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="8">
+                <FluentProgressRing />
+                <FluentLabel>Loading conversation...</FluentLabel>
+            </FluentStack>
+        </FluentCard>
+    }
+
+    @if (!string.IsNullOrEmpty(Context.Error))
+    {
+        <FluentMessageBar Intent="MessageIntent.Error" Style="margin-bottom: 1rem;">
+            @Context.Error
+        </FluentMessageBar>
+    }
+
+    @if (Context.AllPosts.Any())
+    {
+        @if (Context.ShowParticipants && Context.Participants.Any())
+        {
+            <FluentCard class="participants-card">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                    <FluentLabel Weight="FontWeight.Bold" Color="Color.Neutral">
+                        Participants (@Context.Participants.Count)
+                    </FluentLabel>
+                    <FluentStack Orientation="Orientation.Horizontal" Wrap="true" VerticalGap="8" HorizontalGap="8">
+                        @foreach (var participant in Context.Participants)
+                        {
+                            <FluentPersona Name="@Context.GetParticipantDisplayName(participant)"
+                                         Initials="@Context.GetParticipantInitials(participant)"
+                                         Image="@GetParticipantImage(participant)"
+                                         ImageSize="32px"
+                                         Title="@Context.GetParticipantDisplayName(participant)">
+                            </FluentPersona>
+                        }
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        }
+
+        @if (Context.ShowMetadata)
+        {
+            <FluentCard class="metadata-card">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="16" Wrap="true">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalGap="4">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Comment())" Color="Color.Neutral" />
+                        <FluentLabel Color="Color.Neutral">
+                            @Context.AllPosts.Count @(Context.AllPosts.Count == 1 ? "post" : "posts")
+                        </FluentLabel>
+                    </FluentStack>
+                    @if (Context.DateRange.Start.HasValue && Context.DateRange.End.HasValue)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalGap="4">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Color="Color.Neutral" />
+                            <FluentLabel Color="Color.Neutral">
+                                @FormatDateRange(Context.DateRange.Start.Value, Context.DateRange.End.Value)
+                            </FluentLabel>
+                        </FluentStack>
+                    }
+                </FluentStack>
+            </FluentCard>
+        }
+
+        <div class="conversation-posts-container">
+            @if (Context.ViewMode == ConversationViewMode.Chronological)
+            {
+                @* Chronological view with timeline *@
+                <div class="chronological-timeline">
+                    @foreach (var post in Context.GetChronologicalPosts())
+                    {
+                        <div class="timeline-item">
+                            <div class="timeline-marker @(Context.IsFocalPost(post) ? "focal-marker" : "")"></div>
+                            <FluentCard class="@GetPostCardClass(post)">
+                                <ObjectDisplay Object="@post" />
+                            </FluentCard>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                @* Threaded view *@
+                @if (Context.ParentChain.Any())
+                {
+                    <div class="parent-chain-section">
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalGap="8" Style="margin-bottom: 0.75rem;">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.ArrowUp())" Color="Color.Neutral" />
+                            <FluentLabel Weight="FontWeight.Bold" Color="Color.Neutral">
+                                Earlier in conversation
+                            </FluentLabel>
+                        </FluentStack>
+                        @foreach (var parent in Context.ParentChain)
+                        {
+                            <FluentCard class="context-post-card">
+                                <ObjectDisplay Object="@parent" />
+                            </FluentCard>
+                        }
+                    </div>
+                }
+
+                @if (Context.FocalPost != null)
+                {
+                    <FluentCard class="focal-post-card">
+                        <div class="focal-indicator">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Target())" Color="Color.Accent" />
+                            <FluentLabel Weight="FontWeight.Bold" Color="Color.Accent">
+                                Viewing this post
+                            </FluentLabel>
+                        </div>
+                        <ObjectDisplay Object="@Context.FocalPost" />
+                    </FluentCard>
+                }
+
+                @if (Context.ShowReplies && Context.FocalPost != null)
+                {
+                    <div class="replies-section">
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalGap="8" Style="margin-bottom: 0.75rem;">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.CommentMultiple())" Color="Color.Neutral" />
+                            <FluentLabel Weight="FontWeight.Bold" Color="Color.Neutral">
+                                Replies
+                            </FluentLabel>
+                        </FluentStack>
+                        <ReplyThread RootPostId="@Context.FocalPost.Id"
+                                   RootPost="@Context.FocalPost"
+                                   MaxDepth="10"
+                                   PageSize="20"
+                                   ShowLoadMore="true"
+                                   ShowEmptyState="true"
+                                   CssClass="conversation-replies">
+                            <PostTemplate Context="reply">
+                                <FluentCard class="reply-post-card">
+                                    <ObjectDisplay Object="@reply" />
+                                </FluentCard>
+                            </PostTemplate>
+                        </ReplyThread>
+                    </div>
+                }
+            }
+        </div>
+    }
+    else if (!Context.IsLoading)
+    {
+        <FluentCard class="empty-card">
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="12">
+                <FluentIcon Value="@(new Icons.Regular.Size48.Comment())" Color="Color.Neutral" />
+                <FluentLabel Typo="Typography.Subject">No conversation found</FluentLabel>
+            </FluentStack>
+        </FluentCard>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public ConversationContext Context { get; set; } = null!;
+
+    private string GetPostCardClass(KristofferStrube.ActivityStreams.Object post)
+    {
+        if (Context.IsFocalPost(post))
+            return "focal-post-card";
+        if (Context.IsContextPost(post))
+            return "context-post-card";
+        return "post-card";
+    }
+
+    private string? GetParticipantImage(IObjectOrLink participant)
+    {
+        if (participant is Actor actor && actor.Icon?.Any() == true)
+        {
+            var icon = actor.Icon.FirstOrDefault();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.FirstOrDefault();
+                if (url is ILink link)
+                    return link.Href?.ToString();
+                if (url is Document doc && doc.Url?.Any() == true)
+                {
+                    var docUrl = doc.Url.FirstOrDefault();
+                    if (docUrl is ILink docLink)
+                        return docLink.Href?.ToString();
+                }
+            }
+        }
+        return null;
+    }
+
+    private string FormatDateRange(DateTimeOffset start, DateTimeOffset end)
+    {
+        var span = end - start;
+        if (span.TotalMinutes < 1)
+        {
+            return "Just now";
+        }
+        else if (span.TotalMinutes < 60)
+        {
+            return $"{(int)span.TotalMinutes} minute{((int)span.TotalMinutes != 1 ? "s" : "")} ago";
+        }
+        else if (span.TotalHours < 24)
+        {
+            return $"{(int)span.TotalHours} hour{((int)span.TotalHours != 1 ? "s" : "")} ago";
+        }
+        else if (span.TotalDays < 7)
+        {
+            return $"{(int)span.TotalDays} day{((int)span.TotalDays != 1 ? "s" : "")} ago";
+        }
+        else
+        {
+            return $"{(int)(span.TotalDays / 7)} week{((int)(span.TotalDays / 7) != 1 ? "s" : "")} ago";
+        }
+    }
+
+    public static RenderFragment<ConversationContext> Template => context => builder =>
+    {
+        builder.OpenComponent<FluentConversationView>(0);
+        builder.AddAttribute(1, nameof(Context), context);
+        builder.CloseComponent();
+    };
+}

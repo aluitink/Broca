@@ -124,6 +124,13 @@ public class ResilientActivityPubClient : IActivityPubClient
         }
     }
 
+    public IAsyncEnumerable<T> GetCollectionAsync<T>(
+        Uri collectionUri,
+        CollectionSearchParameters search,
+        int? limit = null,
+        CancellationToken cancellationToken = default)
+        => _innerClient.GetCollectionAsync<T>(collectionUri, search, limit, cancellationToken);
+
     public IActivityBuilder CreateActivityBuilder()
         => _innerClient.CreateActivityBuilder();
 

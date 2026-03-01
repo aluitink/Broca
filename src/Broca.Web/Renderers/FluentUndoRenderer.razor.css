@@ -1,0 +1,30 @@
+/* Fluent Undo Renderer Styles */
+.fluent-undo-card {
+    margin-bottom: 16px;
+    border-left: 3px solid var(--neutral-stroke-strong);
+}
+
+.undo-header {
+    align-items: center;
+}
+
+.undo-timestamp {
+    white-space: nowrap;
+}
+
+.undo-context {
+    margin: 0;
+    padding: 12px;
+    background-color: var(--neutral-layer-2);
+    border-radius: var(--control-corner-radius);
+}
+
+.undo-original {
+    margin: 0;
+    padding-left: 8px;
+    opacity: 0.7;
+}
+
+.actor-info-clickable:hover {
+    opacity: 0.8;
+}

@@ -127,52 +127,38 @@ public class ObjectController : ActivityPubControllerBase
                 return NotFound(new { error = "Object not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var replies = await _activityRepository.GetRepliesAsync(fullObjectId, limit, offset);
-            var totalCount = await _activityRepository.GetRepliesCountAsync(fullObjectId);
 
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
+            IEnumerable<IObjectOrLink> replies;
+            int totalCount;
+            bool itemsAlreadyPaginated;
 
-            if (!hasPageParam && !hasLimitParam)
+            if (search?.HasSearchCriteria == true && _activityRepository is ISearchableActivityRepository searchableRepo)
             {
-                // Return the collection wrapper
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/objects/{objectId}/replies",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/replies?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
+                replies = await searchableRepo.GetRepliesAsync(fullObjectId, search, limit, offset);
+                totalCount = await searchableRepo.GetRepliesCountAsync(fullObjectId, search);
+                itemsAlreadyPaginated = true;
+            }
+            else if (search?.HasSearchCriteria == true)
+            {
+                replies = await _activityRepository.GetRepliesAsync(fullObjectId, int.MaxValue, 0);
+                totalCount = replies.Count();
+                itemsAlreadyPaginated = false;
             }
             else
             {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/objects/{objectId}/replies?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/replies") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = replies.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/replies?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/replies?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
+                replies = await _activityRepository.GetRepliesAsync(fullObjectId, limit, offset);
+                totalCount = await _activityRepository.GetRepliesCountAsync(fullObjectId);
+                itemsAlreadyPaginated = true;
             }
+
+            var collectionUrl = $"{baseUrl}/users/{username}/objects/{objectId}/replies";
+            return BuildCollectionResponse(collectionUrl, replies, totalCount, page, limit, search, itemsAlreadyPaginated);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {
@@ -209,52 +195,17 @@ public class ObjectController : ActivityPubControllerBase
                 return NotFound(new { error = "Object not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var likes = await _activityRepository.GetLikesAsync(fullObjectId, limit, offset);
+            var likes = await _activityRepository.GetLikesAsync(fullObjectId, search?.HasSearchCriteria == true ? int.MaxValue : limit, search?.HasSearchCriteria == true ? 0 : offset);
             var totalCount = await _activityRepository.GetLikesCountAsync(fullObjectId);
 
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
-
-            if (!hasPageParam && !hasLimitParam)
-            {
-                // Return the collection wrapper
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/objects/{objectId}/likes",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/likes?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
-            }
-            else
-            {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/objects/{objectId}/likes?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/likes") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = likes.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/likes?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/likes?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
-            }
+            var collectionUrl = $"{baseUrl}/users/{username}/objects/{objectId}/likes";
+            return BuildCollectionResponse(collectionUrl, likes, totalCount, page, limit, search, search?.HasSearchCriteria != true);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {
@@ -291,52 +242,17 @@ public class ObjectController : ActivityPubControllerBase
                 return NotFound(new { error = "Object not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var shares = await _activityRepository.GetSharesAsync(fullObjectId, limit, offset);
+            var shares = await _activityRepository.GetSharesAsync(fullObjectId, search?.HasSearchCriteria == true ? int.MaxValue : limit, search?.HasSearchCriteria == true ? 0 : offset);
             var totalCount = await _activityRepository.GetSharesCountAsync(fullObjectId);
 
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
-
-            if (!hasPageParam && !hasLimitParam)
-            {
-                // Return the collection wrapper
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/objects/{objectId}/shares",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/shares?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
-            }
-            else
-            {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/objects/{objectId}/shares?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/shares") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = shares.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/shares?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/objects/{objectId}/shares?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
-            }
+            var collectionUrl = $"{baseUrl}/users/{username}/objects/{objectId}/shares";
+            return BuildCollectionResponse(collectionUrl, shares, totalCount, page, limit, search, search?.HasSearchCriteria != true);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {

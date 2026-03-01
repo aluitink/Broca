@@ -1,0 +1,252 @@
+@namespace Broca.ActivityPub.Components
+
+<div class="activitypub-activity-calendar @CssClass">
+    @if (CalendarTemplate != null)
+    {
+        @CalendarTemplate(new CalendarContext(this))
+    }
+    else
+    {
+        <div class="calendar-default">
+            <div class="calendar-header">
+                <span class="calendar-title">@Title</span>
+                @if (ShowLegend)
+                {
+                    <div class="calendar-legend">
+                        <span class="legend-label">Less</span>
+                        @for (int i = 0; i <= 4; i++)
+                        {
+                            <div class="legend-box level-@i" title="@GetLevelLabel(i)"></div>
+                        }
+                        <span class="legend-label">More</span>
+                    </div>
+                }
+            </div>
+            
+            <div class="calendar-grid">
+                @if (ShowMonthLabels)
+                {
+                    <div class="month-labels">
+                        @foreach (var month in GetMonthLabels())
+                        {
+                            <span class="month-label" style="grid-column: @month.Column / span @month.Span;">
+                                @month.Name
+                            </span>
+                        }
+                    </div>
+                }
+                
+                <div class="weeks-container">
+                    @if (ShowDayLabels)
+                    {
+                        <div class="day-labels">
+                            @foreach (var day in new[] { "Mon", "Wed", "Fri" })
+                            {
+                                <span class="day-label">@day</span>
+                            }
+                        </div>
+                    }
+                    
+                    <div class="days-grid">
+                        @foreach (var day in GetCalendarDays())
+                        {
+                            <div class="day-cell level-@day.Level" 
+                                 title="@GetDayTooltip(day)"
+                                 @onclick="@(() => OnDayClick(day))"
+                                 style="@GetDayStyle(day)">
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private Dictionary<DateOnly, int> activityData = new();
+    private int maxActivityCount = 1;
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = "Activity";
+
+    [Parameter]
+    public Dictionary<DateOnly, int>? ActivityData { get; set; }
+
+    [Parameter]
+    public int WeeksToShow { get; set; } = 52;
+
+    [Parameter]
+    public bool ShowMonthLabels { get; set; } = true;
+
+    [Parameter]
+    public bool ShowDayLabels { get; set; } = true;
+
+    [Parameter]
+    public bool ShowLegend { get; set; } = true;
+
+    [Parameter]
+    public RenderFragment<CalendarContext>? CalendarTemplate { get; set; }
+
+    [Parameter]
+    public EventCallback<CalendarDay> OnDayClicked { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (ActivityData != null)
+        {
+            activityData = new Dictionary<DateOnly, int>(ActivityData);
+            maxActivityCount = activityData.Values.DefaultIfEmpty(1).Max();
+        }
+    }
+
+    private List<CalendarDay> GetCalendarDays()
+    {
+        var days = new List<CalendarDay>();
+        var endDate = DateOnly.FromDateTime(DateTime.Today);
+        var startDate = endDate.AddDays(-(WeeksToShow * 7 - 1));
+        
+        // Adjust to start on Sunday or Monday
+        while (startDate.DayOfWeek != DayOfWeek.Sunday)
+        {
+            startDate = startDate.AddDays(-1);
+        }
+
+        for (var date = startDate; date <= endDate; date = date.AddDays(1))
+        {
+            var count = activityData.GetValueOrDefault(date, 0);
+            var level = GetActivityLevel(count);
+            
+            days.Add(new CalendarDay
+            {
+                Date = date,
+                Count = count,
+                Level = level
+            });
+        }
+
+        return days;
+    }
+
+    private int GetActivityLevel(int count)
+    {
+        if (count == 0) return 0;
+        if (maxActivityCount <= 1) return 1;
+        
+        var percentage = (double)count / maxActivityCount;
+        if (percentage >= 0.75) return 4;
+        if (percentage >= 0.50) return 3;
+        if (percentage >= 0.25) return 2;
+        return 1;
+    }
+
+    private List<MonthLabel> GetMonthLabels()
+    {
+        var labels = new List<MonthLabel>();
+        var endDate = DateOnly.FromDateTime(DateTime.Today);
+        var startDate = endDate.AddDays(-(WeeksToShow * 7 - 1));
+        
+        var currentMonth = startDate.Month;
+        var monthStart = 1;
+        var col = 1;
+
+        for (int week = 0; week < WeeksToShow; week++)
+        {
+            var weekDate = startDate.AddDays(week * 7);
+            if (weekDate.Month != currentMonth)
+            {
+                labels.Add(new MonthLabel
+                {
+                    Name = new DateTime(weekDate.Year, currentMonth, 1).ToString("MMM"),
+                    Column = monthStart,
+                    Span = week - monthStart + 1
+                });
+                currentMonth = weekDate.Month;
+                monthStart = week + 1;
+            }
+            col++;
+        }
+
+        // Add last month
+        if (monthStart <= WeeksToShow)
+        {
+            labels.Add(new MonthLabel
+            {
+                Name = new DateTime(endDate.Year, currentMonth, 1).ToString("MMM"),
+                Column = monthStart,
+                Span = WeeksToShow - monthStart + 1
+            });
+        }
+
+        return labels;
+    }
+
+    private string GetDayTooltip(CalendarDay day)
+    {
+        var dateStr = day.Date.ToString("MMM dd, yyyy");
+        return day.Count == 0 
+            ? $"{dateStr}: No activity" 
+            : $"{dateStr}: {day.Count} {(day.Count == 1 ? "post" : "posts")}";
+    }
+
+    private string GetDayStyle(CalendarDay day)
+    {
+        // Additional styling can be added here if needed
+        return string.Empty;
+    }
+
+    private string GetLevelLabel(int level)
+    {
+        return level switch
+        {
+            0 => "No activity",
+            1 => "1-25%",
+            2 => "25-50%",
+            3 => "50-75%",
+            4 => "75-100%",
+            _ => ""
+        };
+    }
+
+    private async Task OnDayClick(CalendarDay day)
+    {
+        if (OnDayClicked.HasDelegate)
+        {
+            await OnDayClicked.InvokeAsync(day);
+        }
+    }
+
+    public class CalendarDay
+    {
+        public DateOnly Date { get; set; }
+        public int Count { get; set; }
+        public int Level { get; set; }
+    }
+
+    public class MonthLabel
+    {
+        public string Name { get; set; } = string.Empty;
+        public int Column { get; set; }
+        public int Span { get; set; }
+    }
+
+    public class CalendarContext
+    {
+        private readonly ActivityCalendar _calendar;
+
+        public CalendarContext(ActivityCalendar calendar)
+        {
+            _calendar = calendar;
+        }
+
+        public List<CalendarDay> Days => _calendar.GetCalendarDays();
+        public List<MonthLabel> MonthLabels => _calendar.GetMonthLabels();
+        public string Title => _calendar.Title;
+        public bool ShowLegend => _calendar.ShowLegend;
+        public bool ShowMonthLabels => _calendar.ShowMonthLabels;
+        public bool ShowDayLabels => _calendar.ShowDayLabels;
+    }
+}

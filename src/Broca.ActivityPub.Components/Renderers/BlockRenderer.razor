@@ -1,0 +1,124 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-block @CssClass">
+    @if (Block != null)
+    {
+        <div class="block-header">
+            @if (ShowActor && Block.Actor?.Any() == true)
+            {
+                var actorRef = Block.Actor.FirstOrDefault();
+                <span class="block-actor">
+                    @if (actorRef is IObject actorObj && actorObj.Name?.Any() == true)
+                    {
+                        @actorObj.Name.First()
+                    }
+                    else if (actorRef is ILink link)
+                    {
+                        @link.Href?.ToString()
+                    }
+                    else if (actorRef != null)
+                    {
+                        @actorRef.ToString()
+                    }
+                </span>
+            }
+            <span class="block-action"> blocked </span>
+            @if (ShowTarget && Block.Object?.Any() == true)
+            {
+                var targetRef = Block.Object.FirstOrDefault();
+                <span class="block-target">
+                    @if (targetRef is IObject targetObj && targetObj.Name?.Any() == true)
+                    {
+                        @targetObj.Name.First()
+                    }
+                    else if (targetRef is ILink link)
+                    {
+                        @link.Href?.ToString()
+                    }
+                    else if (targetRef != null)
+                    {
+                        @targetRef.ToString()
+                    }
+                </span>
+            }
+            
+            @if (ShowTimestamp && Block.Published.HasValue)
+            {
+                <time class="block-timestamp" datetime="@Block.Published.Value.ToString("o")" title="@Block.Published.Value.ToString("f")">
+                    @Block.Published.Value.ToString("g")
+                </time>
+            }
+        </div>
+
+        @if (ShowReason && !string.IsNullOrEmpty(GetBlockReason()))
+        {
+            <div class="block-reason">
+                <span class="block-reason-label">Reason:</span>
+                <span class="block-reason-text">@GetBlockReason()</span>
+            </div>
+        }
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Block)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Block activity to render.
+    /// </summary>
+    [Parameter]
+    public Block? Block { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the actor who performed the block.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the target actor being blocked.
+    /// </summary>
+    [Parameter]
+    public bool ShowTarget { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the reason for blocking (if available).
+    /// </summary>
+    [Parameter]
+    public bool ShowReason { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to show the timestamp of the block.
+    /// </summary>
+    [Parameter]
+    public bool ShowTimestamp { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render after the block.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Block>? AdditionalContent { get; set; }
+
+    private string? GetBlockReason()
+    {
+        if (Block?.Summary?.Any() == true)
+        {
+            return Block.Summary.First();
+        }
+        if (Block?.Content?.Any() == true)
+        {
+            return Block.Content.First();
+        }
+        return null;
+    }
+}
