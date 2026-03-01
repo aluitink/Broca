@@ -2,6 +2,9 @@
 @using Microsoft.FluentUI.AspNetCore.Components
 @using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
 @using Broca.ActivityPub.Components
+@using Broca.ActivityPub.Components.Services
+@inject ActorResolutionService ActorResolver
+@inject NavigationManager Navigation
 @inherits ComponentBase
 
 <FluentCard Class="@($"fluent-activity-card {CssClass}")">
@@ -13,6 +16,7 @@
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center" Style="flex: 1;">
                     @if (!string.IsNullOrEmpty(GetActorId()))
                     {
+                        <div class="actor-info-clickable" @onclick="NavigateToActor" style="cursor: pointer;">
                         <FluentPersona Name="@GetActorName()"
                                        Image="@GetActorImageUrl()"
                                        ImageSize="32px"
@@ -24,6 +28,7 @@
                                 </FluentLabel>
                             }
                         </FluentPersona>
+                        </div>
                     }
                     
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
@@ -101,6 +106,8 @@
 </FluentCard>
 
 @code {
+    private ActorInfo? actorInfo;
+
     /// <summary>
     /// Gets or sets the Activity to render.
     /// </summary>
@@ -143,50 +150,64 @@
     [Parameter]
     public RenderFragment<Activity>? AdditionalContent { get; set; }
 
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Activity?.Actor?.Any() == true)
+        {
+            actorInfo = await ActorResolver.ResolveActorAsync(Activity.Actor.First());
+        }
+    }
+
+    private void NavigateToActor()
+    {
+        if (actorInfo?.Id != null)
+        {
+            Navigation.NavigateTo($"/actor?id={Uri.EscapeDataString(actorInfo.Id)}");
+        }
+    }
+
     private string GetActorId()
     {
+        if (!string.IsNullOrEmpty(actorInfo?.Id))
+            return actorInfo.Id;
+
         var actor = Activity?.Actor?.FirstOrDefault();
         if (actor == null) return string.Empty;
-        
-        // If it's an IObject with an Id
+
         if (actor is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
             return actorObj.Id;
-        
-        // If it's a Link with Href
+
         if (actor is Link link && link.Href != null)
             return link.Href.ToString();
-        
+
         return string.Empty;
     }
 
     private string GetActorName()
     {
+        if (actorInfo != null)
+            return actorInfo.Name;
+
         var actor = Activity?.Actor?.FirstOrDefault();
         if (actor == null) return string.Empty;
-        
-        // Try to get Name property if it's an Actor/Person
+
         if (actor is Actor actorObj && actorObj.Name?.Any() == true)
-        {
-            var name = actorObj.Name.FirstOrDefault();
-            return name ?? string.Empty;
-        }
-        
-        // Try to get Name from any Object
+            return actorObj.Name.FirstOrDefault() ?? string.Empty;
+
         if (actor is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
-        {
-            var name = obj.Name.FirstOrDefault();
-            return name ?? string.Empty;
-        }
-        
-        // Fallback to ID
-        return GetActorId();
+            return obj.Name.FirstOrDefault() ?? string.Empty;
+
+        return string.Empty;
     }
 
     private string GetActorImageUrl()
     {
+        if (actorInfo?.IconUrl != null)
+            return actorInfo.IconUrl;
+
         var actor = Activity?.Actor?.FirstOrDefault();
         if (actor == null) return string.Empty;
-        
+
         if (actor is Person person && person.Icon?.Any() == true)
         {
             var icon = person.Icon.First();
@@ -197,18 +218,21 @@
                     return link.Href.ToString();
             }
         }
-        
+
         return string.Empty;
     }
 
     private string GetActorUsername()
     {
+        if (actorInfo != null)
+            return actorInfo.PreferredUsername;
+
         var actor = Activity?.Actor?.FirstOrDefault();
         if (actor == null) return string.Empty;
-        
+
         if (actor is Person person && !string.IsNullOrEmpty(person.PreferredUsername))
             return person.PreferredUsername;
-        
+
         return string.Empty;
     }
 
