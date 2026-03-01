@@ -4,7 +4,7 @@ set -euo pipefail
 SERVER="${SERVER:-https://dev.broca.luit.ink}"
 API_KEY="${API_KEY:-dev-api-key-12345-change-in-production}"
 PREFIX="${PREFIX:-sample_}"
-COUNT="${COUNT:-3}"
+COUNT="${COUNT:-8}"
 ROUTE_PREFIX="${ROUTE_PREFIX:-ap}"
 ADMIN="${ADMIN:-admin}"
 

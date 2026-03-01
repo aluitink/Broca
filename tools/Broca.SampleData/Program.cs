@@ -337,7 +337,7 @@ for (int i = 0; i < Math.Min(userCount, personas.Length); i++)
         Console.WriteLine("        Ensure ActivityPub:EnableAdminOperations=true is set on the server.");
     }
 
-    await Task.Delay(200);
+    await Task.Delay(250);
 }
 
 if (createdUsers.Count == 0)
@@ -399,7 +399,7 @@ foreach (var (username, actorId) in createdUsers)
             Console.WriteLine($"    [!] {username} error: {ex.Message}");
         }
 
-        await Task.Delay(100);
+        await Task.Delay(500);
     }
 
     noteIdsByUser[username] = collected;
@@ -464,7 +464,7 @@ foreach (var (authorShort, starterContent, replies) in conversationStarters)
             }
             catch { }
             
-            await Task.Delay(100);
+            await Task.Delay(500);
         }
     }
     catch (Exception ex)
@@ -472,7 +472,7 @@ foreach (var (authorShort, starterContent, replies) in conversationStarters)
         Console.WriteLine($"    [!] Conversation error: {ex.Message}");
     }
     
-    await Task.Delay(200);
+    await Task.Delay(250);
 }
 
 // Post notes with attachments (for media gallery testing)
@@ -512,7 +512,7 @@ foreach (var (shortName, content, imageUrl, mediaType, altText) in notesWithAtta
         Console.WriteLine($"    [!] Attachment error: {ex.Message}");
     }
     
-    await Task.Delay(100);
+    await Task.Delay(500);
 }
 
 // Post followers-only notes (for visibility testing) 
@@ -546,7 +546,7 @@ foreach (var (shortName, content) in followersOnlyNotes)
         Console.WriteLine($"    [!] Followers-only error: {ex.Message}");
     }
     
-    await Task.Delay(100);
+    await Task.Delay(500);
 }
 
 // Post and then delete notes (for Delete activity testing)
@@ -575,7 +575,7 @@ foreach (var (shortName, content) in notesToDelete)
             {
                 Console.WriteLine($"    [{username}] Created note to delete: {content[..Math.Min(40, content.Length)]}...");
                 
-                await Task.Delay(200);
+                await Task.Delay(500);
                 
                 // Now delete it
                 var deleteActivity = builder.Delete(note.Id);
@@ -592,7 +592,7 @@ foreach (var (shortName, content) in notesToDelete)
         Console.WriteLine($"    [!] Delete error: {ex.Message}");
     }
     
-    await Task.Delay(100);
+    await Task.Delay(250);
 }
 
 // Post and then edit notes (for Update activity testing)
@@ -621,7 +621,7 @@ foreach (var (shortName, originalContent, editedContent) in notesToEdit)
             {
                 Console.WriteLine($"    [{username}] Created note to edit: {originalContent[..Math.Min(40, originalContent.Length)]}...");
                 
-                await Task.Delay(200);
+                await Task.Delay(500);
                 
                 // Now update it
                 var updatedNote = new Note
@@ -649,7 +649,7 @@ foreach (var (shortName, originalContent, editedContent) in notesToEdit)
         Console.WriteLine($"    [!] Update error: {ex.Message}");
     }
     
-    await Task.Delay(100);
+    await Task.Delay(500);
 }
 
 // Create custom collections
@@ -709,7 +709,7 @@ foreach (var (shortName, collectionId, name, description, collType, queryFilter)
         Console.WriteLine($"    [!] Collection error: {ex.Message}");
     }
     
-    await Task.Delay(100);
+    await Task.Delay(500);
 }
 
 // Add featured notes to collections
@@ -737,7 +737,7 @@ foreach (var (username, actorId) in createdUsers)
     }
     catch { }
     
-    await Task.Delay(100);
+    await Task.Delay(500);
 }
 
 // Set up follow relationships
@@ -768,7 +768,7 @@ foreach (var (followerShort, followeeShort) in followRelationships)
         Console.WriteLine($"    [!] Follow error: {ex.Message}");
     }
     
-    await Task.Delay(50);
+    await Task.Delay(250);
 }
 
 // Admin follows each sample user
@@ -785,7 +785,7 @@ foreach (var (username, actorId) in createdUsers)
     }
     catch (Exception ex) { Console.WriteLine($"    [!] {ex.Message}"); }
 
-    await Task.Delay(50);
+    await Task.Delay(250);
 }
 
 // Each sample user follows admin
@@ -803,7 +803,7 @@ foreach (var (username, actorId) in createdUsers)
     }
     catch (Exception ex) { Console.WriteLine($"    [!] {username}: {ex.Message}"); }
 
-    await Task.Delay(50);
+    await Task.Delay(250);
 }
 
 // Set up block relationships
@@ -834,7 +834,7 @@ foreach (var (blockerShort, blockedShort) in blockRelationships)
         Console.WriteLine($"    [!] Block error: {ex.Message}");
     }
     
-    await Task.Delay(100);
+    await Task.Delay(250);
 }
 
 // Create pending follows that will be rejected (for users with manual approval)
@@ -866,7 +866,7 @@ foreach (var (followerShort, followeeShort) in pendingFollowsToReject)
         Console.WriteLine($"    [!] Follow request error: {ex.Message}");
     }
     
-    await Task.Delay(100);
+    await Task.Delay(250);
 }
 
 // Test Undo Follow (follow then unfollow)
@@ -895,7 +895,7 @@ foreach (var (followerShort, followeeShort) in followsToUndo)
         if (followResp.IsSuccessStatusCode)
         {
             Console.WriteLine($"    [{followerShort}] → [{followeeShort}] (followed)");
-            await Task.Delay(200);
+            await Task.Delay(250);
             
             // Then undo the follow
             var undoActivity = builder.Undo(followActivity);
@@ -910,7 +910,7 @@ foreach (var (followerShort, followeeShort) in followsToUndo)
         Console.WriteLine($"    [!] Undo follow error: {ex.Message}");
     }
     
-    await Task.Delay(100);
+    await Task.Delay(250);
 }
 
 // Test Undo Like (like then unlike)
@@ -941,7 +941,7 @@ foreach (var (likerShort, likedUserShort) in likesToUndo)
         if (likeResp.IsSuccessStatusCode)
         {
             Console.WriteLine($"    [{likerShort}] ♥ [{likedUserShort}] (liked)");
-            await Task.Delay(200);
+            await Task.Delay(250);
             
             // Then undo the like
             var undoActivity = builder.Undo(likeActivity);
@@ -956,7 +956,7 @@ foreach (var (likerShort, likedUserShort) in likesToUndo)
         Console.WriteLine($"    [!] Undo like error: {ex.Message}");
     }
     
-    await Task.Delay(100);
+    await Task.Delay(250);
 }
 
 // Sample users like and boost each other's posts
@@ -1000,7 +1000,7 @@ if (createdUsers.Count > 1)
             catch (Exception ex) { Console.WriteLine($"    [!] {ex.Message}"); }
         }
 
-        await Task.Delay(50);
+        await Task.Delay(250);
     }
 }
 
