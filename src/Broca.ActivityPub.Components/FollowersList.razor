@@ -16,6 +16,7 @@
 
     @if (FollowersUrl != null)
     {
+        <div class="followers-grid">
         <CollectionLoader TItem="KristofferStrube.ActivityStreams.Object" 
                          CollectionUrl="@FollowersUrl" 
                          PageSize="@PageSize"
@@ -28,7 +29,7 @@
                 else
                 {
                     <div class="follower-item">
-                        <ActorRenderer Actor="@follower" ShowDetails="false" />
+                        <ObjectDisplay Object="@follower" />
                         
                         @if (ShowFollowButton && Client.ActorId != null)
                         {
@@ -87,6 +88,7 @@
                 }
             </ErrorTemplate>
         </CollectionLoader>
+        </div>
     }
     else
     {

@@ -1,0 +1,82 @@
+.activitypub-following-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.list-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.list-count {
+    font-size: 0.875rem;
+    color: var(--neutral-foreground-hint, #666);
+}
+
+.following-grid ::deep .collection-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+
+.following-grid ::deep .collection-item-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.following-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.following-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.unfollow-button {
+    padding: 0.375rem 0.875rem;
+    border: 1px solid var(--neutral-stroke-rest, #ccc);
+    border-radius: var(--control-corner-radius, 4px);
+    background: transparent;
+    color: var(--neutral-foreground-rest, #000);
+    cursor: pointer;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.unfollow-button:hover {
+    background: var(--error-subtle, #ffebee);
+    border-color: var(--error, #d32f2f);
+    color: var(--error, #d32f2f);
+}
+
+.unfollow-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.list-loading,
+.list-empty,
+.list-error {
+    padding: 2rem;
+    text-align: center;
+    color: var(--neutral-foreground-hint, #666);
+}
+
+.list-error {
+    color: var(--error, #d32f2f);
+}
+
+@media (max-width: 600px) {
+    .following-grid ::deep .collection-items {
+        grid-template-columns: 1fr;
+    }
+}
