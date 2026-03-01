@@ -59,7 +59,8 @@ public class HttpSignatureService
         var headers = new Dictionary<string, string>();
 
         // Add (request-target) pseudo-header
-        string requestTarget = $"{requestMethod.ToLower()} {requestUri.AbsolutePath}";
+        // Per the HTTP Signatures spec, (request-target) is method + path + query string
+        string requestTarget = $"{requestMethod.ToLower()} {requestUri.PathAndQuery}";
         headers.Add("(request-target)", requestTarget);
 
         // Add host header (include port if non-default)

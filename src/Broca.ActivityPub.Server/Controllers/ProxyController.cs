@@ -90,14 +90,18 @@ public class ProxyController : ControllerBase
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json", 0.8));
             request.Headers.UserAgent.ParseAdd(_options.UserAgent);
 
-            // Sign the request with the system actor credentials using Date header
+            // Sign the request with the system actor credentials using Date header.
+            // Accept is already set on the request above; do not pass it here or
+            // ApplyHttpSignatureAsync will append a duplicate via TryAddWithoutValidation,
+            // causing the signed value to mismatch the actual header (Threads returns 404
+            // when all signed headers cannot be verified).
             await _signatureService.ApplyHttpSignatureAsync(
                 request.Method.ToString(),
                 targetUri,
                 (headerName, headerValue) => request.Headers.TryAddWithoutValidation(headerName, headerValue),
                 publicKeyId,
                 privateKey,
-                accept: request.Headers.Accept.ToString(),
+                accept: null,
                 contentType: null,
                 getContentFunc: null,
                 cancellationToken: HttpContext.RequestAborted);
@@ -172,14 +176,15 @@ public class ProxyController : ControllerBase
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/activity+json"));
             request.Headers.UserAgent.ParseAdd(_options.UserAgent);
 
-            // Sign the request with the system actor credentials using Date header
+            // Sign the request with the system actor credentials using Date header.
+            // Accept is already set on the request above; do not pass it here (see GET handler).
             await _signatureService.ApplyHttpSignatureAsync(
                 request.Method.ToString(),
                 targetUri,
                 (headerName, headerValue) => request.Headers.TryAddWithoutValidation(headerName, headerValue),
                 publicKeyId,
                 privateKey,
-                accept: request.Headers.Accept.ToString(),
+                accept: null,
                 contentType: request.Content.Headers.ContentType?.ToString(),
                 getContentFunc: async (ct) => await request.Content.ReadAsByteArrayAsync(ct),
                 cancellationToken: HttpContext.RequestAborted);

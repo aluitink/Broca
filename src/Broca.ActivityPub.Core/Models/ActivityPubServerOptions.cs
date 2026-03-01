@@ -68,9 +68,9 @@ public class ActivityPubServerOptions
     public string SystemActorAlias => $"{SystemActorUsername}@{PrimaryDomain ?? "localhost"}";
 
     /// <summary>
-    /// User agent string for HTTP requests
+    /// User agent string for HTTP requests. Defaults to a computed value that includes the instance URL.
     /// </summary>
-    public string UserAgent { get; set; } = "Broca.ActivityPub.Server/1.0";
+    public string UserAgent => $"Broca.ActivityPub/1.0 (+{BaseUrl?.TrimEnd('/') ?? "http://localhost"})";
 
     /// <summary>
     /// Whether to auto-accept follow requests

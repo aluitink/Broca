@@ -504,15 +504,18 @@ public class ActivityPubClient : IActivityPubClient
         var method = request.Method.ToString();
         var uri = request.RequestUri!;
         var contentType = request.Content?.Headers.ContentType?.ToString();
-        var accept = request.Headers.Accept.Count > 0 ? request.Headers.Accept.ToString() : null;
 
+        // Accept is already set on the request; passing it here would cause ApplyHttpSignatureAsync
+        // to add it a second time via TryAddWithoutValidation, producing a duplicate Accept header
+        // whose value no longer matches the signed value — breaking signature verification on
+        // servers like Threads that check all signed headers.
         await _signatureService.ApplyHttpSignatureAsync(
             method,
             uri,
             (headerName, headerValue) => request.Headers.TryAddWithoutValidation(headerName, headerValue),
             _options.PublicKeyId,
             _options.PrivateKeyPem,
-            accept,
+            accept: null,
             contentType,
             async (ct) => request.Content != null ? await request.Content.ReadAsByteArrayAsync(ct) : Array.Empty<byte>(),
             cancellationToken);
