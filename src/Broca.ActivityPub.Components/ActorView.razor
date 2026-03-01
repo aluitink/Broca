@@ -124,7 +124,7 @@
                         <div class="tab-panel">
                             @if (currentActor is Actor actor && actor.Following != null)
                             {
-                                <FollowingList ActorId="@actor.Id" 
+                                <FollowingList Actor="@actor" 
                                              FollowingUrl="@actor.Following.Href" />
                             }
                             else
@@ -138,7 +138,7 @@
                         <div class="tab-panel">
                             @if (currentActor is Actor actor && actor.Followers != null)
                             {
-                                <FollowersList ActorId="@actor.Id" 
+                                <FollowersList Actor="@actor" 
                                              FollowersUrl="@actor.Followers.Href" />
                             }
                             else
