@@ -7,13 +7,13 @@
 <PageTitle>Explore - Broca</PageTitle>
 
 <div class="explore-container">
-    <FluentCard Class="explore-header">
+    <div class="explore-header">
         <h1>
             <FluentIcon Value="@(new Icons.Regular.Size24.Search())" Color="Color.Accent" />
             Explore the Fediverse
         </h1>
         <p>Search for and discover actors across the ActivityPub network</p>
-    </FluentCard>
+    </div>
 
     <FluentCard Class="search-card">
         <ActorBrowser OnActorFound="@HandleActorFound">
@@ -111,6 +111,11 @@
         gap: 1.5rem;
         max-width: 900px;
         margin: 0 auto;
+    }
+
+    .explore-header {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .explore-header h1 {

@@ -1,28 +1,28 @@
 using Glihm.JSInterop.Browser.WebCryptoAPI.Cryptography;
-using Glihm.JSInterop.Browser.WebCryptoAPI.Cryptography.RSA;
-using Glihm.JSInterop.Browser.WebCryptoAPI.Interfaces;
-using Glihm.JSInterop.Browser.WebCryptoAPI.Interfaces.CryptoKeys;
-using Glihm.JSInterop.Browser.WebCryptoAPI.Interfaces.Subtle.RSA;
-using Glihm.JSInterop.Browser.WebCryptoAPI.Interfaces.Subtle.SHA;
-using Glihm.JSInterop.Browser.WebCryptoAPI.JSHelpers;
 using Broca.ActivityPub.Core.Interfaces;
+using Microsoft.Extensions.Logging;
+using Microsoft.JSInterop;
 
 namespace Broca.ActivityPub.Client.WebCrypto;
 
-/// <summary>
-/// Web Crypto API-based implementation of ICryptoProvider for Blazor WebAssembly
-/// </summary>
-/// <remarks>
-/// This provider uses the browser's native Web Crypto API for RSA signing and verification,
-/// which is necessary in WASM environments where .NET's RSACryptoServiceProvider is not supported.
-/// </remarks>
-public class WebCryptoProvider : ICryptoProvider
+public class WebCryptoProvider : ICryptoProvider, IAsyncDisposable
 {
-    private readonly Crypto _crypto;
+    private const string ModulePath = "./_content/Broca.ActivityPub.Client.WebCrypto/rsaSigning.js";
 
-    public WebCryptoProvider(Crypto crypto)
+    private readonly IJSRuntime _jsRuntime;
+    private readonly ILogger<WebCryptoProvider> _logger;
+    private IJSObjectReference? _module;
+
+    public WebCryptoProvider(IJSRuntime jsRuntime, ILogger<WebCryptoProvider> logger)
     {
-        _crypto = crypto ?? throw new ArgumentNullException(nameof(crypto));
+        _jsRuntime = jsRuntime ?? throw new ArgumentNullException(nameof(jsRuntime));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    private async ValueTask<IJSObjectReference> GetModuleAsync()
+    {
+        _module ??= await _jsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+        return _module;
     }
 
     /// <inheritdoc/>
@@ -31,33 +31,32 @@ public class WebCryptoProvider : ICryptoProvider
         ArgumentException.ThrowIfNullOrWhiteSpace(privateKeyPem);
         ArgumentNullException.ThrowIfNull(bytesToSign);
 
+        if (!privateKeyPem.Contains("BEGIN PRIVATE KEY") && !privateKeyPem.Contains("BEGIN RSA PRIVATE KEY"))
+            throw new ArgumentException("privateKeyPem does not appear to contain a valid PEM-encoded private key", nameof(privateKeyPem));
+
         byte[]? key = PemHelper.KeyExtract(privateKeyPem);
-        if (key is null)
+        if (key is null || key.Length == 0)
+            throw new InvalidOperationException("Failed to extract key from PEM - PemHelper.KeyExtract returned null or empty array");
+
+        _logger.LogDebug("RsaSignDataAsync: extracted {KeyLength} bytes from PEM, data length {DataLength}", key.Length, bytesToSign.Length);
+
+        try
         {
-            throw new InvalidOperationException("Failed to extract key from PEM");
-        }
+            var module = await GetModuleAsync();
+            var signatureBase64 = await module.InvokeAsync<string>(
+                "signRsa",
+                Convert.ToBase64String(key),
+                Convert.ToBase64String(bytesToSign));
 
-        if (!await _crypto.IsWebCryptoAPISupported())
+            var signature = Convert.FromBase64String(signatureBase64);
+            _logger.LogDebug("RsaSignDataAsync: sign succeeded, signature length {SigLength}", signature.Length);
+            return signature;
+        }
+        catch (JSException ex)
         {
-            throw new NotSupportedException("Web Crypto API is not supported in this browser");
+            _logger.LogError(ex, "WebCrypto Sign failed. JSException: {JsError}", ex.Message);
+            throw new InvalidOperationException($"Failed to sign data with private key - WebCrypto error: {ex.Message}", ex);
         }
-
-        JSResultValue<CryptoKeyDescriptor> res = await _crypto.Subtle.ImportKey(
-            CryptoKeyFormat.PKCS8,
-            key,
-            new RsaHashedImportParams(RsaAlgorithm.SSA_PKCS1_v1_5, ShaAlgorithm.SHA256),
-            false,
-            CryptoKeyUsage.Sign);
-
-        if (!res)
-        {
-            res.GetValueOrThrow();
-        }
-
-        var keyDescriptor = res.GetValueOrThrow();
-
-        var result = await _crypto.Subtle.Sign(new RsaSsaPkcs1Params(), keyDescriptor, bytesToSign);
-        return result.GetValueOrThrow();
     }
 
     /// <inheritdoc/>
@@ -69,30 +68,27 @@ public class WebCryptoProvider : ICryptoProvider
 
         byte[]? key = PemHelper.KeyExtract(publicKeyPem);
         if (key is null)
+            return false;
+
+        try
         {
+            var module = await GetModuleAsync();
+            return await module.InvokeAsync<bool>(
+                "verifyRsa",
+                Convert.ToBase64String(key),
+                Convert.ToBase64String(signatureBytes),
+                Convert.ToBase64String(signedDataBytes));
+        }
+        catch (JSException ex)
+        {
+            _logger.LogWarning(ex, "RsaVerifyDataAsync failed. JSException: {JsError}", ex.Message);
             return false;
         }
+    }
 
-        if (!await _crypto.IsWebCryptoAPISupported())
-        {
-            return false;
-        }
-
-        var res = await _crypto.Subtle.ImportKey(
-            CryptoKeyFormat.PKCS8,
-            key,
-            new RsaHashedImportParams(RsaAlgorithm.SSA_PKCS1_v1_5, ShaAlgorithm.SHA256),
-            true,
-            CryptoKeyUsage.Verify);
-
-        if (!res)
-        {
-            return false;
-        }
-
-        var keyDescriptor = res.GetValueOrThrow();
-
-        var result = await _crypto.Subtle.Verify(new RsaSsaPkcs1Params(), keyDescriptor, signatureBytes, signedDataBytes);
-        return result.GetValueOrThrow();
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+            await _module.DisposeAsync();
     }
 }

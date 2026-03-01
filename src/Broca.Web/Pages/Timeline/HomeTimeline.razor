@@ -21,7 +21,7 @@
     }
     else
     {
-        <FluentCard Class="timeline-header">
+        <div class="timeline-header">
             <div class="header-content">
                 <div class="header-title">
                     <FluentIcon Value="@(new Icons.Regular.Size24.Home())" Color="Color.Accent" />
@@ -43,7 +43,7 @@
                     New Post
                 </FluentButton>
             </div>
-        </FluentCard>
+        </div>
 
         @if (_inboxUrl != null)
         {
@@ -138,7 +138,8 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .header-content {

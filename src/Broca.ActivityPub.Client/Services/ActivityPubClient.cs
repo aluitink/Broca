@@ -491,6 +491,14 @@ public class ActivityPubClient : IActivityPubClient
             throw new InvalidOperationException("PublicKeyId and PrivateKeyPem are required for signing requests");
         }
 
+        // Validate PEM format
+        if (!_options.PrivateKeyPem.Contains("BEGIN") || !_options.PrivateKeyPem.Contains("PRIVATE KEY"))
+        {
+            _logger.LogError("PrivateKeyPem does not appear to be a valid PEM format. First 50 chars: {PemPrefix}", 
+                _options.PrivateKeyPem.Substring(0, Math.Min(50, _options.PrivateKeyPem.Length)));
+            throw new InvalidOperationException("PrivateKeyPem does not appear to be in valid PEM format");
+        }
+
         _logger.LogDebug("Signing request to {Uri} with key ID {KeyId}", request.RequestUri, _options.PublicKeyId);
 
         var method = request.Method.ToString();

@@ -47,6 +47,9 @@ public static class ServiceCollectionExtensions
         // Register draft manager service
         services.TryAddScoped<DraftManager>();
 
+        // Register raw JSON overlay service
+        services.TryAddScoped<RawJsonOverlayService>();
+
         // Register default renderers
         RegisterDefaultRenderers(services);
 

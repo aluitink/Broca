@@ -20,12 +20,12 @@
 else if (AuthState.CurrentActorId != null)
 {
     <div class="profile-container">
-        <FluentCard Class="profile-header">
+        <div class="profile-header">
             <h1>
                 <FluentIcon Value="@(new Icons.Regular.Size24.Person())" Color="Color.Accent" />
                 Your Profile
             </h1>
-        </FluentCard>
+        </div>
 
         <ActorProfile ActorUri="@(new Uri(AuthState.CurrentActorId))" />
 
@@ -107,6 +107,11 @@ else if (AuthState.CurrentActorId != null)
         gap: 1.5rem;
         max-width: 900px;
         margin: 0 auto;
+    }
+
+    .profile-header {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .profile-header h1 {

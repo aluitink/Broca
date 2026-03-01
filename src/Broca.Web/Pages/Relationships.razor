@@ -21,13 +21,13 @@
 else
 {
     <div class="relationships-container">
-        <FluentCard Class="relationships-header">
+        <div class="relationships-header">
             <h1>
                 <FluentIcon Value="@(new Icons.Regular.Size24.People())" Color="Color.Accent" />
                 Relationships
             </h1>
             <p>Manage your followers and following</p>
-        </FluentCard>
+        </div>
 
         <FluentTabs>
             <FluentTab Label="Followers">
@@ -271,6 +271,11 @@ else
         gap: 1rem;
         max-width: 1000px;
         margin: 0 auto;
+    }
+
+    .relationships-header {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .relationships-header h1 {

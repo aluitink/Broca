@@ -19,13 +19,13 @@
 else
 {
     <div class="outbox-container">
-        <FluentCard Class="outbox-header">
+        <div class="outbox-header">
             <h1>
                 <FluentIcon Value="@(new Icons.Regular.Size24.Send())" Color="Color.Accent" />
                 Outbox
             </h1>
             <p>Activities you have sent</p>
-        </FluentCard>
+        </div>
 
         @if (!string.IsNullOrEmpty(_postMessage))
         {
@@ -122,6 +122,11 @@ else
         gap: 1rem;
         max-width: 800px;
         margin: 0 auto;
+    }
+
+    .outbox-header {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .outbox-header h1 {

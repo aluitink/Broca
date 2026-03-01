@@ -1,8 +1,10 @@
 @using KristofferStrube.ActivityStreams
 @using Microsoft.JSInterop
 @using System.Text.Json
+@using Broca.ActivityPub.Components.Services
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject RawJsonOverlayService RawJsonOverlay
 
 <div class="object-menu">
     <button class="menu-button" @onclick="ToggleMenu" aria-label="Object menu" title="More options">
@@ -145,16 +147,14 @@
                     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
                 };
                 var json = JsonSerializer.Serialize(Object, options);
-                
-                // Open a modal or new window with the JSON
-                await JS.InvokeVoidAsync("alert", json);
-                
-                await OnMenuItemClicked.InvokeAsync("raw");
+                RawJsonOverlay.Show(json);
                 isMenuOpen = false;
+                await OnMenuItemClicked.InvokeAsync("raw");
             }
             catch (Exception ex)
             {
-                await JS.InvokeVoidAsync("alert", $"Error serializing object: {ex.Message}");
+                RawJsonOverlay.Show($"Error serializing object: {ex.Message}");
+                isMenuOpen = false;
             }
         }
     }

@@ -19,13 +19,13 @@
 else
 {
     <div class="inbox-container">
-        <FluentCard Class="inbox-header">
+        <div class="inbox-header">
             <h1>
                 <FluentIcon Value="@(new Icons.Regular.Size24.Mail())" Color="Color.Accent" />
                 Inbox
             </h1>
             <p>Activities sent to you from other actors</p>
-        </FluentCard>
+        </div>
 
         @if (_inboxUrl != null)
         {
@@ -100,6 +100,11 @@ else
         gap: 1rem;
         max-width: 800px;
         margin: 0 auto;
+    }
+
+    .inbox-header {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .inbox-header h1 {

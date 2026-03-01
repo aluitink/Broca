@@ -23,7 +23,7 @@
 else
 {
     <div class="collections-container">
-        <FluentCard Class="collections-header">
+        <div class="collections-header">
             <h1>
                 <FluentIcon Value="@(new Icons.Regular.Size24.Grid())" Color="Color.Accent" />
                 Custom Collections
@@ -33,7 +33,7 @@ else
                 <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
                 Create Collection
             </FluentButton>
-        </FluentCard>
+        </div>
 
         @if (_isLoading)
         {
@@ -518,6 +518,8 @@ else
         display: flex;
         flex-direction: column;
         gap: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .collections-header h1 {

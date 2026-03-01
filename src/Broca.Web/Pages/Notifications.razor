@@ -19,13 +19,13 @@
 else
 {
     <div class="notifications-container">
-        <FluentCard Class="notifications-header">
+        <div class="notifications-header">
             <h1>
                 <FluentIcon Value="@(new Icons.Regular.Size24.Alert())" Color="Color.Accent" />
                 Notifications
             </h1>
             <p>Activity that mentions you or interacts with your content</p>
-        </FluentCard>
+        </div>
 
         @if (_inboxUrl != null)
         {
@@ -116,6 +116,11 @@ else
         gap: 1.5rem;
         max-width: 800px;
         margin: 0 auto;
+    }
+
+    .notifications-header {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .notifications-header h1 {

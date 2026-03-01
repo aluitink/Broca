@@ -174,9 +174,12 @@
     [Parameter]
     public EventCallback<KristofferStrube.ActivityStreams.Object> OnReplyClick { get; set; }
 
+    [Parameter]
+    public string? RepliesCollectionUrl { get; set; }
+
     protected override async Task OnParametersSetAsync()
     {
-        if ((RootPostId != null || RootPost != null) && !replies.Any())
+        if ((RootPostId != null || RootPost != null || RepliesCollectionUrl != null) && !replies.Any())
         {
             await LoadRepliesAsync();
         }
@@ -192,19 +195,25 @@
 
         try
         {
-            var targetPostId = RootPostId ?? RootPost?.Id;
-            if (string.IsNullOrEmpty(targetPostId)) return;
+            var collectionUrl = RepliesCollectionUrl
+                ?? (RootPostId != null ? $"{RootPostId}/replies" : null)
+                ?? (RootPost?.Id != null ? $"{RootPost.Id}/replies" : null);
 
-            // TODO: This would need a proper API endpoint that returns replies
-            // For now, this is a placeholder implementation
-            // In a real implementation, you'd call something like:
-            // var repliesCollection = await Client.GetAsync<OrderedCollection>(
-            //     new Uri($"{targetPostId}/replies?page={currentPage}&limit={PageSize}")
-            // );
-            
-            // Placeholder: simulate loading
-            await Task.Delay(500);
-            hasMore = false;
+            if (string.IsNullOrEmpty(collectionUrl)) return;
+
+            var pageUrl = new Uri($"{collectionUrl}?page={currentPage}&limit={PageSize}");
+            var result = await Client.GetAsync<IObjectOrLink>(pageUrl, useCache: false);
+
+            if (result is CollectionPage page)
+            {
+                var items = page.OrderedItems ?? page.Items ?? Enumerable.Empty<IObjectOrLink>();
+                foreach (var item in items)
+                {
+                    if (item is KristofferStrube.ActivityStreams.Object obj)
+                        replies.Add(new ReplyNode { Post = obj, Depth = 0 });
+                }
+                hasMore = page.Next != null;
+            }
         }
         catch (Exception ex)
         {

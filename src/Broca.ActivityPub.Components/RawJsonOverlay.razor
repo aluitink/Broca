@@ -1,0 +1,33 @@
+@using Broca.ActivityPub.Components.Services
+@inject RawJsonOverlayService OverlayService
+@implements IDisposable
+
+@if (OverlayService.IsVisible)
+{
+    <div class="raw-overlay">
+        <div class="raw-overlay-toolbar">
+            <span class="raw-overlay-title">Raw JSON</span>
+            <button class="raw-overlay-dismiss" @onclick="OverlayService.Hide" aria-label="Dismiss">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z"/>
+                </svg>
+                Dismiss
+            </button>
+        </div>
+        <div class="raw-overlay-body">
+            <pre><code>@OverlayService.Json</code></pre>
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        OverlayService.OnChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        OverlayService.OnChanged -= StateHasChanged;
+    }
+}

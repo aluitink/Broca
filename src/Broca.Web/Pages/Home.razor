@@ -13,24 +13,19 @@
 <div class="home-container">
     @if (AuthState.IsAuthenticated)
     {
-        <FluentCard Class="home-header">
+        <div class="home-header">
             <h1>Welcome back, @GetDisplayName()</h1>
-            <p>Here's the latest public activity</p>
-            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/inbox"))">
-                <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
-                View Your Inbox
-            </FluentButton>
-        </FluentCard>
+        </div>
     }
     else
     {
-        <FluentCard Class="home-header">
+        <div class="home-header">
             <h1>Welcome to Broca</h1>
             <p>A modern ActivityPub client for the decentralized web</p>
             <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/login"))">
                 Get Started
             </FluentButton>
-        </FluentCard>
+        </div>
     }
 
     @if (_sysInboxUrl != null)
@@ -143,6 +138,8 @@
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .home-header h1 {

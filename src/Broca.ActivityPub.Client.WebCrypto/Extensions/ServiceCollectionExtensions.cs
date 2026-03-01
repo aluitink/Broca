@@ -1,7 +1,6 @@
 using Broca.ActivityPub.Client.Extensions;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
-using Glihm.JSInterop.Browser.WebCryptoAPI.Cryptography.RSA;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Broca.ActivityPub.Client.WebCrypto.Extensions;
@@ -27,8 +26,6 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         Action<ActivityPubClientOptions>? configureOptions = null)
     {
-        // Add WebCrypto RSA services
-        services.AddWebCryptoRsa();
         services.AddScoped<WebCryptoProvider>();
 
         // Add ActivityPub client with standard registration
