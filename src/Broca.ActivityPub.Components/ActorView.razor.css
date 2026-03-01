@@ -48,7 +48,8 @@
     gap: 0;
 }
 
-.actor-profile-section {
+/* ── Hero Section ───────────────────────────────────────────── */
+.actor-hero-section {
     background: var(--neutral-layer-1, #fff);
     border: 1px solid var(--neutral-stroke-divider-rest, #e0e0e0);
     border-radius: var(--control-corner-radius, 4px);
@@ -56,22 +57,129 @@
     margin-bottom: 0;
 }
 
-/* Place actor renderer (the card from FluentActorRenderer) flush against the border */
-.actor-profile-section > :first-child {
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+.actor-hero-banner-container {
+    position: relative;
+    height: 220px;
+    overflow: hidden;
+    background: var(--neutral-layer-2, #f0f0f0);
 }
 
-/* Action bar sits below the actor card with a divider */
-.actor-actions {
+.actor-hero-banner {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.actor-hero-banner-placeholder {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        135deg,
+        var(--accent-fill-rest, #0078d4) 0%,
+        var(--accent-fill-hover, #106ebe) 100%
+    );
+}
+
+.actor-hero-identity {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0 1rem 0.875rem;
+    margin-top: -36px;
+    position: relative;
+}
+
+.actor-hero-avatar-container {
+    flex-shrink: 0;
+}
+
+.actor-hero-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--neutral-layer-1, #fff);
+    background: var(--neutral-layer-2, #e8e8e8);
+    display: block;
+}
+
+.actor-hero-avatar-placeholder {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid var(--neutral-layer-1, #fff);
+    background: var(--accent-fill-rest, #0078d4);
+    color: #fff;
+    font-size: 2rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.actor-hero-name-area {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding-top: 2.5rem;
+}
+
+.actor-hero-name {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--neutral-foreground-rest, #000);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.actor-hero-username {
+    font-size: 0.875rem;
+    color: var(--neutral-foreground-hint, #666);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.actor-hero-actions {
     display: flex;
     gap: 0.5rem;
+    align-items: center;
+    flex-shrink: 0;
+    padding-top: 2.5rem;
+}
+
+.actor-hero-summary {
+    padding: 0 1rem 0.75rem;
+    line-height: 1.6;
+    font-size: 0.9375rem;
+    color: var(--neutral-foreground-rest, #000);
+}
+
+.actor-hero-meta {
+    display: flex;
+    gap: 1.25rem;
     flex-wrap: wrap;
     align-items: center;
-    padding: 0.75rem 1rem;
+    padding: 0 1rem 1rem;
+    font-size: 0.8125rem;
+    color: var(--neutral-foreground-hint, #666);
     border-top: 1px solid var(--neutral-stroke-divider-rest, #e0e0e0);
-    background: var(--neutral-layer-2, #fafafa);
+    margin-top: 0.25rem;
+    padding-top: 0.625rem;
+}
+
+.actor-hero-meta a {
+    color: var(--accent-fill-rest, #0078d4);
+    text-decoration: none;
+}
+
+.actor-hero-meta a:hover {
+    text-decoration: underline;
 }
 
 .actor-action-button {
@@ -274,11 +382,28 @@
     .tab-content {
         padding: 1rem;
     }
+
+    .actor-hero-banner-container {
+        height: 160px;
+    }
+
+    .actor-hero-identity {
+        flex-wrap: wrap;
+        margin-top: -28px;
+    }
+
+    .actor-hero-name-area,
+    .actor-hero-actions {
+        padding-top: 1.75rem;
+    }
 }
 
-@media (max-width: 600px) {
-    .actor-actions {
+@media (max-width: 480px) {
+    .actor-hero-actions {
         flex-direction: column;
+        align-items: stretch;
+        padding-top: 0;
+        width: 100%;
     }
 
     .actor-action-button {

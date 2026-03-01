@@ -16,31 +16,39 @@
     @if (!AuthState.IsAuthenticated)
     {
         <FluentCard>
-            <h2>Authentication Required</h2>
-            <p>Please login to view posts.</p>
-            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString($"/post/{ObjectId}")}"))">
-                Login
-            </FluentButton>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                <FluentLabel Typo="Typography.Subject">Authentication Required</FluentLabel>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Please login to view posts.</FluentLabel>
+                <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/post/" + ObjectId)}"))">
+                    Login
+                </FluentButton>
+            </FluentStack>
         </FluentCard>
     }
     else if (_isLoading)
     {
         <FluentCard>
-            <FluentProgressRing />
-            <p>Loading post...</p>
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                         Style="padding: 2rem; text-align: center;" VerticalGap="16">
+                <FluentProgressRing />
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Loading post...</FluentLabel>
+            </FluentStack>
         </FluentCard>
     }
     else if (_error != null)
     {
         <FluentCard>
-            <h2>
-                <FluentIcon Value="@(new Icons.Regular.Size20.ErrorCircle())" Color="Color.Error" />
-                Error Loading Post
-            </h2>
-            <p>@_error</p>
-            <FluentButton Appearance="Appearance.Outline" OnClick="@LoadPostAsync">
-                Try Again
-            </FluentButton>
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                         Style="padding: 2rem; text-align: center;" VerticalGap="16">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.ErrorCircle())" Color="Color.Error" />
+                    <FluentLabel Typo="Typography.Subject">Error Loading Post</FluentLabel>
+                </FluentStack>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@_error</FluentLabel>
+                <FluentButton Appearance="Appearance.Outline" OnClick="@LoadPostAsync">
+                    Try Again
+                </FluentButton>
+            </FluentStack>
         </FluentCard>
     }
     else if (_post != null)
@@ -52,7 +60,7 @@
                              OnClick="@(() => Navigation.NavigateTo("/"))">
                     Back
                 </FluentButton>
-                <h1>Post Details</h1>
+                <FluentLabel Typo="Typography.PageTitle">Post Details</FluentLabel>
             </div>
 
             <div class="post-content">
@@ -61,10 +69,11 @@
         </FluentCard>
 
         <FluentCard Class="post-thread-card">
-            <h2>
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                         VerticalAlignment="VerticalAlignment.Center" Style="margin-bottom: 1rem;">
                 <FluentIcon Value="@(new Icons.Regular.Size20.Comment())" Color="Color.Accent" />
-                Conversation
-            </h2>
+                <FluentLabel Typo="Typography.Subject">Conversation</FluentLabel>
+            </FluentStack>
             <ConversationView FocalPostId="@_post.Id"
                             FocalPost="@_post"
                             ViewMode="ConversationViewMode.Threaded"
@@ -184,22 +193,8 @@
         margin-bottom: 1.5rem;
     }
 
-    .post-header h1 {
-        margin: 0;
-        font-size: 1.5rem;
-        flex: 1;
-    }
-
     .post-content {
         margin-bottom: 1rem;
-    }
-
-    .post-thread-card h2 {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 1rem;
-        font-size: 1.25rem;
     }
 
     .post-conversation-view {

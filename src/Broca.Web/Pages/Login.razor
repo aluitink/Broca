@@ -9,8 +9,10 @@
 
 <div class="login-container">
     <FluentCard Class="login-card">
-        <h2>Login to Broca</h2>
-        <p class="login-subtitle">Enter your credentials to access your ActivityPub account</p>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Style="margin-bottom: 1.5rem;">
+            <FluentLabel Typo="Typography.PageTitle">Login to Broca</FluentLabel>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Enter your credentials to access your ActivityPub account</FluentLabel>
+        </FluentStack>
 
         @if (!string.IsNullOrEmpty(_errorMessage))
         {
@@ -69,11 +71,11 @@
 
         <div class="login-info">
             <FluentIcon Value="@(new Icons.Regular.Size20.Info())" Color="Color.Accent" />
-            <div>
-                <p><strong>Development Login</strong></p>
-                <p>This is a temporary authentication method using API keys. Full OAuth support will be added in a future release.</p>
-                <p>When you login, your actor profile and private key will be fetched from the server, allowing you to interact with ActivityPub content.</p>
-            </div>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">Development Login</FluentLabel>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">This is a temporary authentication method using API keys. Full OAuth support will be added in a future release.</FluentLabel>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">When you login, your actor profile and private key will be fetched from the server, allowing you to interact with ActivityPub content.</FluentLabel>
+            </FluentStack>
         </div>
     </FluentCard>
 </div>
@@ -158,11 +160,6 @@
         padding: 2rem;
     }
 
-    .login-subtitle {
-        color: var(--neutral-foreground-hint);
-        margin-bottom: 1.5rem;
-    }
-
     .form-field {
         margin-bottom: 1.5rem;
     }
@@ -179,18 +176,9 @@
         margin-top: 2rem;
         padding: 1rem;
         background-color: var(--neutral-layer-2);
-        border-radius: 4px;
+        border-radius: var(--control-corner-radius);
         display: flex;
         gap: 1rem;
-    }
-
-    .login-info p {
-        margin: 0.25rem 0;
-        font-size: 0.875rem;
-        color: var(--neutral-foreground-rest);
-    }
-
-    .login-info p:first-child {
-        font-weight: 600;
+        align-items: flex-start;
     }
 </style>

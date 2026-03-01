@@ -12,17 +12,17 @@
     {
         <div class="editor-loading">
             <FluentProgressRing />
-            <p>Loading...</p>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Loading...</FluentLabel>
         </div>
     }
     else if (isEditing)
     {
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
-                <h3>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
                     <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" Color="Color.Accent" />
-                    Edit Profile
-                </h3>
+                    <FluentLabel Typo="Typography.Subject">Edit Profile</FluentLabel>
+                </FluentStack>
             </FluentStack>
 
             @if (!string.IsNullOrEmpty(errorMessage))
@@ -190,7 +190,7 @@
     {
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
-                <h3>Profile Information</h3>
+                <FluentLabel Typo="Typography.Subject">Profile Information</FluentLabel>
                 <FluentButton 
                     Appearance="Appearance.Accent"
                     OnClick="@StartEdit">

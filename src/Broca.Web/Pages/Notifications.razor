@@ -9,23 +9,25 @@
 @if (!AuthState.IsAuthenticated)
 {
     <FluentCard>
-        <h2>Authentication Required</h2>
-        <p>Please login to view your notifications.</p>
-        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/notifications")}"))">
-            Login
-        </FluentButton>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentLabel Typo="Typography.Subject">Authentication Required</FluentLabel>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Please login to view your notifications.</FluentLabel>
+            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/notifications")}"))">
+                Login
+            </FluentButton>
+        </FluentStack>
     </FluentCard>
 }
 else
 {
     <div class="notifications-container">
-        <div class="notifications-header">
-            <h1>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Class="notifications-header">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
                 <FluentIcon Value="@(new Icons.Regular.Size24.Alert())" Color="Color.Accent" />
-                Notifications
-            </h1>
-            <p>Activity that mentions you or interacts with your content</p>
-        </div>
+                <FluentLabel Typo="Typography.PageTitle">Notifications</FluentLabel>
+            </FluentStack>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Activity that mentions you or interacts with your content</FluentLabel>
+        </FluentStack>
 
         @if (_inboxUrl != null)
         {
@@ -37,35 +39,40 @@ else
                 AutoMarkAsRead="true"
                 OnNotificationClick="@HandleNotificationClick">
                 <LoadingTemplate>
-                    <FluentCard Class="loading-state">
+                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                                 Style="padding: 2rem; text-align: center;" VerticalGap="16">
                         <FluentProgressRing />
-                        <p>Loading notifications...</p>
-                    </FluentCard>
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Loading notifications...</FluentLabel>
+                    </FluentStack>
                 </LoadingTemplate>
                 <EmptyTemplate>
-                    <FluentCard Class="empty-state">
+                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                                 Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
                         <FluentIcon Value="@(new Icons.Regular.Size48.Alert())" Color="Color.Neutral" />
-                        <h3>No notifications</h3>
-                        <p>When someone interacts with your content, you'll see it here.</p>
-                    </FluentCard>
+                        <FluentLabel Typo="Typography.Subject">No notifications</FluentLabel>
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">When someone interacts with your content, you'll see it here.</FluentLabel>
+                    </FluentStack>
                 </EmptyTemplate>
                 <ErrorTemplate Context="error">
-                    <FluentCard Class="error-state">
+                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                                 Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
                         <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
-                        <h3>Failed to load notifications</h3>
-                        <p>@error</p>
+                        <FluentLabel Typo="Typography.Subject">Failed to load notifications</FluentLabel>
+                        <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@error</FluentLabel>
                         <FluentButton Appearance="Appearance.Accent" OnClick="@(() => StateHasChanged())">
                             Retry
                         </FluentButton>
-                    </FluentCard>
+                    </FluentStack>
                 </ErrorTemplate>
             </NotificationFeed>
         }
         else
         {
             <FluentCard>
-                <FluentIcon Value="@(new Icons.Regular.Size24.Warning())" Color="Color.Warning" />
-                <p>Unable to determine inbox URL for notifications.</p>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Warning())" Color="Color.Warning" />
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Unable to determine inbox URL for notifications.</FluentLabel>
+                </FluentStack>
             </FluentCard>
         }
     </div>
@@ -121,40 +128,5 @@ else
     .notifications-header {
         padding-bottom: 0.75rem;
         border-bottom: 1px solid var(--neutral-stroke-divider-rest);
-    }
-
-    .notifications-header h1 {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin: 0 0 0.5rem 0;
-    }
-
-    .notifications-header p {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
-    }
-
-    .loading-state,
-    .empty-state,
-    .error-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 3rem 2rem;
-        text-align: center;
-        gap: 1rem;
-    }
-
-    .empty-state h3,
-    .error-state h3 {
-        margin: 0;
-    }
-
-    .empty-state p,
-    .error-state p {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
     }
 </style>

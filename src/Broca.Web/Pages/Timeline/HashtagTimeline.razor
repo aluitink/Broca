@@ -14,11 +14,13 @@
     @if (!AuthState.IsAuthenticated)
     {
         <FluentCard>
-            <h2>Authentication Required</h2>
-            <p>Please login to view hashtag timelines.</p>
-            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString($"/timeline/hashtag/{Hashtag}")}"))">
-                Login
-            </FluentButton>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                <FluentLabel Typo="Typography.Subject">Authentication Required</FluentLabel>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Please login to view hashtag timelines.</FluentLabel>
+                <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/timeline/hashtag/" + Hashtag)}"))">
+                    Login
+                </FluentButton>
+            </FluentStack>
         </FluentCard>
     }
     else if (string.IsNullOrEmpty(Hashtag))
@@ -33,11 +35,12 @@
     {
         <div class="timeline-header">
             <div class="header-content">
-                <div class="header-title">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                             VerticalAlignment="VerticalAlignment.Center" Style="margin-bottom: 0.5rem;">
                     <FluentIcon Value="@(new Icons.Regular.Size24.Tag())" Color="Color.Accent" />
-                    <h1>#@Hashtag</h1>
-                </div>
-                <p class="header-subtitle">Posts tagged with #@Hashtag</p>
+                    <FluentLabel Typo="Typography.PageTitle">#@Hashtag</FluentLabel>
+                </FluentStack>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Posts tagged with #@Hashtag</FluentLabel>
             </div>
             <div class="timeline-actions">
                 <FluentButton 
@@ -194,24 +197,6 @@
 
     .header-content {
         flex: 1;
-    }
-
-    .header-title {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 0.5rem;
-    }
-
-    .header-title h1 {
-        margin: 0;
-        font-size: 1.75rem;
-    }
-
-    .header-subtitle {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
-        font-size: 0.875rem;
     }
 
     .timeline-actions {

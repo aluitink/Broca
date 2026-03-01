@@ -7,13 +7,14 @@
     <FluentLayout>
         <FluentHeader>
             <div class="header-content">
-                <span class="header-title">Broca.Web</span>
+                <FluentLabel Typo="Typography.Subject" Weight="FontWeight.Bold">Broca</FluentLabel>
                 @if (AuthState.IsAuthenticated && AuthState.CurrentActor != null)
                 {
-                    <div class="header-user">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                                 VerticalAlignment="VerticalAlignment.Center" Class="header-user">
                         <FluentIcon Value="@(new Icons.Regular.Size20.PersonCircle())" Color="Color.Accent" />
-                        <span class="header-user-text">@GetUsername()</span>
-                    </div>
+                        <FluentLabel Typo="Typography.Body">@GetUsername()</FluentLabel>
+                    </FluentStack>
                 }
             </div>
         </FluentHeader>
@@ -98,20 +99,5 @@
         justify-content: space-between;
         width: 100%;
         padding: 0 1rem;
-    }
-
-    .header-title {
-        font-size: 1.125rem;
-        font-weight: 600;
-    }
-
-    .header-user {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .header-user-text {
-        font-size: 0.875rem;
     }
 </style>

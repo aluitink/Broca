@@ -9,7 +9,7 @@
             <div class="audio-info">
                 @if (!string.IsNullOrEmpty(Audio.Name?.FirstOrDefault()))
                 {
-                    <h4 class="audio-title">@Audio.Name.First()</h4>
+                    <FluentLabel Typo="Typography.Subject">@Audio.Name.First()</FluentLabel>
                 }
             </div>
         </div>

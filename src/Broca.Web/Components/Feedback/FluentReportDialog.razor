@@ -11,7 +11,7 @@
             <FluentIcon Value="@(new Icons.Regular.Size24.Flag())" Color="Color.Error" />
         </div>
         
-        <h3>Report @(Content.ReportType == ReportTargetType.Actor ? "User" : "Post")</h3>
+        <FluentLabel Typo="Typography.Subject">Report @(Content.ReportType == ReportTargetType.Actor ? "User" : "Post")</FluentLabel>
 
         <div class="report-form">
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">

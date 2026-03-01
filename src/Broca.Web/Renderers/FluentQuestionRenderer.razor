@@ -4,13 +4,13 @@
         <FluentIcon Value="@(new Icons.Regular.Size24.QuestionCircle())" Color="Color.Accent" />
         @if (!string.IsNullOrEmpty(Question?.Name?.FirstOrDefault()))
         {
-            <h4 class="question-title">@Question.Name.First()</h4>
+            <FluentLabel Typo="Typography.Subject">@Question.Name.First()</FluentLabel>
         }
     </div>
 
     @if (!string.IsNullOrEmpty(Question?.Content?.FirstOrDefault()))
     {
-        <p class="question-content">@((MarkupString)(Question.Content.First()))</p>
+        <FluentLabel Typo="Typography.Body">@((MarkupString)(Question.Content.First()))</FluentLabel>
     }
 
     <div class="question-options">

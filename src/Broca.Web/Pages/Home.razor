@@ -13,19 +13,19 @@
 <div class="home-container">
     @if (AuthState.IsAuthenticated)
     {
-        <div class="home-header">
-            <h1>Welcome back, @GetDisplayName()</h1>
-        </div>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Class="home-header">
+            <FluentLabel Typo="Typography.PageTitle">Welcome back, @GetDisplayName()</FluentLabel>
+        </FluentStack>
     }
     else
     {
-        <div class="home-header">
-            <h1>Welcome to Broca</h1>
-            <p>A modern ActivityPub client for the decentralized web</p>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="home-header">
+            <FluentLabel Typo="Typography.PageTitle">Welcome to Broca</FluentLabel>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">A modern ActivityPub client for the decentralized web</FluentLabel>
             <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/login"))">
                 Get Started
             </FluentButton>
-        </div>
+        </FluentStack>
     }
 
     @if (_sysInboxUrl != null)
@@ -38,34 +38,42 @@
             ShowObjects="true"
             ShowRecipients="false">
             <EmptyTemplate>
-                <FluentCard Class="empty-state">
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
                     <FluentIcon Value="@(new Icons.Regular.Size48.Globe())" Color="Color.Neutral" />
-                    <h3>No public activity yet</h3>
-                    <p>Public activities from the server will appear here.</p>
-                </FluentCard>
+                    <FluentLabel Typo="Typography.Subject">No public activity yet</FluentLabel>
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Public activities from the server will appear here.</FluentLabel>
+                </FluentStack>
             </EmptyTemplate>
             <ErrorTemplate Context="error">
-                <FluentCard Class="error-state">
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
                     <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
-                    <h3>Failed to load public stream</h3>
-                    <p>@error</p>
-                </FluentCard>
+                    <FluentLabel Typo="Typography.Subject">Failed to load public stream</FluentLabel>
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@error</FluentLabel>
+                </FluentStack>
             </ErrorTemplate>
         </ActivityFeed>
     }
     else if (_loading)
     {
-        <FluentCard Class="loading-state">
-            <FluentProgressRing />
-            <p>Loading public stream...</p>
+        <FluentCard>
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                         Style="padding: 2rem; text-align: center;" VerticalGap="16">
+                <FluentProgressRing />
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Loading public stream...</FluentLabel>
+            </FluentStack>
         </FluentCard>
     }
     else if (_error != null)
     {
-        <FluentCard Class="error-state">
-            <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
-            <h3>Unable to load public stream</h3>
-            <p>@_error</p>
+        <FluentCard>
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                         Style="padding: 2rem; text-align: center;" VerticalGap="16">
+                <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
+                <FluentLabel Typo="Typography.Subject">Unable to load public stream</FluentLabel>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@_error</FluentLabel>
+            </FluentStack>
         </FluentCard>
     }
 </div>
@@ -135,51 +143,7 @@
     }
 
     .home-header {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
         padding-bottom: 0.75rem;
         border-bottom: 1px solid var(--neutral-stroke-divider-rest);
-    }
-
-    .home-header h1 {
-        margin: 0;
-    }
-
-    .home-header p {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
-    }
-
-    .loading-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 3rem 2rem;
-        text-align: center;
-        gap: 1rem;
-    }
-
-    .empty-state,
-    .error-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 3rem 2rem;
-        text-align: center;
-        gap: 1rem;
-    }
-
-    .empty-state h3,
-    .error-state h3 {
-        margin: 0;
-    }
-
-    .empty-state p,
-    .error-state p {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
     }
 </style>

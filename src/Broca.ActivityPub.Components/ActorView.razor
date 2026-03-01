@@ -37,46 +37,110 @@
     {
         <div class="actor-view-content">
             @* Actor Profile Section *@
-            <div class="actor-profile-section">
-                @if (ActorProfileTemplate != null)
-                {
-                    @ActorProfileTemplate(currentActor)
-                }
-                else
-                {
-                    <ActorRenderer Actor="currentActor" ShowDetails="true" />
-                }
-
-                @* Action Buttons *@
-                <div class="actor-actions">
-                    @if (IsExternalActor)
-                    {
-                        @if (ShowFollowButton)
-                        {
-                            <button @onclick="HandleFollowAsync" 
-                                    class="@GetFollowButtonClass()" 
-                                    disabled="@isProcessingAction">
-                                @(isFollowing ? "Unfollow" : "Follow")
-                            </button>
+            @if (ActorProfileTemplate != null)
+            {
+                @ActorProfileTemplate(currentActor)
+            }
+            else
+            {
+                <div class="actor-hero-section">
+                    <div class="actor-hero-banner-container">
+                        @{
+                            var bannerUrl = GetActorBannerProxyUrl();
                         }
-                        
-                        @if (ShowOpenProfileButton && !string.IsNullOrEmpty(currentActor.Id))
+                        @if (!string.IsNullOrEmpty(bannerUrl))
                         {
-                            <a href="@currentActor.Id" 
-                               target="_blank" 
-                               rel="noopener noreferrer" 
-                               class="actor-action-button external-profile">
-                                Open Profile ↗
+                            <img src="@bannerUrl" alt="Profile banner" class="actor-hero-banner" />
+                        }
+                        else
+                        {
+                            <div class="actor-hero-banner-placeholder" aria-hidden="true"></div>
+                        }
+                    </div>
+
+                    <div class="actor-hero-identity">
+                        <div class="actor-hero-avatar-container">
+                            @{
+                                var iconUrl = GetActorIconProxyUrl();
+                            }
+                            @if (!string.IsNullOrEmpty(iconUrl))
+                            {
+                                <img src="@iconUrl" alt="@GetActorDisplayName()" class="actor-hero-avatar" />
+                            }
+                            else
+                            {
+                                <div class="actor-hero-avatar actor-hero-avatar-placeholder">
+                                    @GetActorInitial()
+                                </div>
+                            }
+                        </div>
+
+                        <div class="actor-hero-name-area">
+                            <span class="actor-hero-name">@GetActorDisplayName()</span>
+                            @{
+                                var preferredUsername = GetActorPreferredUsername();
+                            }
+                            @if (!string.IsNullOrEmpty(preferredUsername))
+                            {
+                                <span class="actor-hero-username">@@@preferredUsername</span>
+                            }
+                        </div>
+
+                        <div class="actor-hero-actions">
+                            @if (IsExternalActor)
+                            {
+                                @if (ShowFollowButton)
+                                {
+                                    <button @onclick="HandleFollowAsync"
+                                            class="@GetFollowButtonClass()"
+                                            disabled="@isProcessingAction">
+                                        @(isFollowing ? "Unfollow" : "Follow")
+                                    </button>
+                                }
+                                @if (ShowOpenProfileButton && !string.IsNullOrEmpty(currentActor.Id))
+                                {
+                                    <a href="@currentActor.Id"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="actor-action-button external-profile">
+                                        Open ↗
+                                    </a>
+                                }
+                            }
+                            @if (AdditionalActions != null)
+                            {
+                                @AdditionalActions(currentActor)
+                            }
+                        </div>
+                    </div>
+
+                    @{
+                        var summary = GetActorSummary();
+                    }
+                    @if (!string.IsNullOrEmpty(summary))
+                    {
+                        <div class="actor-hero-summary">
+                            @((MarkupString)summary)
+                        </div>
+                    }
+
+                    <div class="actor-hero-meta">
+                        @{
+                            var joinedDate = GetActorPublished();
+                        }
+                        @if (joinedDate.HasValue)
+                        {
+                            <span>Joined @joinedDate.Value.ToString("MMMM yyyy")</span>
+                        }
+                        @if (!string.IsNullOrEmpty(currentActor.Id))
+                        {
+                            <a href="@currentActor.Id" target="_blank" rel="noopener noreferrer">
+                                @TruncateActorId(currentActor.Id)
                             </a>
                         }
-                    }
-                    
-                    @if (AdditionalActions != null)
-                    {
-                        @AdditionalActions(currentActor)
-                    }
+                    </div>
                 </div>
-            </div>
+            }
 
             @* Tabs for different views *@
             <div class="actor-view-tabs">
@@ -245,6 +309,13 @@
     /// </summary>
     [Parameter]
     public bool ShowOpenProfileButton { get; set; } = true;
+
+    /// <summary>
+    /// Base URL of the backend API, used to construct proxied image URLs for remote actors.
+    /// Falls back to same-origin (empty string) when not specified.
+    /// </summary>
+    [Parameter]
+    public string? ApiBaseUrl { get; set; }
 
     /// <summary>
     /// Initial tab to display
@@ -531,6 +602,65 @@
             return null;
         }
     }
+
+    private string GetActorDisplayName()
+    {
+        if (currentActor?.Name?.Any() == true) return currentActor.Name.First();
+        if (currentActor is Actor a) return a.PreferredUsername ?? currentActor.Id ?? "?";
+        return currentActor?.Id ?? "?";
+    }
+
+    private string GetActorPreferredUsername()
+        => currentActor is Actor a ? a.PreferredUsername ?? string.Empty : string.Empty;
+
+    private string GetActorSummary()
+        => currentActor?.Summary?.FirstOrDefault() ?? string.Empty;
+
+    private DateTime? GetActorPublished() => currentActor?.Published;
+
+    private char GetActorInitial()
+    {
+        var name = GetActorDisplayName();
+        return name.Length > 0 && char.IsLetter(name[0]) ? char.ToUpper(name[0]) : '?';
+    }
+
+    private string GetActorIconProxyUrl()
+    {
+        if (currentActor?.Id == null) return string.Empty;
+        var raw = GetRawActorImageUrl(currentActor.Icon);
+        if (string.IsNullOrEmpty(raw)) return string.Empty;
+        if (!IsExternalActor) return raw;
+        return BuildRemoteMediaUrl(currentActor.Id, "icon");
+    }
+
+    private string GetActorBannerProxyUrl()
+    {
+        if (currentActor?.Id == null) return string.Empty;
+        var raw = GetRawActorImageUrl(currentActor.Image);
+        if (string.IsNullOrEmpty(raw)) return string.Empty;
+        if (!IsExternalActor) return raw;
+        return BuildRemoteMediaUrl(currentActor.Id, "banner");
+    }
+
+    private static string? GetRawActorImageUrl(IEnumerable<IImageOrLink>? images)
+    {
+        if (images?.Any() != true) return null;
+        var first = images.First();
+        if (first is KristofferStrube.ActivityStreams.Image img && img.Url?.Any() == true)
+            return img.Url.First().Href?.ToString();
+        if (first is ILink link)
+            return link.Href?.ToString();
+        return null;
+    }
+
+    private string BuildRemoteMediaUrl(string actorId, string type)
+    {
+        var apiBase = (ApiBaseUrl ?? string.Empty).TrimEnd('/');
+        return $"{apiBase}/media/remote-actor?actorId={Uri.EscapeDataString(actorId)}&type={type}";
+    }
+
+    private static string TruncateActorId(string id)
+        => id.Length <= 40 ? id : id[..37] + "...";
 
     /// <summary>
     /// Tabs available in the actor view

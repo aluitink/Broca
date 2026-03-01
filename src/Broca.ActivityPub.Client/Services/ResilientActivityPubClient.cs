@@ -39,9 +39,11 @@ public class ResilientActivityPubClient : IActivityPubClient
         {
             return await _innerClient.GetActorAsync(actorUri, cancellationToken);
         }
-        catch (HttpRequestException ex) when (IsCorsError(ex))
+        catch (Exception ex)
         {
-            _logger.LogWarning("CORS error fetching actor, attempting via proxy: {Uri}", actorUri);
+            // Fall back to server-side proxy which signs with the system actor.
+            // This handles CORS blocks and servers requiring authorized fetch (e.g. Threads).
+            _logger.LogWarning(ex, "Direct actor fetch failed, retrying via proxy: {Uri}", actorUri);
             var result = await _proxyService.GetViaProxyAsync<Actor>(actorUri, cancellationToken);
             return result ?? throw new InvalidOperationException($"Actor not found at {actorUri}");
         }
@@ -53,9 +55,11 @@ public class ResilientActivityPubClient : IActivityPubClient
         {
             return await _innerClient.GetActorByAliasAsync(alias, cancellationToken);
         }
-        catch (Exception ex) when (ex is HttpRequestException || IsCorsLikeError(ex))
+        catch (Exception ex)
         {
-            _logger.LogWarning("Direct WebFinger lookup failed for {Alias}, attempting via proxy", alias);
+            // Fall back to proxy-based resolution for CORS blocks, authorized fetch
+            // requirements, or any other failure in the direct lookup chain.
+            _logger.LogWarning(ex, "Direct lookup failed for {Alias}, attempting via proxy", alias);
             return await ResolveViaWebFingerProxyAsync(alias, cancellationToken);
         }
     }
@@ -89,11 +93,19 @@ public class ResilientActivityPubClient : IActivityPubClient
     {
         try
         {
-            return await _innerClient.GetAsync<T>(uri, useCache, cancellationToken);
+            var result = await _innerClient.GetAsync<T>(uri, useCache, cancellationToken);
+            if (result is not null)
+                return result;
+
+            // Direct request returned null (e.g. unsigned request got 404 from a server
+            // requiring authorized fetch like Threads). Retry via server-side proxy
+            // which signs with the system actor.
+            _logger.LogInformation("Direct fetch returned null, retrying via proxy: {Uri}", uri);
+            return await _proxyService.GetViaProxyAsync<T>(uri, cancellationToken);
         }
-        catch (HttpRequestException ex) when (IsCorsError(ex))
+        catch (HttpRequestException ex)
         {
-            _logger.LogWarning("CORS error fetching resource, attempting via proxy: {Uri}", uri);
+            _logger.LogWarning(ex, "Direct fetch failed, retrying via proxy: {Uri}", uri);
             return await _proxyService.GetViaProxyAsync<T>(uri, cancellationToken);
         }
     }
@@ -104,9 +116,9 @@ public class ResilientActivityPubClient : IActivityPubClient
         {
             return await _innerClient.PostAsync(uri, obj, cancellationToken);
         }
-        catch (HttpRequestException ex) when (IsCorsError(ex))
+        catch (HttpRequestException ex)
         {
-            _logger.LogWarning("CORS error posting to resource, attempting via proxy: {Uri}", uri);
+            _logger.LogWarning(ex, "Direct POST failed, retrying via proxy: {Uri}", uri);
             return await _proxyService.PostViaProxyAsync(uri, obj, cancellationToken);
         }
     }
@@ -136,20 +148,4 @@ public class ResilientActivityPubClient : IActivityPubClient
 
     public Task<HttpResponseMessage> PostToOutboxAsync(Activity activity, CancellationToken cancellationToken = default)
         => _innerClient.PostToOutboxAsync(activity, cancellationToken);
-
-    /// <summary>
-    /// Determines if an HTTP exception is likely caused by CORS or a network-level block
-    /// </summary>
-    private bool IsCorsError(HttpRequestException ex) => IsCorsLikeError(ex);
-
-    private static bool IsCorsLikeError(Exception ex)
-    {
-        var message = ex.Message?.ToLowerInvariant() ?? "";
-        return message.Contains("cors") ||
-               message.Contains("blocked") ||
-               message.Contains("cross-origin") ||
-               message.Contains("access-control") ||
-               message.Contains("failed to fetch") ||
-               (ex.InnerException != null && IsCorsLikeError(ex.InnerException));
-    }
 }

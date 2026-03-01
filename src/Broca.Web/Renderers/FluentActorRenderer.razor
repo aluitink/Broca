@@ -37,14 +37,26 @@
                     }
                 </FluentStack>
 
-                @if (ShowFollowButton && OnFollow.HasDelegate)
+                @if (ShowFollowButton && (OnFollow.HasDelegate || OnUnfollow.HasDelegate))
                 {
-                    <FluentButton Appearance="Appearance.Accent" 
-                                  Style="margin-left: auto;"
-                                  OnClick="@(() => OnFollow.InvokeAsync(Actor))">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.PersonAdd())" Slot="start" />
-                        Follow
-                    </FluentButton>
+                    @if (IsFollowing)
+                    {
+                        <FluentButton Appearance="Appearance.Outline"
+                                      Style="margin-left: auto;"
+                                      OnClick="@(() => OnUnfollow.InvokeAsync(Actor))">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.PersonDelete())" Slot="start" />
+                            Unfollow
+                        </FluentButton>
+                    }
+                    else
+                    {
+                        <FluentButton Appearance="Appearance.Accent"
+                                      Style="margin-left: auto;"
+                                      OnClick="@(() => OnFollow.InvokeAsync(Actor))">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.PersonAdd())" Slot="start" />
+                            Follow
+                        </FluentButton>
+                    }
                 }
             </FluentStack>
 
@@ -141,6 +153,18 @@
     /// </summary>
     [Parameter]
     public RenderFragment<KristofferStrube.ActivityStreams.Object>? AdditionalContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the current user is already following this actor.
+    /// </summary>
+    [Parameter]
+    public bool IsFollowing { get; set; } = false;
+
+    /// <summary>
+    /// Event callback for unfollow action.
+    /// </summary>
+    [Parameter]
+    public EventCallback<KristofferStrube.ActivityStreams.Object> OnUnfollow { get; set; }
 
     /// <summary>
     /// Event callback for follow action.

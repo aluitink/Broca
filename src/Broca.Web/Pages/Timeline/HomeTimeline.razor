@@ -12,22 +12,25 @@
     @if (!AuthState.IsAuthenticated)
     {
         <FluentCard>
-            <h2>Authentication Required</h2>
-            <p>Please login to view your home timeline.</p>
-            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/login?returnUrl=/timeline/home"))">
-                Login
-            </FluentButton>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                <FluentLabel Typo="Typography.Subject">Authentication Required</FluentLabel>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Please login to view your home timeline.</FluentLabel>
+                <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/login?returnUrl=/timeline/home"))">
+                    Login
+                </FluentButton>
+            </FluentStack>
         </FluentCard>
     }
     else
     {
         <div class="timeline-header">
             <div class="header-content">
-                <div class="header-title">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                             VerticalAlignment="VerticalAlignment.Center" Style="margin-bottom: 0.5rem;">
                     <FluentIcon Value="@(new Icons.Regular.Size24.Home())" Color="Color.Accent" />
-                    <h1>Home Timeline</h1>
-                </div>
-                <p class="header-subtitle">Activities from accounts you follow</p>
+                    <FluentLabel Typo="Typography.PageTitle">Home Timeline</FluentLabel>
+                </FluentStack>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Activities from accounts you follow</FluentLabel>
             </div>
             <div class="timeline-actions">
                 <FluentButton 
@@ -144,24 +147,6 @@
 
     .header-content {
         flex: 1;
-    }
-
-    .header-title {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 0.5rem;
-    }
-
-    .header-title h1 {
-        margin: 0;
-        font-size: 1.75rem;
-    }
-
-    .header-subtitle {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
-        font-size: 0.875rem;
     }
 
     .timeline-actions {

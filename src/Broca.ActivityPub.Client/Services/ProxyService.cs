@@ -25,7 +25,7 @@ public class ProxyService
     /// <param name="targetUri">The URI to fetch</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The deserialized response, or null if the request failed</returns>
-    public async Task<T?> GetViaProxyAsync<T>(Uri targetUri, CancellationToken cancellationToken = default)
+    public virtual async Task<T?> GetViaProxyAsync<T>(Uri targetUri, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -64,7 +64,7 @@ public class ProxyService
     /// <param name="data">The data to post</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The HTTP response</returns>
-    public async Task<HttpResponseMessage> PostViaProxyAsync<T>(Uri targetUri, T data, CancellationToken cancellationToken = default)
+    public virtual async Task<HttpResponseMessage> PostViaProxyAsync<T>(Uri targetUri, T data, CancellationToken cancellationToken = default)
     {
         try
         {
