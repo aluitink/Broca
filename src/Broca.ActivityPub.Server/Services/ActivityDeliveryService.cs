@@ -1,7 +1,4 @@
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
-using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Microsoft.Extensions.Options;
@@ -17,33 +14,24 @@ public class ActivityDeliveryService
     private readonly IDeliveryQueueRepository _deliveryQueue;
     private readonly IActorRepository _actorRepository;
     private readonly IActivityRepository _activityRepository;
-    private readonly IActivityPubClient _activityPubClient;
-    private readonly HttpSignatureService _signatureService;
-    private readonly ICryptoProvider _cryptoProvider;
+    private readonly IActivityPubClientFactory _clientFactory;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<ActivityDeliveryService> _logger;
-    private readonly IHttpClientFactory _httpClientFactory;
 
     public ActivityDeliveryService(
         IDeliveryQueueRepository deliveryQueue,
         IActorRepository actorRepository,
         IActivityRepository activityRepository,
-        IActivityPubClient activityPubClient,
-        HttpSignatureService signatureService,
-        ICryptoProvider cryptoProvider,
+        IActivityPubClientFactory clientFactory,
         IOptions<ActivityPubServerOptions> options,
-        ILogger<ActivityDeliveryService> logger,
-        IHttpClientFactory httpClientFactory)
+        ILogger<ActivityDeliveryService> logger)
     {
         _deliveryQueue = deliveryQueue;
         _actorRepository = actorRepository;
         _activityRepository = activityRepository;
-        _activityPubClient = activityPubClient;
-        _signatureService = signatureService;
-        _cryptoProvider = cryptoProvider;
+        _clientFactory = clientFactory;
         _options = options.Value;
         _logger = logger;
-        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
@@ -85,7 +73,7 @@ public class ActivityDeliveryService
         string inboxUrl = "";
         try
         {
-            var targetActor = await _activityPubClient.GetActorAsync(new Uri(targetActorId), cancellationToken);
+            var targetActor = await _clientFactory.CreateAnonymous().GetActorAsync(new Uri(targetActorId), cancellationToken);
             inboxUrl = targetActor?.Inbox?.Href?.ToString() ?? "";
         }
         catch (Exception ex)
@@ -159,7 +147,7 @@ public class ActivityDeliveryService
             {
                 try
                 {
-                    var followerActor = await _activityPubClient.GetActorAsync(new Uri(followerActorId), cancellationToken);
+                    var followerActor = await _clientFactory.CreateAnonymous().GetActorAsync(new Uri(followerActorId), cancellationToken);
 
                     if (followerActor == null)
                     {
@@ -308,7 +296,7 @@ public class ActivityDeliveryService
                 try
                 {
                     // Fetch the recipient's actor to get their inbox
-                    var recipientActor = await _activityPubClient.GetActorAsync(new Uri(recipientId), cancellationToken);
+                    var recipientActor = await _clientFactory.CreateAnonymous().GetActorAsync(new Uri(recipientId), cancellationToken);
 
                     if (recipientActor == null)
                     {
@@ -485,7 +473,8 @@ public class ActivityDeliveryService
                     return;
                 }
 
-                var targetActor = await FetchActorWithSignatureAsync(item.TargetActorId, publicKeyId, privateKeyPem, cancellationToken);
+                var targetActor = await _clientFactory.CreateForActor(item.SenderActorId, publicKeyId, privateKeyPem)
+                    .GetActorAsync(new Uri(item.TargetActorId), cancellationToken);
                 var resolved = targetActor?.Inbox?.Href?.ToString();
                 if (string.IsNullOrEmpty(resolved))
                 {
@@ -502,63 +491,10 @@ public class ActivityDeliveryService
             _logger.LogDebug("Delivering activity to {InboxUrl} (attempt {AttemptCount})",
                 item.InboxUrl, item.AttemptCount);
 
-            // Create HTTP client
-            using var httpClient = _httpClientFactory.CreateClient("ActivityPub");
-            var targetUri = new Uri(item.InboxUrl);
+            var senderClient = _clientFactory.CreateForActor(item.SenderActorId, publicKeyId, privateKeyPem);
+            using var response = await senderClient.PostAsync(new Uri(item.InboxUrl), item.Activity, cancellationToken);
 
-            // Serialize activity
-            var activityJson = JsonSerializer.Serialize(item.Activity, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-            });
-
-            var content = new StringContent(activityJson, System.Text.Encoding.UTF8, "application/activity+json");
-
-            // Create request message
-            using var request = new HttpRequestMessage(HttpMethod.Post, targetUri)
-            {
-                Content = content
-            };
-
-            // Get the actual Content-Type value (including charset) for signature calculation
-            var actualContentType = content.Headers.ContentType?.ToString();
-
-            // Apply HTTP signature
-            await _signatureService.ApplyHttpSignatureAsync(
-                "POST",
-                targetUri,
-                (name, value) => 
-                {
-                    // Content-Type is already set by StringContent constructor
-                    if (name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Don't override it
-                        return;
-                    }
-                    // Digest is a content header
-                    else if (name.Equals("Digest", StringComparison.OrdinalIgnoreCase))
-                    {
-                        request.Content?.Headers.TryAddWithoutValidation(name, value);
-                    }
-                    // All other headers are request headers
-                    else
-                    {
-                        request.Headers.TryAddWithoutValidation(name, value);
-                    }
-                },
-                publicKeyId,
-                privateKeyPem,
-                accept: "application/activity+json",
-                contentType: actualContentType,
-                getContentFunc: ct => Task.FromResult(System.Text.Encoding.UTF8.GetBytes(activityJson)),
-                cancellationToken: cancellationToken
-            );
-
-            // Send the request
-            using var response = await httpClient.SendAsync(request, cancellationToken);
-
-            if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.Accepted)
+            if (response.IsSuccessStatusCode)
             {
                 await _deliveryQueue.MarkAsDeliveredAsync(item.Id, cancellationToken);
                 _logger.LogInformation("Successfully delivered activity to {InboxUrl}", item.InboxUrl);
@@ -581,33 +517,6 @@ public class ActivityDeliveryService
             if (item.AttemptCount >= item.MaxRetries)
                 await ApplyDeliveryDeadLetterSideEffectsAsync(item, cancellationToken);
         }
-    }
-
-    private async Task<Actor?> FetchActorWithSignatureAsync(
-        string actorId,
-        string publicKeyId,
-        string privateKeyPem,
-        CancellationToken cancellationToken)
-    {
-        using var httpClient = _httpClientFactory.CreateClient("ActivityPub");
-        using var response = await _signatureService.SendSignedGetAsync(
-            httpClient, new Uri(actorId), publicKeyId, privateKeyPem, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogWarning("Signed GET for actor {ActorId} failed with status {StatusCode}",
-                actorId, response.StatusCode);
-            return null;
-        }
-
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-
-        return await response.Content.ReadFromJsonAsync<Actor>(jsonOptions, cancellationToken);
     }
 
     private async Task ApplyDeliverySuccessSideEffectsAsync(DeliveryQueueItem item, CancellationToken cancellationToken)

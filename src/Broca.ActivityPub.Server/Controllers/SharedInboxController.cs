@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Broca.ActivityPub.Server.Services;
@@ -25,8 +24,9 @@ public class SharedInboxController : ActivityPubControllerBase
 {
     private readonly IInboxHandler _inboxHandler;
     private readonly IActorRepository _actorRepository;
-    private readonly HttpSignatureService _signatureService;
-    private readonly IActivityPubClient _activityPubClient;
+    private readonly IHttpSignatureVerifier _signatureVerifier;
+    private readonly IActivityPubClientFactory _clientFactory;
+    private readonly ISystemIdentityService _systemIdentityService;
     private readonly IMemoryCache _cache;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<SharedInboxController> _logger;
@@ -35,16 +35,18 @@ public class SharedInboxController : ActivityPubControllerBase
     public SharedInboxController(
         IInboxHandler inboxHandler,
         IActorRepository actorRepository,
-        HttpSignatureService signatureService,
-        IActivityPubClient activityPubClient,
+        IHttpSignatureVerifier signatureVerifier,
+        IActivityPubClientFactory clientFactory,
+        ISystemIdentityService systemIdentityService,
         IMemoryCache cache,
         IOptions<ActivityPubServerOptions> options,
         ILogger<SharedInboxController> logger)
     {
         _inboxHandler = inboxHandler;
         _actorRepository = actorRepository;
-        _signatureService = signatureService;
-        _activityPubClient = activityPubClient;
+        _signatureVerifier = signatureVerifier;
+        _clientFactory = clientFactory;
+        _systemIdentityService = systemIdentityService;
         _cache = cache;
         _options = options.Value;
         _logger = logger;
@@ -169,16 +171,10 @@ public class SharedInboxController : ActivityPubControllerBase
                 return false;
             }
 
-            // Parse signature to get keyId
-            var keyId = ExtractKeyId(signatureHeader.ToString());
-            if (string.IsNullOrEmpty(keyId))
-            {
-                return false;
-            }
+            var keyId = _signatureVerifier.GetSignatureKeyId(signatureHeader.ToString());
 
             ValidateRequestClockSkew(Request);
 
-            // Validate Digest header for POST requests
             if (Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
             {
                 if (!Request.Headers.TryGetValue("Digest", out var digestHeader))
@@ -188,67 +184,36 @@ public class SharedInboxController : ActivityPubControllerBase
                 else
                 {
                     var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
-                    var expectedDigest = _signatureService.ComputeContentDigestHash(bodyBytes);
-                    var digestValue = digestHeader.ToString();
-                    
-                    if (digestValue.StartsWith("SHA-256=", StringComparison.OrdinalIgnoreCase))
+                    if (!_signatureVerifier.VerifyDigest(bodyBytes, digestHeader.ToString()))
                     {
-                        var providedDigest = digestValue.Substring(8);
-                        if (providedDigest != expectedDigest)
-                        {
-                            _logger.LogWarning("Shared inbox Digest mismatch. Expected: {Expected}, Got: {Got}", 
-                                expectedDigest, providedDigest);
-                            return false;
-                        }
-                        _logger.LogDebug("Shared inbox Digest header validated successfully");
+                        _logger.LogWarning("Shared inbox Digest header mismatch");
+                        return false;
                     }
+                    _logger.LogDebug("Shared inbox Digest header validated successfully");
                 }
             }
 
-            // Fetch public key
             var publicKeyPem = await FetchPublicKeyAsync(keyId, cancellationToken);
             if (string.IsNullOrEmpty(publicKeyPem))
             {
                 return false;
             }
 
-            // Verify signature
             var headers = new Dictionary<string, string>();
-            
-            // Add (request-target) pseudo-header
-            var requestTarget = $"{Request.Method.ToLower()} {Request.Path}";
-            headers["(request-target)"] = requestTarget;
-            
-            // Add all headers from the request (lowercase keys)
+            headers["(request-target)"] = $"{Request.Method.ToLower()} {Request.Path}";
+
             foreach (var header in Request.Headers)
             {
                 headers[header.Key.ToLowerInvariant()] = header.Value.ToString();
             }
-            
-            return await _signatureService.VerifyHttpSignatureAsync(
-                headers,
-                publicKeyPem,
-                cancellationToken
-            );
+
+            return await _signatureVerifier.VerifyAsync(headers, publicKeyPem, cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error verifying signature");
             return false;
         }
-    }
-
-    private string? ExtractKeyId(string signatureHeader)
-    {
-        foreach (var param in signatureHeader.Split(','))
-        {
-            var parts = param.Trim().Split('=', 2);
-            if (parts.Length == 2 && parts[0] == "keyId")
-            {
-                return parts[1].Trim('"');
-            }
-        }
-        return null;
     }
 
     private async Task<string?> FetchPublicKeyAsync(string keyId, CancellationToken cancellationToken)
@@ -266,7 +231,11 @@ public class SharedInboxController : ActivityPubControllerBase
 
             if (actor == null)
             {
-                actor = await _activityPubClient.GetActorAsync(new Uri(actorUrl), cancellationToken);
+                var systemActor = await _systemIdentityService.GetSystemActorAsync(cancellationToken);
+                var privateKey = await _systemIdentityService.GetSystemPrivateKeyAsync(cancellationToken);
+                var publicKeyId = $"{systemActor.Id}#main-key";
+                actor = await _clientFactory.CreateForActor(systemActor.Id!, publicKeyId, privateKey)
+                    .GetActorAsync(new Uri(actorUrl), cancellationToken);
             }
 
             if (actor?.ExtensionData != null &&

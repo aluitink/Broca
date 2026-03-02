@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Broca.ActivityPub.Server.Services;
@@ -20,7 +19,7 @@ public class OutboxController : ActivityPubControllerBase
     private readonly OutboxProcessor _outboxProcessor;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ObjectEnrichmentService _enrichmentService;
-    private readonly HttpSignatureService _signatureService;
+    private readonly IHttpSignatureVerifier _signatureVerifier;
     private readonly IMemoryCache _cache;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<OutboxController> _logger;
@@ -33,7 +32,7 @@ public class OutboxController : ActivityPubControllerBase
         OutboxProcessor outboxProcessor,
         AttachmentProcessingService attachmentProcessingService,
         ObjectEnrichmentService enrichmentService,
-        HttpSignatureService signatureService,
+        IHttpSignatureVerifier signatureVerifier,
         IMemoryCache cache,
         IOptions<ActivityPubServerOptions> options,
         ILogger<OutboxController> logger)
@@ -43,7 +42,7 @@ public class OutboxController : ActivityPubControllerBase
         _outboxProcessor = outboxProcessor;
         _attachmentProcessingService = attachmentProcessingService;
         _enrichmentService = enrichmentService;
-        _signatureService = signatureService;
+        _signatureVerifier = signatureVerifier;
         _cache = cache;
         _options = options.Value;
         _logger = logger;
@@ -190,7 +189,7 @@ public class OutboxController : ActivityPubControllerBase
         if (!Request.Headers.TryGetValue("Signature", out var signatureHeader) || string.IsNullOrEmpty(signatureHeader))
             return Unauthorized(new { error = "Signature header is missing" });
 
-        var keyId = _signatureService.GetSignatureKeyId(signatureHeader!);
+        var keyId = _signatureVerifier.GetSignatureKeyId(signatureHeader!);
 
         ValidateRequestClockSkew(Request);
 
@@ -215,13 +214,11 @@ public class OutboxController : ActivityPubControllerBase
             && Request.Headers.TryGetValue("Digest", out var digestHeader))
         {
             var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
-            var expectedDigest = _signatureService.ComputeContentDigestHash(bodyBytes);
-            var digestValue = digestHeader.ToString();
-            if (digestValue.StartsWith("SHA-256=") && digestValue.Substring(8) != expectedDigest)
+            if (!_signatureVerifier.VerifyDigest(bodyBytes, digestHeader.ToString()))
                 throw new InvalidOperationException("Digest header does not match request body");
         }
 
-        var isValid = await _signatureService.VerifyHttpSignatureAsync(headers, publicKeyPem, cancellationToken);
+        var isValid = await _signatureVerifier.VerifyAsync(headers, publicKeyPem, cancellationToken);
         if (!isValid)
             return Unauthorized(new { error = "Invalid signature" });
 

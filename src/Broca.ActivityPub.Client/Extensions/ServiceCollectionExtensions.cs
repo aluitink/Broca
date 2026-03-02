@@ -56,6 +56,9 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<ActivityPubClient>();
         services.TryAddScoped<IActivityPubClient>(sp => sp.GetRequiredService<ActivityPubClient>());
 
+        // Register the factory for creating per-actor clients
+        services.TryAddSingleton<IActivityPubClientFactory, ActivityPubClientFactory>();
+
         return services;
     }
 
