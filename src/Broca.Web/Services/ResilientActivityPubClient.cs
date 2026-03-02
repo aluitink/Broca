@@ -1,22 +1,20 @@
+using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 
-namespace Broca.ActivityPub.Client.Services;
+namespace Broca.Web.Services;
 
-/// <summary>
-/// Wrapper around ActivityPubClient that provides CORS fallback via proxy
-/// </summary>
 public class ResilientActivityPubClient : IActivityPubClient
 {
-    private readonly IActivityPubClient _innerClient;
+    private readonly ActivityPubClient _innerClient;
     private readonly ProxyService _proxyService;
     private readonly ILogger<ResilientActivityPubClient> _logger;
 
     public ResilientActivityPubClient(
-        IActivityPubClient innerClient,
+        ActivityPubClient innerClient,
         ProxyService proxyService,
         ILogger<ResilientActivityPubClient> logger)
     {
@@ -41,8 +39,6 @@ public class ResilientActivityPubClient : IActivityPubClient
         }
         catch (Exception ex)
         {
-            // Fall back to server-side proxy which signs with the system actor.
-            // This handles CORS blocks and servers requiring authorized fetch (e.g. Threads).
             _logger.LogWarning(ex, "Direct actor fetch failed, retrying via proxy: {Uri}", actorUri);
             var result = await _proxyService.GetViaProxyAsync<Actor>(actorUri, cancellationToken);
             return result ?? throw new InvalidOperationException($"Actor not found at {actorUri}");
@@ -57,8 +53,6 @@ public class ResilientActivityPubClient : IActivityPubClient
         }
         catch (Exception ex)
         {
-            // Fall back to proxy-based resolution for CORS blocks, authorized fetch
-            // requirements, or any other failure in the direct lookup chain.
             _logger.LogWarning(ex, "Direct lookup failed for {Alias}, attempting via proxy", alias);
             return await ResolveViaWebFingerProxyAsync(alias, cancellationToken);
         }
@@ -97,9 +91,6 @@ public class ResilientActivityPubClient : IActivityPubClient
             if (result is not null)
                 return result;
 
-            // Direct request returned null (e.g. unsigned request got 404 from a server
-            // requiring authorized fetch like Threads). Retry via server-side proxy
-            // which signs with the system actor.
             _logger.LogInformation("Direct fetch returned null, retrying via proxy: {Uri}", uri);
             return await _proxyService.GetViaProxyAsync<T>(uri, cancellationToken);
         }
@@ -128,8 +119,6 @@ public class ResilientActivityPubClient : IActivityPubClient
         int? limit = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        // For collection enumeration, we'll let the inner client handle it
-        // If individual pages fail with CORS, they'll be caught by GetAsync above
         await foreach (var item in _innerClient.GetCollectionAsync<T>(collectionUri, limit, cancellationToken))
         {
             yield return item;

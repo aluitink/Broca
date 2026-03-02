@@ -250,22 +250,26 @@ public class InboxProcessor : IInboxHandler
         return false;
     }
 
-    private Task<bool> HandleAcceptAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task<bool> HandleAcceptAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {
-        // A remote actor accepted our Follow request.
-        // The following collection is updated optimistically when the Follow is sent (in OutboxProcessor),
-        // so no further action is required here beyond acknowledging receipt.
-        if (activity is Activity acceptActivity)
+        if (activity is not Activity acceptActivity)
+            return true;
+
+        var acceptingActorId = acceptActivity.Actor?.FirstOrDefault() switch
         {
-            var acceptingActorId = acceptActivity.Actor?.FirstOrDefault() switch
-            {
-                ILink link => link.Href?.ToString(),
-                IObject obj => obj.Id,
-                _ => null
-            };
-            _logger.LogInformation("Follow request by {Username} accepted by {AcceptingActorId}", username, acceptingActorId);
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (acceptingActorId != null)
+        {
+            await _actorRepository.RemovePendingFollowingAsync(username, acceptingActorId, cancellationToken);
+            await _actorRepository.AddFollowingAsync(username, acceptingActorId, cancellationToken);
+            _logger.LogInformation("Follow of {AcceptingActorId} by {Username} accepted; added to following", acceptingActorId, username);
         }
-        return Task.FromResult(true);
+
+        return true;
     }
 
     private async Task<bool> HandleRejectAsync(string username, IObject? activity, CancellationToken cancellationToken)
@@ -299,8 +303,9 @@ public class InboxProcessor : IInboxHandler
 
             if (rejectingActorId != null)
             {
+                await _actorRepository.RemovePendingFollowingAsync(username, rejectingActorId, cancellationToken);
                 await _actorRepository.RemoveFollowingAsync(username, rejectingActorId, cancellationToken);
-                _logger.LogInformation("Follow of {RejectingActorId} by {Username} was rejected - removed from following",
+                _logger.LogInformation("Follow of {RejectingActorId} by {Username} was rejected - removed from pending-following",
                     rejectingActorId, username);
             }
         }

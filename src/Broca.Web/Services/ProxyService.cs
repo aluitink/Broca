@@ -1,12 +1,8 @@
 using System.Net.Http.Json;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
-namespace Broca.ActivityPub.Client.Services;
+namespace Broca.Web.Services;
 
-/// <summary>
-/// Provides fallback proxy support for CORS-blocked requests
-/// </summary>
 public class ProxyService
 {
     private readonly HttpClient _httpClient;
@@ -18,35 +14,30 @@ public class ProxyService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Attempts to fetch a resource through the origin server proxy
-    /// </summary>
-    /// <typeparam name="T">The type to deserialize the response to</typeparam>
-    /// <param name="targetUri">The URI to fetch</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The deserialized response, or null if the request failed</returns>
     public virtual async Task<T?> GetViaProxyAsync<T>(Uri targetUri, CancellationToken cancellationToken = default)
     {
+        if (_httpClient.BaseAddress == null)
+        {
+            _logger.LogDebug("Proxy HttpClient has no BaseAddress; skipping proxy for {Uri}", targetUri);
+            return default;
+        }
+
         try
         {
             _logger.LogInformation("Attempting to fetch {Uri} via proxy", targetUri);
 
-            // Build proxy URL - uses the ActivityPub route prefix path
             var proxyUrl = $"/ap/proxy?url={Uri.EscapeDataString(targetUri.ToString())}";
-            
             var response = await _httpClient.GetAsync(proxyUrl, cancellationToken);
-            
+
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Proxy request failed with status {StatusCode} for: {Uri}", 
+                _logger.LogWarning("Proxy request failed with status {StatusCode} for: {Uri}",
                     response.StatusCode, targetUri);
                 return default;
             }
 
             var result = await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken);
-            
             _logger.LogInformation("Successfully fetched {Uri} via proxy", targetUri);
-            
             return result;
         }
         catch (Exception ex)
@@ -56,35 +47,28 @@ public class ProxyService
         }
     }
 
-    /// <summary>
-    /// Posts data to a resource through the origin server proxy
-    /// </summary>
-    /// <typeparam name="T">The type of data to post</typeparam>
-    /// <param name="targetUri">The URI to post to</param>
-    /// <param name="data">The data to post</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The HTTP response</returns>
     public virtual async Task<HttpResponseMessage> PostViaProxyAsync<T>(Uri targetUri, T data, CancellationToken cancellationToken = default)
     {
+        if (_httpClient.BaseAddress == null)
+            throw new InvalidOperationException($"Proxy HttpClient has no BaseAddress configured; cannot POST via proxy to {targetUri}");
+
         try
         {
             _logger.LogInformation("Attempting to post to {Uri} via proxy", targetUri);
 
-            // Build proxy URL
             var proxyUrl = $"/ap/proxy?url={Uri.EscapeDataString(targetUri.ToString())}";
-            
             var response = await _httpClient.PostAsJsonAsync(proxyUrl, data, cancellationToken);
-            
+
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Proxy POST failed with status {StatusCode} for: {Uri}", 
+                _logger.LogWarning("Proxy POST failed with status {StatusCode} for: {Uri}",
                     response.StatusCode, targetUri);
             }
             else
             {
                 _logger.LogInformation("Successfully posted to {Uri} via proxy", targetUri);
             }
-            
+
             return response;
         }
         catch (Exception ex)

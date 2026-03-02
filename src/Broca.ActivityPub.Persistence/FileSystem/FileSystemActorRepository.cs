@@ -218,6 +218,11 @@ public class FileSystemActorRepository : IActorRepository, IActorStatistics
         return Path.Combine(GetUserDirectory(username), "pending_followers.json");
     }
 
+    private string GetPendingFollowingFilePath(string username)
+    {
+        return Path.Combine(GetUserDirectory(username), "pending_following.json");
+    }
+
     private string GetCollectionsDirectory(string username)
     {
         return Path.Combine(GetUserDirectory(username), "collections");
@@ -318,6 +323,36 @@ public class FileSystemActorRepository : IActorRepository, IActorStatistics
     {
         await RemoveFromListAsync(GetPendingFollowersFilePath(username), followerActorId, cancellationToken);
         _logger.LogInformation("Removed pending follower {FollowerId} for {Username}", followerActorId, username);
+    }
+
+    public async Task<IEnumerable<string>> GetPendingFollowingAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var path = GetPendingFollowingFilePath(username);
+        if (!File.Exists(path))
+            return Array.Empty<string>();
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(path, cancellationToken);
+            return JsonSerializer.Deserialize<List<string>>(json, _jsonOptions) ?? new List<string>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading pending following for {Username}", username);
+            return Array.Empty<string>();
+        }
+    }
+
+    public async Task AddPendingFollowingAsync(string username, string followingActorId, CancellationToken cancellationToken = default)
+    {
+        await AddToListAsync(GetPendingFollowingFilePath(username), followingActorId, cancellationToken);
+        _logger.LogInformation("Added pending following {FollowingId} for {Username}", followingActorId, username);
+    }
+
+    public async Task RemovePendingFollowingAsync(string username, string followingActorId, CancellationToken cancellationToken = default)
+    {
+        await RemoveFromListAsync(GetPendingFollowingFilePath(username), followingActorId, cancellationToken);
+        _logger.LogInformation("Removed pending following {FollowingId} for {Username}", followingActorId, username);
     }
 
     public Task<IEnumerable<string>> GetAllLocalUsernamesAsync(CancellationToken cancellationToken = default)

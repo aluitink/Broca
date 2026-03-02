@@ -306,21 +306,18 @@ public class OutboxProcessor
 
     private async Task HandleOutgoingFollowAsync(string username, Follow followActivity, CancellationToken cancellationToken)
     {
-        if (followActivity.Object != null)
+        var targetObject = followActivity.Object?.FirstOrDefault();
+        var targetActorId = targetObject switch
         {
-            var followTarget = followActivity.Object.FirstOrDefault();
-            var followingActorId = followTarget switch
-            {
-                ILink link => link.Href?.ToString(),
-                IObject obj => obj.Id,
-                _ => null
-            };
-            
-            if (followingActorId != null)
-            {
-                await _actorRepository.AddFollowingAsync(username, followingActorId, cancellationToken);
-                _logger.LogInformation("User {Username} now following {FollowingActorId}", username, followingActorId);
-            }
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (targetActorId != null)
+        {
+            await _actorRepository.AddFollowingAsync(username, targetActorId, cancellationToken);
+            _logger.LogInformation("Added {TargetActorId} to {Username}'s following collection", targetActorId, username);
         }
     }
 
@@ -573,18 +570,18 @@ public class OutboxProcessor
         // Handle Undo Follow
         if (undoObject is Follow followActivity && followActivity.Object != null)
         {
-            var followTarget = followActivity.Object.FirstOrDefault();
-            var followingActorId = followTarget switch
+            var targetObject = followActivity.Object.FirstOrDefault();
+            var targetActorId = targetObject switch
             {
                 ILink link => link.Href?.ToString(),
                 IObject obj => obj.Id,
                 _ => null
             };
-            
-            if (followingActorId != null)
+
+            if (targetActorId != null)
             {
-                await _actorRepository.RemoveFollowingAsync(username, followingActorId, cancellationToken);
-                _logger.LogInformation("User {Username} unfollowed {FollowingActorId}", username, followingActorId);
+                await _actorRepository.RemoveFollowingAsync(username, targetActorId, cancellationToken);
+                _logger.LogInformation("Removed {TargetActorId} from {Username}'s following collection", targetActorId, username);
             }
         }
     }

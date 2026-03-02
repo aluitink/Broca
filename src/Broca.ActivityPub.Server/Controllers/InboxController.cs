@@ -1,3 +1,5 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
@@ -21,6 +23,8 @@ public class InboxController : ActivityPubControllerBase
     private readonly IActorRepository _actorRepository;
     private readonly HttpSignatureService _signatureService;
     private readonly IActivityPubClient _activityPubClient;
+    private readonly ISystemIdentityService _systemIdentityService;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ObjectEnrichmentService _enrichmentService;
     private readonly IMemoryCache _cache;
@@ -35,6 +39,8 @@ public class InboxController : ActivityPubControllerBase
         IActorRepository actorRepository,
         HttpSignatureService signatureService,
         IActivityPubClient activityPubClient,
+        ISystemIdentityService systemIdentityService,
+        IHttpClientFactory httpClientFactory,
         AttachmentProcessingService attachmentProcessingService,
         ObjectEnrichmentService enrichmentService,
         IMemoryCache cache,
@@ -46,6 +52,8 @@ public class InboxController : ActivityPubControllerBase
         _actorRepository = actorRepository;
         _signatureService = signatureService;
         _activityPubClient = activityPubClient;
+        _systemIdentityService = systemIdentityService;
+        _httpClientFactory = httpClientFactory;
         _attachmentProcessingService = attachmentProcessingService;
         _enrichmentService = enrichmentService;
         _cache = cache;
@@ -349,11 +357,8 @@ public class InboxController : ActivityPubControllerBase
             
             if (actor == null)
             {
-                _logger.LogDebug("Actor not in local repository, fetching from {ActorUrl} via ActivityPub client", actorUrl);
-                
-                // Use ActivityPubClient to fetch the actor from remote server
-                // Note: The client is configured with the system actor credentials for signing outbound requests
-                actor = await _activityPubClient.GetActorAsync(new Uri(actorUrl), cancellationToken);
+                _logger.LogDebug("Actor not in local repository, fetching from {ActorUrl} via signed GET", actorUrl);
+                actor = await FetchActorWithSignatureAsync(actorUrl, cancellationToken);
             }
             else
             {
@@ -409,6 +414,33 @@ public class InboxController : ActivityPubControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching actor public key from {KeyId}", keyId);
+            return null;
+        }
+    }
+
+    private async Task<Actor?> FetchActorWithSignatureAsync(string actorUrl, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var systemActor = await _systemIdentityService.GetSystemActorAsync(cancellationToken);
+            var privateKey = await _systemIdentityService.GetSystemPrivateKeyAsync(cancellationToken);
+            var publicKeyId = $"{systemActor.Id}#main-key";
+
+            using var httpClient = _httpClientFactory.CreateClient("ActivityPub");
+            using var response = await _signatureService.SendSignedGetAsync(
+                httpClient, new Uri(actorUrl), publicKeyId, privateKey, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Signed GET for actor {ActorUrl} failed with status {StatusCode}", actorUrl, response.StatusCode);
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<Actor>(_jsonOptions, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Signed GET for actor {ActorUrl} failed", actorUrl);
             return null;
         }
     }

@@ -107,6 +107,23 @@ public interface IActorRepository
     /// </summary>
     Task RemovePendingFollowerAsync(string username, string followerActorId, CancellationToken cancellationToken = default);
 
+    // Pending Following (outgoing Follow sent, awaiting remote Accept)
+
+    /// <summary>
+    /// Gets all outgoing follow requests that have been sent but not yet accepted by the remote actor
+    /// </summary>
+    Task<IEnumerable<string>> GetPendingFollowingAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records an outgoing Follow that has been successfully delivered to the remote actor's inbox but not yet accepted
+    /// </summary>
+    Task AddPendingFollowingAsync(string username, string followingActorId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes an entry from the pending-following list (on Accept, Reject, Undo, or permanent delivery failure)
+    /// </summary>
+    Task RemovePendingFollowingAsync(string username, string followingActorId, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Gets all local usernames
     /// </summary>
