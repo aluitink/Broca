@@ -1,6 +1,7 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Core.Interfaces
 @inject IActivityPubClient Client
+@inject NavigationManager Navigation
 
 <div class="activitypub-followers-list @CssClass">
     @if (!string.IsNullOrEmpty(Title))
@@ -28,7 +29,7 @@
                 }
                 else
                 {
-                    <div class="follower-item">
+                    <div class="follower-item" @onclick="() => NavigateToActor(follower)" style="cursor: pointer;">
                         <ObjectDisplay Object="@follower" />
                         
                         @if (ShowFollowButton && Client.ActorId != null && follower.Id != Client.ActorId)
@@ -38,6 +39,7 @@
                                 {
                                     <button class="follow-button following" 
                                             @onclick="() => HandleUnfollowClick(follower)"
+                                            @onclick:stopPropagation="true"
                                             disabled="@IsProcessing(follower)">
                                         Following
                                     </button>
@@ -46,6 +48,7 @@
                                 {
                                     <button class="follow-button" 
                                             @onclick="() => HandleFollowClick(follower)"
+                                            @onclick:stopPropagation="true"
                                             disabled="@IsProcessing(follower)">
                                         @(IsOwnProfile ? "Follow Back" : "Follow")
                                     </button>
@@ -225,6 +228,12 @@
         {
             // Silently fail - follow buttons will default to showing "Follow Back"
         }
+    }
+
+    private void NavigateToActor(KristofferStrube.ActivityStreams.Object actor)
+    {
+        if (!string.IsNullOrEmpty(actor.Id))
+            Navigation.NavigateTo($"/actor?id={Uri.EscapeDataString(actor.Id)}");
     }
 
     private bool IsFollowing(KristofferStrube.ActivityStreams.Object follower)

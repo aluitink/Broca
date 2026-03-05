@@ -1,6 +1,7 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Core.Interfaces
 @inject IActivityPubClient Client
+@inject NavigationManager Navigation
 
 <div class="activitypub-following-list @CssClass">
     @if (!string.IsNullOrEmpty(Title))
@@ -28,7 +29,7 @@
                 }
                 else
                 {
-                    <div class="following-item">
+                    <div class="following-item" @onclick="() => NavigateToActor(followedActor)" style="cursor: pointer;">
                         <ObjectDisplay Object="@followedActor" />
                         
                         @if (ShowUnfollowButton && CanUnfollow)
@@ -36,6 +37,7 @@
                             <div class="following-actions">
                                 <button class="unfollow-button" 
                                         @onclick="() => HandleUnfollowClick(followedActor)"
+                                        @onclick:stopPropagation="true"
                                         disabled="@IsProcessing(followedActor)">
                                     @if (IsProcessing(followedActor))
                                     {
@@ -188,6 +190,12 @@
         }
 
         return Task.CompletedTask;
+    }
+
+    private void NavigateToActor(KristofferStrube.ActivityStreams.Object actor)
+    {
+        if (!string.IsNullOrEmpty(actor.Id))
+            Navigation.NavigateTo($"/actor?id={Uri.EscapeDataString(actor.Id)}");
     }
 
     private bool IsProcessing(KristofferStrube.ActivityStreams.Object followedActor)
