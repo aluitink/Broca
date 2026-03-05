@@ -519,7 +519,9 @@ public class ActivityDeliveryService
             if (response.IsSuccessStatusCode)
             {
                 await _deliveryQueue.MarkAsDeliveredAsync(item.Id, cancellationToken);
-                _logger.LogInformation("Successfully delivered activity to {InboxUrl}", item.InboxUrl);
+                _logger.LogInformation(
+                    "Delivered {ActivityType} from @{Sender} to {InboxUrl} (delivery {DeliveryId})",
+                    item.Activity.Type?.FirstOrDefault() ?? "Activity", item.SenderUsername, item.InboxUrl, item.Id);
                 await ApplyDeliverySuccessSideEffectsAsync(item, cancellationToken);
             }
             else

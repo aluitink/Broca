@@ -145,7 +145,10 @@ public class FileSystemDeliveryQueueRepository : IDeliveryQueueRepository
             await WriteEnvelopeAsync(GetDeliveredFilePath(deliveryId), item, cancellationToken);
             File.Delete(queueFile);
 
-            _logger.LogDebug("Delivery {DeliveryId} to {InboxUrl} completed successfully", deliveryId, item.InboxUrl);
+            _logger.LogInformation(
+                "Delivery {DeliveryId} completed: {ActivityType} from {Sender} to {InboxUrl}{TargetActor} after {Attempts} attempt(s)",
+                deliveryId, item.Activity.Type?.FirstOrDefault() ?? "Unknown", item.SenderUsername, item.InboxUrl,
+                item.TargetActorId != null ? $" (actor: {item.TargetActorId})" : "", item.AttemptCount);
         }
         finally
         {
