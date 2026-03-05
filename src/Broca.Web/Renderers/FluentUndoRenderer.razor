@@ -1,0 +1,371 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@using Broca.ActivityPub.Components.Services
+@using Broca.ActivityPub.Core.Interfaces
+@inject ActorResolutionService ActorResolver
+@inject NavigationManager Navigation
+@inject IActivityPubClient? ActivityPubClient
+@inherits ComponentBase
+
+<FluentCard Class="@($"fluent-undo-card {CssClass}")">
+    @if (Undo != null)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            @* Header with actor and timestamp *@
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="undo-header">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    @if (Undo.Actor?.Any() == true)
+                    {
+                        <div class="actor-info-clickable" @onclick="NavigateToActor" style="cursor: pointer;">
+                            <FluentPersona Name="@GetActorDisplay()"
+                                           Image="@GetActorImageUrl()"
+                                           ImageSize="32px"
+                                           TextPosition="@TextPosition.End">
+                                @if (!string.IsNullOrEmpty(GetActorUsername()))
+                                {
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                                        @@@GetActorUsername()
+                                    </FluentLabel>
+                                }
+                            </FluentPersona>
+                        </div>
+                    }
+
+                    <FluentBadge Appearance="Appearance.Neutral">
+                        @GetUndoBadge()
+                    </FluentBadge>
+                </FluentStack>
+                
+                @if (Undo.Published.HasValue)
+                {
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral" class="undo-timestamp">
+                        <time datetime="@Undo.Published.Value.ToString("o")" title="@Undo.Published.Value.ToString("f")">
+                            @FormatDateTime(Undo.Published.Value)
+                        </time>
+                    </FluentLabel>
+                }
+            </FluentStack>
+
+            @* Show context *@
+            @if (ShowContext)
+            {
+                <FluentDivider Style="margin: 0;" />
+                <div class="undo-context">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentIcon Value="@GetUndoIcon()" Color="Color.Neutral" />
+                        <FluentLabel Typo="Typography.Body">
+                            @GetUndoContextMessage()
+                        </FluentLabel>
+                    </FluentStack>
+                </div>
+            }
+
+            @* Show original activity if requested *@
+            @if (ShowOriginalActivity && Undo.Object?.Any() == true)
+            {
+                <FluentDivider Style="margin: 0;" />
+                <div class="undo-original">
+                    @if (resolvedActivity != null)
+                    {
+                        <ObjectDisplay Object="@resolvedActivity" />
+                    }
+                    else if (!isLoading)
+                    {
+                        var objRef = Undo.Object.First();
+                        @if (objRef is Link link)
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Link())" Color="Color.Neutral" />
+                                <FluentAnchor Href="@(link.Href?.ToString() ?? "#")" Target="_blank" Appearance="Appearance.Hypertext">
+                                    View original activity
+                                </FluentAnchor>
+                            </FluentStack>
+                        }
+                        else if (objRef is IObject obj)
+                        {
+                            <ObjectDisplay Object="@obj" />
+                        }
+                    }
+                    else if (isLoading)
+                    {
+                        <FluentProgressRing Style="width: 24px; height: 24px;" />
+                    }
+                </div>
+            }
+
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Undo)
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    private ActorInfo? actorInfo;
+    private object? resolvedActivity;
+    private bool isLoading = false;
+    private string? activityType;
+
+    [Parameter]
+    public Undo? Undo { get; set; }
+
+    [Parameter]
+    public bool ShowContext { get; set; } = true;
+
+    [Parameter]
+    public bool ShowOriginalActivity { get; set; } = false;
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public RenderFragment<Undo>? AdditionalContent { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadActorInfo();
+        DetermineActivityType();
+        if (ShowOriginalActivity)
+        {
+            await LoadOriginalActivity();
+        }
+    }
+
+    private async Task LoadActorInfo()
+    {
+        if (Undo?.Actor?.Any() == true)
+        {
+            var actorRef = Undo.Actor.First();
+            string? actorId = null;
+
+            if (actorRef is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
+                actorId = actorObj.Id;
+            else if (actorRef is Link link && link.Href != null)
+                actorId = link.Href.ToString();
+
+            if (!string.IsNullOrEmpty(actorId))
+            {
+                try
+                {
+                    var actorLinkObj = new Link { Href = new Uri(actorId) };
+                    actorInfo = await ActorResolver.ResolveActorAsync(actorLinkObj);
+                }
+                catch
+                {
+                    // Ignore errors in actor resolution
+                }
+            }
+        }
+    }
+
+    private void DetermineActivityType()
+    {
+        if (Undo?.Object?.Any() == true)
+        {
+            var obj = Undo.Object.First();
+            if (obj is IObject activityObj && activityObj.Type?.Any() == true)
+            {
+                activityType = activityObj.Type.First();
+            }
+        }
+    }
+
+    private async Task LoadOriginalActivity()
+    {
+        if (ActivityPubClient == null || Undo?.Object?.Any() != true)
+            return;
+
+        var objRef = Undo.Object.First();
+        
+        if (objRef is IObject obj && obj is not Link)
+        {
+            resolvedActivity = obj;
+            return;
+        }
+
+        Uri? urlToFetch = null;
+        
+        if (objRef is Link link && link.Href != null)
+        {
+            urlToFetch = link.Href;
+        }
+
+        if (urlToFetch != null)
+        {
+            try
+            {
+                isLoading = true;
+                StateHasChanged();
+
+                var fetchedObject = await ActivityPubClient.GetAsync<Activity>(
+                    urlToFetch, 
+                    useCache: true);
+                
+                if (fetchedObject != null)
+                {
+                    resolvedActivity = fetchedObject;
+                }
+            }
+            catch
+            {
+                // If fetch fails, we'll just show the link
+            }
+            finally
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private string GetUndoBadge()
+    {
+        if (string.IsNullOrEmpty(activityType))
+            return "↩️ Undid action";
+
+        return activityType.ToLower() switch
+        {
+            "follow" => "👥 Unfollowed",
+            "like" => "💔 Unliked",
+            "announce" => "🔁 Un-boosted",
+            "block" => "✅ Unblocked",
+            _ => $"↩️ Undid {activityType.ToLower()}"
+        };
+    }
+
+    private Icon GetUndoIcon()
+    {
+        if (string.IsNullOrEmpty(activityType))
+            return new Icons.Regular.Size20.ArrowUndo();
+
+        return activityType.ToLower() switch
+        {
+            "follow" => new Icons.Regular.Size20.PersonDelete(),
+            "like" => new Icons.Regular.Size20.HeartBroken(),
+            "announce" => new Icons.Regular.Size20.ArrowTurnUpLeft(),
+            "block" => new Icons.Regular.Size20.CheckmarkCircle(),
+            _ => new Icons.Regular.Size20.ArrowUndo()
+        };
+    }
+
+    private string GetUndoContextMessage()
+    {
+        if (string.IsNullOrEmpty(activityType))
+            return "Action undone";
+
+        var objRef = Undo?.Object?.FirstOrDefault();
+        string targetDisplay = "something";
+
+        if (objRef is Activity activity && activity.Object?.Any() == true)
+        {
+            var target = activity.Object.First();
+            
+            if (target is IObject targetObj && targetObj.Name?.Any() == true)
+            {
+                targetDisplay = targetObj.Name.First();
+            }
+            else if (target is Link link && link.Href != null)
+            {
+                var url = link.Href.ToString();
+                targetDisplay = url.Length > 50 ? url.Substring(0, 47) + "..." : url;
+            }
+        }
+
+        return activityType.ToLower() switch
+        {
+            "follow" => $"Unfollowed {targetDisplay}",
+            "like" => $"Removed like from {targetDisplay}",
+            "announce" => $"Removed boost of {targetDisplay}",
+            "block" => $"Unblocked {targetDisplay}",
+            _ => $"Undid {activityType.ToLower()}"
+        };
+    }
+
+    private string GetActorDisplay()
+    {
+        if (actorInfo != null)
+            return actorInfo.Name;
+
+        var actorRef = Undo?.Actor?.FirstOrDefault();
+        if (actorRef == null) return "Unknown";
+
+        if (actorRef is Actor actor && actor.Name?.Any() == true)
+            return actor.Name.First();
+
+        if (actorRef is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true)
+                return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id))
+                return obj.Id;
+        }
+
+        if (actorRef is Link link && link.Href != null)
+            return link.Href.ToString();
+
+        return "Unknown";
+    }
+
+    private string GetActorImageUrl()
+    {
+        if (actorInfo?.IconUrl != null)
+            return actorInfo.IconUrl;
+
+        var actorRef = Undo?.Actor?.FirstOrDefault();
+        if (actorRef == null) return string.Empty;
+
+        if (actorRef is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                if (url is Link link && link.Href != null)
+                    return link.Href.ToString();
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private string GetActorUsername()
+    {
+        if (actorInfo != null)
+            return actorInfo.PreferredUsername;
+
+        var actorRef = Undo?.Actor?.FirstOrDefault();
+        if (actorRef == null) return string.Empty;
+
+        if (actorRef is Person person && !string.IsNullOrEmpty(person.PreferredUsername))
+            return person.PreferredUsername;
+
+        return string.Empty;
+    }
+
+    private void NavigateToActor()
+    {
+        if (actorInfo != null)
+        {
+            Navigation.NavigateTo($"/actor?id={Uri.EscapeDataString(actorInfo.Id)}");
+        }
+    }
+
+    private string FormatDateTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (timeSpan.TotalMinutes < 1)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays}d ago";
+
+        return dateTime.ToString("MMM d, yyyy");
+    }
+}

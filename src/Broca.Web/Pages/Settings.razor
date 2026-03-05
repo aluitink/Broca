@@ -6,11 +6,11 @@
 <PageTitle>Settings - Broca</PageTitle>
 
 <FluentStack Orientation="Orientation.Vertical" VerticalGap="20">
-    <h1>Settings</h1>
+    <FluentLabel Typo="Typography.PageTitle">Settings</FluentLabel>
 
     <FluentCard Style="max-width: 600px;">
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-            <h3>ActivityPub Authentication</h3>
+            <FluentLabel Typo="Typography.Subject">ActivityPub Authentication</FluentLabel>
             
             @if (provider?.IsAuthenticated == true)
             {
@@ -111,19 +111,19 @@
 
     <FluentCard Style="max-width: 600px;">
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
-            <h3>About Authentication</h3>
-            <p style="font-size: 0.875rem; color: var(--neutral-foreground-rest);">
-                <strong>Anonymous Mode:</strong> Browse public ActivityPub content without signing in. 
+            <FluentLabel Typo="Typography.Subject">About Authentication</FluentLabel>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                <strong>Anonymous Mode:</strong> Browse public ActivityPub content without signing in.
                 Some features may be limited.
-            </p>
-            <p style="font-size: 0.875rem; color: var(--neutral-foreground-rest);">
-                <strong>API Key:</strong> Recommended for most users. The API key is used to fetch 
+            </FluentLabel>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                <strong>API Key:</strong> Recommended for most users. The API key is used to fetch
                 your credentials from the server securely.
-            </p>
-            <p style="font-size: 0.875rem; color: var(--neutral-foreground-rest);">
-                <strong>Private Key:</strong> For advanced users who want to manage their own keys. 
+            </FluentLabel>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">
+                <strong>Private Key:</strong> For advanced users who want to manage their own keys.
                 Your private key never leaves your browser.
-            </p>
+            </FluentLabel>
         </FluentStack>
     </FluentCard>
 </FluentStack>

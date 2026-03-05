@@ -1,0 +1,226 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<ObjectCard Actor="@(Event?.AttributedTo?.FirstOrDefault())"
+            ObjectType="Event"
+            Timestamp="@Event?.Published"
+            ShowActor="@ShowActor"
+            ShowType="true"
+            ShowTimestamp="true"
+            CssClass="@CssClass">
+    <ChildContent>
+        @if (Event != null)
+        {
+            @if (Event.Name?.Any() == true)
+            {
+                <h3 class="event-title">@Event.Name.First()</h3>
+            }
+
+            @if (Event.Summary?.Any() == true)
+            {
+                <div class="event-summary">
+                    @((MarkupString)(Event.Summary.First() ?? string.Empty))
+                </div>
+            }
+
+            @if (Event.Content?.Any() == true)
+            {
+                <div class="event-content">
+                    @((MarkupString)(Event.Content.First() ?? string.Empty))
+                </div>
+            }
+
+            <div class="event-details">
+                @if (ShowTime && Event.StartTime != null)
+                {
+                    <div class="event-detail event-start">
+                        <span class="detail-label">Starts:</span>
+                        <span class="detail-value">@FormatDateTime(Event.StartTime.Value)</span>
+                    </div>
+                }
+
+                @if (ShowTime && Event.EndTime != null)
+                {
+                    <div class="event-detail event-end">
+                        <span class="detail-label">Ends:</span>
+                        <span class="detail-value">@FormatDateTime(Event.EndTime.Value)</span>
+                    </div>
+                }
+
+                @if (ShowDuration && Event.Duration != null)
+                {
+                    <div class="event-detail event-duration">
+                        <span class="detail-label">Duration:</span>
+                        <span class="detail-value">@FormatDuration(Event.Duration.Value)</span>
+                    </div>
+                }
+
+                @if (ShowLocation && Event.Location?.Any() == true)
+                {
+                    <div class="event-detail event-location">
+                        <span class="detail-label">Location:</span>
+                        <span class="detail-value">@GetLocationText()</span>
+                    </div>
+                }
+            </div>
+
+            @if (AdditionalContent != null)
+            {
+                @AdditionalContent(Event)
+            }
+        }
+    </ChildContent>
+    <FooterContent>
+        @if (ShowInteractions && Event?.Id != null)
+        {
+            <InteractionBar ObjectId="@Event.Id"
+                           Object="@Event"
+                           ShowReply="@ShowReply"
+                           ShowBoost="@ShowBoost"
+                           ShowLike="@ShowLike"
+                           ShowBookmark="@ShowBookmark"
+                           CssClass="event-interactions" />
+        }
+    </FooterContent>
+</ObjectCard>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Event object to render.
+    /// </summary>
+    [Parameter]
+    public Event? Event { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the actor attribution.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show time information.
+    /// </summary>
+    [Parameter]
+    public bool ShowTime { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show duration.
+    /// </summary>
+    [Parameter]
+    public bool ShowDuration { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show location.
+    /// </summary>
+    [Parameter]
+    public bool ShowLocation { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the time format (relative or absolute).
+    /// </summary>
+    [Parameter]
+    public string TimeFormat { get; set; } = "relative";
+
+    /// <summary>
+    /// Gets or sets whether to show the interaction bar.
+    /// </summary>
+    [Parameter]
+    public bool ShowInteractions { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the reply button.
+    /// </summary>
+    [Parameter]
+    public bool ShowReply { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the boost button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBoost { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the like button.
+    /// </summary>
+    [Parameter]
+    public bool ShowLike { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the bookmark button.
+    /// </summary>
+    [Parameter]
+    public bool ShowBookmark { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Event>? AdditionalContent { get; set; }
+
+    private string FormatDateTime(DateTimeOffset dateTime)
+    {
+        if (TimeFormat == "absolute")
+        {
+            return dateTime.ToString("f");
+        }
+
+        var local = dateTime.ToLocalTime();
+        var now = DateTimeOffset.Now;
+        
+        if (local.Date == now.Date)
+            return $"Today at {local:h:mm tt}";
+        
+        if (local.Date == now.Date.AddDays(1))
+            return $"Tomorrow at {local:h:mm tt}";
+        
+        if (local.Date == now.Date.AddDays(-1))
+            return $"Yesterday at {local:h:mm tt}";
+        
+        if (local.Year == now.Year)
+            return local.ToString("MMM d 'at' h:mm tt");
+        
+        return local.ToString("MMM d, yyyy 'at' h:mm tt");
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+            return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+        
+        if (duration.TotalMinutes >= 1)
+            return $"{(int)duration.TotalMinutes}m";
+        
+        return $"{(int)duration.TotalSeconds}s";
+    }
+
+    private string GetLocationText()
+    {
+        if (Event?.Location == null || !Event.Location.Any())
+            return string.Empty;
+
+        var location = Event.Location.FirstOrDefault();
+        
+        if (location is Place place)
+        {
+            if (place.Name?.Any() == true)
+                return place.Name.First();
+            
+            if (place.Latitude.HasValue && place.Longitude.HasValue)
+                return $"{place.Latitude.Value}, {place.Longitude.Value}";
+        }
+
+        if (location is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
+            return obj.Name.First();
+
+        if (location is ILink link && link.Href != null)
+            return link.Href.ToString();
+
+        return "Location available";
+    }
+}

@@ -443,6 +443,13 @@ internal class NoteBuilder : INoteBuilder
         return this;
     }
 
+    public INoteBuilder CcFollowers()
+    {
+        var followersUrl = $"{_actorId}/followers";
+        _cc.Add(new Link { Href = new Uri(followersUrl) });
+        return this;
+    }
+
     public INoteBuilder WithMention(string actorId, string name)
     {
         // Add to recipients

@@ -1,0 +1,84 @@
+.fluent-media-gallery {
+    /* Enhanced Fluent UI styling for MediaGallery */
+}
+
+.fluent-media-gallery .media-grid-item {
+    border: 1px solid var(--neutral-stroke-rest);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fluent-media-gallery .media-grid-item:hover {
+    border-color: var(--neutral-stroke-hover);
+    box-shadow: var(--elevation-shadow-card-rest);
+}
+
+.fluent-media-gallery .media-grid-item:focus-visible {
+    outline: 2px solid var(--accent-fill-rest);
+    outline-offset: 2px;
+}
+
+.fluent-media-gallery .carousel-button,
+.fluent-media-gallery .lightbox-nav-button,
+.fluent-media-gallery .lightbox-close,
+.fluent-media-gallery .zoom-button {
+    background-color: var(--neutral-fill-rest);
+    color: var(--neutral-foreground-rest);
+    box-shadow: var(--elevation-shadow-tooltip);
+}
+
+.fluent-media-gallery .carousel-button:hover:not(:disabled),
+.fluent-media-gallery .lightbox-nav-button:hover:not(:disabled),
+.fluent-media-gallery .lightbox-close:hover,
+.fluent-media-gallery .zoom-button:hover:not(:disabled) {
+    background-color: var(--neutral-fill-hover);
+}
+
+.fluent-media-gallery .carousel-button:active:not(:disabled),
+.fluent-media-gallery .lightbox-nav-button:active:not(:disabled),
+.fluent-media-gallery .lightbox-close:active,
+.fluent-media-gallery .zoom-button:active:not(:disabled) {
+    background-color: var(--neutral-fill-active);
+}
+
+.fluent-media-gallery .carousel-button:focus-visible,
+.fluent-media-gallery .lightbox-nav-button:focus-visible,
+.fluent-media-gallery .lightbox-close:focus-visible,
+.fluent-media-gallery .zoom-button:focus-visible {
+    outline: 2px solid var(--accent-fill-rest);
+    outline-offset: 2px;
+}
+
+.fluent-media-gallery .carousel-dot {
+    background-color: var(--neutral-fill-secondary-rest);
+}
+
+.fluent-media-gallery .carousel-dot:hover {
+    background-color: var(--neutral-fill-secondary-hover);
+}
+
+.fluent-media-gallery .carousel-dot.active {
+    background-color: var(--accent-fill-rest);
+}
+
+.fluent-media-gallery .lightbox-info {
+    background-color: var(--neutral-layer-floating);
+    backdrop-filter: blur(30px);
+    box-shadow: var(--elevation-shadow-flyout);
+}
+
+.fluent-media-gallery .play-overlay {
+    background-color: var(--neutral-fill-stealth-rest);
+    backdrop-filter: blur(10px);
+}
+
+.fluent-media-gallery .media-grid-item:hover .play-overlay {
+    background-color: var(--neutral-fill-stealth-hover);
+}
+
+/* Smooth transitions in Fluent style */
+@media (prefers-reduced-motion: no-preference) {
+    .fluent-media-gallery .media-grid-item,
+    .fluent-media-gallery .carousel-track {
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+}

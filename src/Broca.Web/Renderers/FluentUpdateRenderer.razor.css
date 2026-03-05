@@ -1,0 +1,22 @@
+/* Fluent Update Renderer Styles */
+.fluent-update-card {
+    margin-bottom: 16px;
+    border-left: 3px solid var(--accent-fill-rest);
+}
+
+.update-header {
+    align-items: center;
+}
+
+.update-timestamp {
+    white-space: nowrap;
+}
+
+.update-object {
+    margin: 0;
+    padding-left: 8px;
+}
+
+.actor-info-clickable:hover {
+    opacity: 0.8;
+}

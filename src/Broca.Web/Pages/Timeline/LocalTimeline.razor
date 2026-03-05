@@ -1,0 +1,187 @@
+@page "/timeline/local"
+@using Broca.Web.Services
+@using Broca.ActivityPub.Components
+@using Broca.ActivityPub.Core.Interfaces
+@using Broca.Web.Renderers
+@using static Broca.ActivityPub.Components.FeedFilter
+@inject AuthenticationStateService AuthState
+@inject NavigationManager Navigation
+@inject IActivityPubClient Client
+
+<PageTitle>Local Timeline - Broca</PageTitle>
+
+<div class="timeline-container">
+    @if (!AuthState.IsAuthenticated)
+    {
+        <FluentCard>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                <FluentLabel Typo="Typography.Subject">Authentication Required</FluentLabel>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Please login to view the local timeline.</FluentLabel>
+                <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/login?returnUrl=/timeline/local"))">
+                    Login
+                </FluentButton>
+            </FluentStack>
+        </FluentCard>
+    }
+    else
+    {
+        <div class="timeline-header">
+            <div class="header-content">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                             VerticalAlignment="VerticalAlignment.Center" Style="margin-bottom: 0.5rem;">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.PeopleTeam())" Color="Color.Accent" />
+                    <FluentLabel Typo="Typography.PageTitle">Local Timeline</FluentLabel>
+                </FluentStack>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Public posts from your instance</FluentLabel>
+            </div>
+            <div class="timeline-actions">
+                <FluentButton 
+                    Appearance="Appearance.Outline"
+                    IconStart="@(new Icons.Regular.Size20.Filter())"
+                    OnClick="@ToggleFilter">
+                    @(showFilter ? "Hide" : "Show") Filters
+                </FluentButton>
+                <FluentButton 
+                    Appearance="Appearance.Accent"
+                    IconStart="@(new Icons.Regular.Size20.Compose())"
+                    OnClick="@(() => Navigation.NavigateTo("/"))">
+                    New Post
+                </FluentButton>
+            </div>
+        </div>
+
+        @if (_localTimelineUrl != null)
+        {
+            <ActivityFeed 
+                CollectionUrl="@_localTimelineUrl"
+                PageSize="20"
+                UseVirtualization="true"
+                ItemSize="200"
+                ShowSearch="true"
+                ShowFilter="@showFilter"
+                FilterTemplate="@CreateFilterTemplate()"
+                ShowScrollToTop="true"
+                EnableAutoRefresh="true"
+                AutoRefreshInterval="60"
+                ShowNewPostsNotification="true"
+                CssClass="local-timeline-feed">
+                <ActivityTemplate Context="activity">
+                    <div class="activity-item">
+                        <ObjectDisplay Object="@activity" />
+                    </div>
+                </ActivityTemplate>
+            </ActivityFeed>
+        }
+        else
+        {
+            <FluentCard>
+                <FluentMessageBar Intent="MessageIntent.Info">
+                    Local timeline is not available. This feature requires server-side support for a public local timeline collection.
+                </FluentMessageBar>
+            </FluentCard>
+        }
+    }
+</div>
+
+@code {
+    private Uri? _localTimelineUrl;
+    private bool showFilter = false;
+
+    protected override void OnInitialized()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthStateChanged;
+        UpdateLocalTimelineUrl();
+    }
+
+    private void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        UpdateLocalTimelineUrl();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateLocalTimelineUrl()
+    {
+        // Construct local timeline URL based on current instance
+        // This would typically be /api/v1/timelines/public?local=true or similar
+        // For now, we'll use a placeholder - this should be configured based on server
+        if (AuthState.IsAuthenticated && AuthState.CurrentActorId != null)
+        {
+            var baseUri = new Uri(AuthState.CurrentActorId);
+            _localTimelineUrl = new Uri(baseUri, "/api/timelines/local");
+        }
+    }
+
+    private void ToggleFilter()
+    {
+        showFilter = !showFilter;
+    }
+
+    private RenderFragment CreateFilterTemplate()
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FeedFilter>(0);
+            builder.AddAttribute(1, nameof(FeedFilter.FilterTemplate), FluentFeedFilterRenderer.Template);
+            builder.AddAttribute(2, nameof(FeedFilter.ShowActivityTypeFilter), true);
+            builder.AddAttribute(3, nameof(FeedFilter.ShowContentTypeFilter), true);
+            builder.AddAttribute(4, nameof(FeedFilter.ShowActorFilter), true);
+            builder.AddAttribute(5, nameof(FeedFilter.ShowDateRangeFilter), true);
+            builder.CloseComponent();
+        };
+    }
+
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+}
+
+<style>
+    .timeline-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .timeline-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
+    }
+
+    .header-content {
+        flex: 1;
+    }
+
+    .timeline-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .activity-item {
+        padding: 1rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
+    }
+
+    .activity-item:last-child {
+        border-bottom: none;
+    }
+
+    @@media (max-width: 768px) {
+        .timeline-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .timeline-actions {
+            width: 100%;
+            flex-direction: column;
+        }
+    }
+</style>

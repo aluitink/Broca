@@ -3,7 +3,6 @@ using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
 using System.Net.Http.Headers;
 
 namespace Broca.ActivityPub.Client.Extensions;
@@ -53,20 +52,12 @@ public static class ServiceCollectionExtensions
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         });
 
-        // Register proxy service for CORS fallback
-        services.TryAddScoped<ProxyService>();
-
         // Register the base ActivityPub client
         services.TryAddScoped<ActivityPubClient>();
-        
-        // Register the resilient client wrapper as the primary IActivityPubClient
-        services.TryAddScoped<IActivityPubClient>(sp =>
-        {
-            var baseClient = sp.GetRequiredService<ActivityPubClient>();
-            var proxyService = sp.GetRequiredService<ProxyService>();
-            var logger = sp.GetRequiredService<ILogger<ResilientActivityPubClient>>();
-            return new ResilientActivityPubClient(baseClient, proxyService, logger);
-        });
+        services.TryAddScoped<IActivityPubClient>(sp => sp.GetRequiredService<ActivityPubClient>());
+
+        // Register the factory for creating per-actor clients
+        services.TryAddSingleton<IActivityPubClientFactory, ActivityPubClientFactory>();
 
         return services;
     }

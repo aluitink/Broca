@@ -207,7 +207,7 @@ public class ActorController : ActivityPubControllerBase
 
     [HttpGet("followers")]
     [Produces("application/activity+json", "application/ld+json")]
-    public async Task<IActionResult> GetFollowers(string username)
+    public async Task<IActionResult> GetFollowers(string username, [FromQuery] int page = 0, [FromQuery] int limit = 20)
     {
         try
         {
@@ -217,21 +217,15 @@ public class ActorController : ActivityPubControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
-            var followers = await _actorRepository.GetFollowersAsync(username);
-            var baseUrl = GetBaseUrl();
-
-            var collection = new OrderedCollection
-            {
-                JsonLDContext = new List<ITermDefinition> 
-                { 
-                    new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                },
-                Id = $"{baseUrl}/users/{username}/followers",
-                TotalItems = (uint)followers.Count(),
-                OrderedItems = followers.Select(f => new Link { Href = new Uri(f) } as IObjectOrLink).ToList()
-            };
-
-            return Ok(collection);
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+            var collectionUrl = $"{baseUrl}/users/{username}/followers";
+            var totalCount = await _actorRepository.GetFollowersCountAsync(username);
+            var hasPageParam = Request.Query.ContainsKey("page") || Request.Query.ContainsKey("limit");
+            IEnumerable<IObjectOrLink> items = hasPageParam
+                ? (await _actorRepository.GetFollowersAsync(username, limit, page * limit))
+                    .Select(f => (IObjectOrLink)new Link { Href = new Uri(f) })
+                : Enumerable.Empty<IObjectOrLink>();
+            return BuildCollectionResponse(collectionUrl, items, totalCount, page, limit, itemsAlreadyPaginated: true);
         }
         catch (Exception ex)
         {
@@ -242,7 +236,7 @@ public class ActorController : ActivityPubControllerBase
 
     [HttpGet("following")]
     [Produces("application/activity+json", "application/ld+json")]
-    public async Task<IActionResult> GetFollowing(string username)
+    public async Task<IActionResult> GetFollowing(string username, [FromQuery] int page = 0, [FromQuery] int limit = 20)
     {
         try
         {
@@ -252,21 +246,15 @@ public class ActorController : ActivityPubControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
-            var following = await _actorRepository.GetFollowingAsync(username);
-            var baseUrl = GetBaseUrl();
-
-            var collection = new OrderedCollection
-            {
-                JsonLDContext = new List<ITermDefinition> 
-                { 
-                    new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                },
-                Id = $"{baseUrl}/users/{username}/following",
-                TotalItems = (uint)following.Count(),
-                OrderedItems = following.Select(f => new Link { Href = new Uri(f) } as IObjectOrLink).ToList()
-            };
-
-            return Ok(collection);
+            var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+            var collectionUrl = $"{baseUrl}/users/{username}/following";
+            var totalCount = await _actorRepository.GetFollowingCountAsync(username);
+            var hasPageParam = Request.Query.ContainsKey("page") || Request.Query.ContainsKey("limit");
+            IEnumerable<IObjectOrLink> items = hasPageParam
+                ? (await _actorRepository.GetFollowingAsync(username, limit, page * limit))
+                    .Select(f => (IObjectOrLink)new Link { Href = new Uri(f) })
+                : Enumerable.Empty<IObjectOrLink>();
+            return BuildCollectionResponse(collectionUrl, items, totalCount, page, limit, itemsAlreadyPaginated: true);
         }
         catch (Exception ex)
         {
@@ -287,56 +275,35 @@ public class ActorController : ActivityPubControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var liked = await _activityRepository.GetLikedByActorAsync(username, limit, offset);
-            var totalCount = await _activityRepository.GetLikedByActorCountAsync(username);
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
 
-            // Enrich activities with collection information
-            await _enrichmentService.EnrichActivitiesAsync(liked, baseUrl);
+            IEnumerable<IObjectOrLink> liked;
+            int likedCount;
+            bool likedAlreadyPaginated;
 
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
-
-            if (!hasPageParam && !hasLimitParam)
+            if (search?.HasSearchCriteria == true)
             {
-                // Return the collection wrapper
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/liked",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/liked?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
+                liked = await _activityRepository.GetLikedByActorAsync(username, int.MaxValue, 0);
+                likedCount = liked.Count();
+                likedAlreadyPaginated = false;
             }
             else
             {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/liked?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/liked") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = liked.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/liked?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/liked?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
+                liked = await _activityRepository.GetLikedByActorAsync(username, limit, offset);
+                likedCount = await _activityRepository.GetLikedByActorCountAsync(username);
+                likedAlreadyPaginated = true;
             }
+
+            await _enrichmentService.EnrichActivitiesAsync(liked, baseUrl);
+
+            var collectionUrl = $"{baseUrl}/users/{username}/liked";
+            return BuildCollectionResponse(collectionUrl, liked, likedCount, page, limit, search, likedAlreadyPaginated);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {
@@ -357,56 +324,35 @@ public class ActorController : ActivityPubControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var shared = await _activityRepository.GetSharedByActorAsync(username, limit, offset);
-            var totalCount = await _activityRepository.GetSharedByActorCountAsync(username);
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
 
-            // Enrich activities with collection information
-            await _enrichmentService.EnrichActivitiesAsync(shared, baseUrl);
+            IEnumerable<IObjectOrLink> shared;
+            int sharedCount;
+            bool sharedAlreadyPaginated;
 
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
-
-            if (!hasPageParam && !hasLimitParam)
+            if (search?.HasSearchCriteria == true)
             {
-                // Return the collection wrapper
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/shared",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/shared?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
+                shared = await _activityRepository.GetSharedByActorAsync(username, int.MaxValue, 0);
+                sharedCount = shared.Count();
+                sharedAlreadyPaginated = false;
             }
             else
             {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/shared?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/shared") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = shared.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/shared?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/shared?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
+                shared = await _activityRepository.GetSharedByActorAsync(username, limit, offset);
+                sharedCount = await _activityRepository.GetSharedByActorCountAsync(username);
+                sharedAlreadyPaginated = true;
             }
+
+            await _enrichmentService.EnrichActivitiesAsync(shared, baseUrl);
+
+            var collectionUrl = $"{baseUrl}/users/{username}/shared";
+            return BuildCollectionResponse(collectionUrl, shared, sharedCount, page, limit, search, sharedAlreadyPaginated);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {

@@ -89,7 +89,17 @@
                                 ShowLike="true"
                                 ShowBookmark="false"
                                 ShowShare="false"
+                                ReplyCount="@GetReplyCount()"
+                                OnReplyClick="@HandleReplyButtonClick"
                                 BarTemplate="FluentInteractionBarRenderer.Template" />
+
+                @if (showReplies && !string.IsNullOrEmpty(GetRepliesUrl()))
+                {
+                    <FluentDivider Style="margin: 0;" />
+                    <ReplyThread RepliesCollectionUrl="@GetRepliesUrl()"
+                                 ShowEmptyState="false"
+                                 CssClass="note-replies" />
+                }
             }
 
             @if (AdditionalContent != null)
@@ -102,6 +112,7 @@
 
 @code {
     private ActorInfo? actorInfo;
+    private bool showReplies;
 
     /// <summary>
     /// Gets or sets the Note object to render.
@@ -163,6 +174,26 @@
         {
             actorInfo = await ActorResolver.ResolveActorAsync(Note.AttributedTo.First());
         }
+    }
+
+    private int GetReplyCount()
+    {
+        if (Note?.Replies is Collection collection)
+            return (int)(collection.TotalItems ?? 0);
+        return 0;
+    }
+
+    private string? GetRepliesUrl()
+    {
+        return (Note?.Replies as Collection)?.Id;
+    }
+
+    private Task HandleReplyButtonClick()
+    {
+        if (GetRepliesUrl() != null)
+            showReplies = !showReplies;
+        StateHasChanged();
+        return Task.CompletedTask;
     }
 
     private void NavigateToActor()

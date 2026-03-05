@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Broca.ActivityPub.Server.Services;
@@ -19,8 +18,8 @@ public class InboxController : ActivityPubControllerBase
     private readonly IInboxHandler _inboxHandler;
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
-    private readonly HttpSignatureService _signatureService;
-    private readonly IActivityPubClient _activityPubClient;
+    private readonly IHttpSignatureVerifier _signatureVerifier;
+    private readonly SignedClientProvider _signedClientProvider;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ObjectEnrichmentService _enrichmentService;
     private readonly IMemoryCache _cache;
@@ -33,8 +32,8 @@ public class InboxController : ActivityPubControllerBase
         IInboxHandler inboxHandler,
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
-        HttpSignatureService signatureService,
-        IActivityPubClient activityPubClient,
+        IHttpSignatureVerifier signatureVerifier,
+        SignedClientProvider signedClientProvider,
         AttachmentProcessingService attachmentProcessingService,
         ObjectEnrichmentService enrichmentService,
         IMemoryCache cache,
@@ -44,8 +43,8 @@ public class InboxController : ActivityPubControllerBase
         _inboxHandler = inboxHandler;
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
-        _signatureService = signatureService;
-        _activityPubClient = activityPubClient;
+        _signatureVerifier = signatureVerifier;
+        _signedClientProvider = signedClientProvider;
         _attachmentProcessingService = attachmentProcessingService;
         _enrichmentService = enrichmentService;
         _cache = cache;
@@ -71,11 +70,33 @@ public class InboxController : ActivityPubControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var activities = await _activityRepository.GetInboxActivitiesAsync(username, limit, offset);
-            
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
-            
+
+            IEnumerable<IObjectOrLink> activities;
+            int totalCount;
+            bool itemsAlreadyPaginated;
+
+            if (search?.HasSearchCriteria == true && _activityRepository is ISearchableActivityRepository searchableRepo)
+            {
+                activities = await searchableRepo.GetInboxActivitiesAsync(username, search, limit, offset);
+                totalCount = await searchableRepo.GetInboxCountAsync(username, search);
+                itemsAlreadyPaginated = true;
+            }
+            else if (search?.HasSearchCriteria == true)
+            {
+                activities = await _activityRepository.GetInboxActivitiesAsync(username, int.MaxValue, 0);
+                totalCount = activities.Count();
+                itemsAlreadyPaginated = false;
+            }
+            else
+            {
+                activities = await _activityRepository.GetInboxActivitiesAsync(username, limit, offset);
+                totalCount = await _activityRepository.GetInboxCountAsync(username);
+                itemsAlreadyPaginated = true;
+            }
+
             // Rewrite attachment URLs and enrich with collection metadata
             foreach (var activity in activities)
             {
@@ -87,52 +108,13 @@ public class InboxController : ActivityPubControllerBase
                 // Enrich activities with collection information (replies, likes, shares counts)
                 await _enrichmentService.EnrichActivityAsync(activity, baseUrl);
             }
-            
-            var totalCount = await _activityRepository.GetInboxCountAsync(username);
 
-            // Check if pagination parameters were explicitly provided
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
-
-            if (!hasPageParam && !hasLimitParam)
-            {
-                // Return the collection wrapper when no pagination params provided
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/inbox",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/inbox?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
-            }
-            else
-            {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/inbox?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/inbox") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = activities.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/inbox?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/inbox?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
-            }
+            var collectionUrl = $"{baseUrl}/users/{username}/inbox";
+            return BuildCollectionResponse(collectionUrl, activities, totalCount, page, limit, search, itemsAlreadyPaginated);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {
@@ -242,7 +224,6 @@ public class InboxController : ActivityPubControllerBase
         _logger.LogDebug("Starting signature verification. Request headers: {Headers}", 
             string.Join(", ", Request.Headers.Keys));
         
-        // Get Signature header
         if (!Request.Headers.TryGetValue("Signature", out var signatureHeader) || string.IsNullOrEmpty(signatureHeader))
         {
             _logger.LogWarning("Signature header is missing from request");
@@ -251,20 +232,11 @@ public class InboxController : ActivityPubControllerBase
 
         _logger.LogDebug("Signature header found: {SignatureHeader}", signatureHeader!);
         
-        // Parse the signature to see what headers it expects
-        var signatureParts = _signatureService.ParseSignatureParts(signatureHeader!);
-        if (signatureParts.TryGetValue("headers", out var headersInSignature))
-        {
-            _logger.LogInformation("Signature expects these headers to be signed: {SignedHeaders}", headersInSignature);
-        }
-        
-        // Extract keyId from signature
-        var keyId = _signatureService.GetSignatureKeyId(signatureHeader!);
+        var keyId = _signatureVerifier.GetSignatureKeyId(signatureHeader!);
         _logger.LogInformation("Extracted keyId from signature: {KeyId}", keyId);
 
         ValidateRequestClockSkew(Request);
         
-        // Fetch the actor's public key
         var publicKeyPem = await FetchActorPublicKeyAsync(keyId, cancellationToken);
         
         if (string.IsNullOrWhiteSpace(publicKeyPem))
@@ -275,62 +247,39 @@ public class InboxController : ActivityPubControllerBase
 
         _logger.LogDebug("Successfully fetched public key for keyId: {KeyId}", keyId);
 
-        // Build headers dictionary for verification
         var headers = new Dictionary<string, string>();
-        
-        // Add the Signature header itself (required for verification)
         headers["signature"] = signatureHeader!;
-        
-        // Add (request-target) pseudo-header
-        var requestTarget = $"{Request.Method.ToLower()} {Request.Path}";
-        headers["(request-target)"] = requestTarget;
+        headers["(request-target)"] = $"{Request.Method.ToLower()} {Request.Path}";
 
-        // Add all headers from the request (lowercase keys)
-        // The verification service will use only the ones that are part of the signature
         foreach (var header in Request.Headers)
         {
             var headerName = header.Key.ToLower();
-            // Don't duplicate the signature header
             if (headerName != "signature")
-            {
                 headers[headerName] = header.Value.ToString();
-            }
         }
         
         _logger.LogDebug("Headers being verified: {Headers}", 
             string.Join(", ", headers.Select(h => $"\"{h.Key}\"")));
 
-        // Validate Digest header for POST requests (required per ActivityPub spec)
         if (Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
         {
             if (!Request.Headers.TryGetValue("Digest", out var digestHeader))
             {
                 _logger.LogWarning("POST request missing Digest header");
-                // Some implementations may not send Digest, log but don't fail
             }
             else
             {
-                // Verify the digest matches the body
                 var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
-                var expectedDigest = _signatureService.ComputeContentDigestHash(bodyBytes);
-                var digestValue = digestHeader.ToString();
-                
-                if (digestValue.StartsWith("SHA-256="))
+                if (!_signatureVerifier.VerifyDigest(bodyBytes, digestHeader.ToString()))
                 {
-                    var providedDigest = digestValue.Substring(8);
-                    if (providedDigest != expectedDigest)
-                    {
-                        _logger.LogWarning("Digest header mismatch. Expected: {Expected}, Got: {Got}", 
-                            expectedDigest, providedDigest);
-                        throw new InvalidOperationException("Digest header does not match request body");
-                    }
+                    _logger.LogWarning("Digest header mismatch for inbox request to keyId: {KeyId}", keyId);
+                    throw new InvalidOperationException("Digest header does not match request body");
                 }
             }
         }
 
-        // Verify the signature
-        _logger.LogDebug("Calling HttpSignatureService.VerifyHttpSignatureAsync with {HeaderCount} headers", headers.Count);
-        var result = await _signatureService.VerifyHttpSignatureAsync(headers, publicKeyPem, cancellationToken);
+        _logger.LogDebug("Calling IHttpSignatureVerifier.VerifyAsync with {HeaderCount} headers", headers.Count);
+        var result = await _signatureVerifier.VerifyAsync(headers, publicKeyPem, cancellationToken);
         _logger.LogDebug("Signature verification result: {Result}", result);
         return result;
     }
@@ -366,11 +315,8 @@ public class InboxController : ActivityPubControllerBase
             
             if (actor == null)
             {
-                _logger.LogDebug("Actor not in local repository, fetching from {ActorUrl} via ActivityPub client", actorUrl);
-                
-                // Use ActivityPubClient to fetch the actor from remote server
-                // Note: The client is configured with the system actor credentials for signing outbound requests
-                actor = await _activityPubClient.GetActorAsync(new Uri(actorUrl), cancellationToken);
+                _logger.LogDebug("Actor not in local repository, fetching from {ActorUrl} via signed GET", actorUrl);
+                actor = await FetchActorWithSignatureAsync(actorUrl, cancellationToken);
             }
             else
             {
@@ -426,6 +372,20 @@ public class InboxController : ActivityPubControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching actor public key from {KeyId}", keyId);
+            return null;
+        }
+    }
+
+    private async Task<Actor?> FetchActorWithSignatureAsync(string actorUrl, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var client = await _signedClientProvider.CreateForSystemActorAsync(cancellationToken);
+            return await client.GetActorAsync(new Uri(actorUrl), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Signed GET for actor {ActorUrl} failed", actorUrl);
             return null;
         }
     }

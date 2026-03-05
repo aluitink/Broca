@@ -69,12 +69,42 @@
             <div class="lightbox-content" @onclick:stopPropagation="true">
                 <button class="lightbox-close" @onclick="CloseLightbox" title="Close (ESC)" aria-label="Close lightbox">×</button>
 
-                <div class="lightbox-media">
+                <div class="lightbox-media" style="transform: scale(@zoomLevel);">
                     @if (currentIndex >= 0 && currentIndex < mediaItems.Count)
                     {
                         @RenderMedia(mediaItems[currentIndex], true)
                     }
                 </div>
+
+                @if (ShowZoomControls && currentIndex >= 0 && currentIndex < mediaItems.Count && mediaItems[currentIndex].MediaType == MediaType.Image)
+                {
+                    <div class="lightbox-zoom-controls">
+                        <button class="zoom-button" 
+                                @onclick="ZoomIn"
+                                @onclick:stopPropagation="true"
+                                disabled="@(zoomLevel >= MaxZoom)"
+                                title="Zoom in (+)"
+                                aria-label="Zoom in">
+                            +
+                        </button>
+                        <button class="zoom-button" 
+                                @onclick="ZoomOut"
+                                @onclick:stopPropagation="true"
+                                disabled="@(zoomLevel <= MinZoom)"
+                                title="Zoom out (-)"
+                                aria-label="Zoom out">
+                            −
+                        </button>
+                        <button class="zoom-button" 
+                                @onclick="ResetZoom"
+                                @onclick:stopPropagation="true"
+                                disabled="@(zoomLevel == 1.0)"
+                                title="Reset zoom (0)"
+                                aria-label="Reset zoom">
+                            ⊙
+                        </button>
+                    </div>
+                }
 
                 @if (mediaItems.Count > 1)
                 {
@@ -105,6 +135,31 @@
                         {
                             <div class="info-caption">@currentItem.Caption</div>
                         }
+                        @if (ShowMetadata && (!string.IsNullOrEmpty(currentItem.Metadata) || currentItem.Width.HasValue || currentItem.Height.HasValue))
+                        {
+                            <div class="info-metadata">
+                                @if (currentItem.Width.HasValue && currentItem.Height.HasValue)
+                                {
+                                    <span>@currentItem.Width × @currentItem.Height</span>
+                                    @if (!string.IsNullOrEmpty(currentItem.MimeType))
+                                    {
+                                        <span> • </span>
+                                    }
+                                }
+                                @if (!string.IsNullOrEmpty(currentItem.MimeType))
+                                {
+                                    <span>@currentItem.MimeType</span>
+                                    @if (!string.IsNullOrEmpty(currentItem.Metadata))
+                                    {
+                                        <span> • </span>
+                                    }
+                                }
+                                @if (!string.IsNullOrEmpty(currentItem.Metadata))
+                                {
+                                    <span>@currentItem.Metadata</span>
+                                }
+                            </div>
+                        }
                     </div>
                 }
             </div>
@@ -116,6 +171,10 @@
     private List<MediaItem> mediaItems = new();
     private int currentIndex = 0;
     private bool isLightboxOpen;
+    private double zoomLevel = 1.0;
+    private const double MinZoom = 0.5;
+    private const double MaxZoom = 3.0;
+    private const double ZoomStep = 0.25;
 
     /// <summary>
     /// Gets or sets the media items to display.
@@ -164,6 +223,18 @@
     /// </summary>
     [Parameter]
     public bool ShowImageInfo { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show metadata in lightbox.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show zoom controls in lightbox.
+    /// </summary>
+    [Parameter]
+    public bool ShowZoomControls { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether lightbox is enabled.
@@ -278,6 +349,30 @@
                 
                 builder.CloseElement();
             }
+            else if (item.MediaType == MediaType.Audio)
+            {
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "thumbnail-audio");
+                
+                if (!string.IsNullOrEmpty(item.ThumbnailUrl))
+                {
+                    builder.OpenElement(sequence++, "img");
+                    builder.AddAttribute(sequence++, "src", item.ThumbnailUrl);
+                    builder.AddAttribute(sequence++, "alt", item.Caption ?? $"Audio {index + 1}");
+                    builder.AddAttribute(sequence++, "loading", "lazy");
+                    builder.CloseElement();
+                }
+                
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "play-overlay");
+                builder.OpenElement(sequence++, "span");
+                builder.AddAttribute(sequence++, "class", "audio-icon");
+                builder.AddContent(sequence++, "🎵");
+                builder.CloseElement();
+                builder.CloseElement();
+                
+                builder.CloseElement();
+            }
 
             builder.CloseElement(); // thumbnail-wrapper
         };
@@ -305,9 +400,30 @@
                 
                 builder.OpenElement(sequence++, "source");
                 builder.AddAttribute(sequence++, "src", item.Url);
+                if (!string.IsNullOrEmpty(item.MimeType))
+                {
+                    builder.AddAttribute(sequence++, "type", item.MimeType);
+                }
                 builder.CloseElement();
                 
                 builder.AddContent(sequence++, "Your browser does not support the video tag.");
+                builder.CloseElement();
+            }
+            else if (item.MediaType == MediaType.Audio)
+            {
+                builder.OpenElement(sequence++, "audio");
+                builder.AddAttribute(sequence++, "controls", true);
+                builder.AddAttribute(sequence++, "class", isLightbox ? "lightbox-audio" : "carousel-audio");
+                
+                builder.OpenElement(sequence++, "source");
+                builder.AddAttribute(sequence++, "src", item.Url);
+                if (!string.IsNullOrEmpty(item.MimeType))
+                {
+                    builder.AddAttribute(sequence++, "type", item.MimeType);
+                }
+                builder.CloseElement();
+                
+                builder.AddContent(sequence++, "Your browser does not support the audio tag.");
                 builder.CloseElement();
             }
         };
@@ -319,6 +435,7 @@
 
         currentIndex = index;
         isLightboxOpen = true;
+        zoomLevel = 1.0;
         StateHasChanged();
 
         if (OnItemClick.HasDelegate)
@@ -330,6 +447,31 @@
     private void CloseLightbox()
     {
         isLightboxOpen = false;
+        zoomLevel = 1.0;
+        StateHasChanged();
+    }
+
+    private void ZoomIn()
+    {
+        if (zoomLevel < MaxZoom)
+        {
+            zoomLevel = Math.Min(zoomLevel + ZoomStep, MaxZoom);
+            StateHasChanged();
+        }
+    }
+
+    private void ZoomOut()
+    {
+        if (zoomLevel > MinZoom)
+        {
+            zoomLevel = Math.Max(zoomLevel - ZoomStep, MinZoom);
+            StateHasChanged();
+        }
+    }
+
+    private void ResetZoom()
+    {
+        zoomLevel = 1.0;
         StateHasChanged();
     }
 
@@ -338,10 +480,12 @@
         if (currentIndex > 0)
         {
             currentIndex--;
+            zoomLevel = 1.0;
         }
         else if (Loop)
         {
             currentIndex = mediaItems.Count - 1;
+            zoomLevel = 1.0;
         }
         StateHasChanged();
     }
@@ -351,10 +495,12 @@
         if (currentIndex < mediaItems.Count - 1)
         {
             currentIndex++;
+            zoomLevel = 1.0;
         }
         else if (Loop)
         {
             currentIndex = 0;
+            zoomLevel = 1.0;
         }
         StateHasChanged();
     }
@@ -401,11 +547,33 @@
                 break;
             case "Home":
                 currentIndex = 0;
+                zoomLevel = 1.0;
                 StateHasChanged();
                 break;
             case "End":
                 currentIndex = mediaItems.Count - 1;
+                zoomLevel = 1.0;
                 StateHasChanged();
+                break;
+            case "+":
+            case "=":
+                if (ShowZoomControls && currentIndex >= 0 && currentIndex < mediaItems.Count && mediaItems[currentIndex].MediaType == MediaType.Image)
+                {
+                    ZoomIn();
+                }
+                break;
+            case "-":
+            case "_":
+                if (ShowZoomControls && currentIndex >= 0 && currentIndex < mediaItems.Count && mediaItems[currentIndex].MediaType == MediaType.Image)
+                {
+                    ZoomOut();
+                }
+                break;
+            case "0":
+                if (ShowZoomControls && currentIndex >= 0 && currentIndex < mediaItems.Count && mediaItems[currentIndex].MediaType == MediaType.Image)
+                {
+                    ResetZoom();
+                }
                 break;
         }
     }
@@ -441,7 +609,8 @@
     public enum MediaType
     {
         Image,
-        Video
+        Video,
+        Audio
     }
 
     /// <summary>
@@ -453,5 +622,9 @@
         public string? ThumbnailUrl { get; set; }
         public string? Caption { get; set; }
         public MediaType MediaType { get; set; } = MediaType.Image;
+        public string? MimeType { get; set; }
+        public int? Width { get; set; }
+        public int? Height { get; set; }
+        public string? Metadata { get; set; }
     }
 }

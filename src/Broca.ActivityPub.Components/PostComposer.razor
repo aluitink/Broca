@@ -1,8 +1,12 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Core.Interfaces
 @using Broca.ActivityPub.Components.Services
+@using Microsoft.JSInterop
 @inject IActivityPubClient Client
 @inject ActivityStreamNotificationService? NotificationService
+@inject DraftManager? DraftManager
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
 <div class="activitypub-post-composer @CssClass">
     @if (ComposerTemplate != null)
@@ -25,8 +29,7 @@
                          @bind="content"
                          @bind:event="oninput"
                          @onfocus="HandleFocus"
-                         @onblur="HandleBlur"
-                         placeholder="@Placeholder"
+                         @onblur="HandleBlur"                         @onkeydown="HandleKeyDown"                         placeholder="@Placeholder"
                          rows="@Rows"
                          maxlength="@MaxLength"
                          disabled="@isPosting"></textarea>
@@ -85,6 +88,13 @@
                     </div>
 
                     <div class="composer-actions">
+                        @if (draftSaveStatus != null)
+                        {
+                            <span class="draft-status @(draftSaveStatus.IsError ? "error" : "")">
+                                @draftSaveStatus.Message
+                            </span>
+                        }
+                        
                         @if (ShowCharacterCount)
                         {
                             <span class="character-count @(GetCharacterCountClass())">
@@ -157,6 +167,8 @@
     private bool hasFocus;
     private string? error;
     private string? successMessage;
+    private DraftStatus? draftSaveStatus;
+    private string currentDraftContext = DraftManager.MainContext;
 
     /// <summary>
     /// Gets or sets the initial content.
@@ -286,9 +298,19 @@
         content.Length <= MaxLength &&
         Client.ActorId != null;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        if (!string.IsNullOrEmpty(InitialContent))
+        // Determine draft context
+        currentDraftContext = !string.IsNullOrEmpty(InReplyToId) 
+            ? DraftManager.GetReplyContext(InReplyToId) 
+            : DraftManager.MainContext;
+
+        // Try to restore draft
+        if (DraftManager != null && string.IsNullOrEmpty(InitialContent))
+        {
+            await RestoreDraftAsync();
+        }
+        else if (!string.IsNullOrEmpty(InitialContent))
         {
             content = InitialContent;
         }
@@ -321,10 +343,10 @@
             switch (visibility)
             {
                 case "public":
-                    builder.ToPublic();
+                    builder.ToPublic().CcFollowers();
                     break;
                 case "unlisted":
-                    builder.ToPublic(); // Unlisted is still public but not in public timelines
+                    builder.CcFollowers();
                     break;
                 case "followers":
                     builder.ToFollowers();
@@ -348,6 +370,18 @@
             }
 
             var activity = builder.Build();
+            
+            // Debug: Log the activity before sending
+            var activityJson = System.Text.Json.JsonSerializer.Serialize(activity, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            });
+            Console.WriteLine($"[PostComposer] Activity being sent:\n{activityJson}");
+            Console.WriteLine($"[PostComposer] Visibility: {visibility}");
+            Console.WriteLine($"[PostComposer] Activity.To count: {(activity.To?.Count() ?? 0)}");
+            Console.WriteLine($"[PostComposer] Activity.Cc count: {(activity.Cc?.Count() ?? 0)}");
+            
             await Client.PostToOutboxAsync(activity);
 
             successMessage = "Posted successfully!";
@@ -356,6 +390,13 @@
             content = string.Empty;
             contentWarning = null;
             hasContentWarning = false;
+
+            // Delete draft on successful post
+            if (DraftManager != null)
+            {
+                await DraftManager.DeleteDraftAsync(currentDraftContext);
+                draftSaveStatus = null;
+            }
 
             // Notify subscribers about the new activity
             if (NotificationService != null)
@@ -419,11 +460,19 @@
     private void ToggleContentWarning()
     {
         hasContentWarning = !hasContentWarning;
+        ScheduleDraftSave();
     }
 
     private int GetRemainingCharacters()
     {
-        return MaxLength - content.Length;
+        return MaxLength - GetEffectiveContentLength();
+    }
+
+    private int GetEffectiveContentLength()
+    {
+        // TODO: Account for URL shortening (most ActivityPub servers count URLs as ~23 chars)
+        // For now, just return actual length
+        return content.Length;
     }
 
     private string GetCharacterCountClass()
@@ -500,5 +549,112 @@
         public Task Post() => _composer.HandlePost();
         public Task Cancel() => _composer.HandleCancel();
         public void ToggleContentWarning() => _composer.ToggleContentWarning();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        // Ctrl+Enter or Cmd+Enter to post
+        if ((e.CtrlKey || e.MetaKey) && e.Key == "Enter" && CanPost)
+        {
+            await HandlePost();
+        }
+        // Escape to cancel
+        else if (e.Key == "Escape" && OnCancel.HasDelegate)
+        {
+            await HandleCancel();
+        }
+        // Schedule draft save on content change
+        else if (!isPosting)
+        {
+            ScheduleDraftSave();
+        }
+    }
+
+    private async Task RestoreDraftAsync()
+    {
+        if (DraftManager == null) return;
+
+        try
+        {
+            var draft = await DraftManager.GetDraftAsync(currentDraftContext);
+            if (draft != null)
+            {
+                content = draft.Content;
+                visibility = draft.Visibility;
+                contentWarning = draft.ContentWarning;
+                hasContentWarning = draft.HasContentWarning;
+                
+                draftSaveStatus = new DraftStatus 
+                { 
+                    Message = "Draft restored", 
+                    IsError = false 
+                };
+                StateHasChanged();
+
+                // Clear status after delay
+                await Task.Delay(2000);
+                draftSaveStatus = null;
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            // Silently fail - draft restoration is not critical
+        }
+    }
+
+    private void ScheduleDraftSave()
+    {
+        if (DraftManager == null || string.IsNullOrWhiteSpace(content)) return;
+
+        var draft = new PostDraft
+        {
+            Context = currentDraftContext,
+            Content = content,
+            Visibility = visibility,
+            ContentWarning = contentWarning,
+            HasContentWarning = hasContentWarning,
+            InReplyToId = InReplyToId
+        };
+
+        DraftManager.ScheduleAutoSave(draft);
+
+        draftSaveStatus = new DraftStatus 
+        { 
+            Message = "Saving...", 
+            IsError = false 
+        };
+
+        // Update status after save delay
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(5500); // Slightly longer than auto-save delay
+            if (draftSaveStatus?.Message == "Saving...")
+            {
+                draftSaveStatus = new DraftStatus 
+                { 
+                    Message = "Draft saved", 
+                    IsError = false 
+                };
+                await InvokeAsync(StateHasChanged);
+
+                // Clear after 2 seconds
+                await Task.Delay(2000);
+                draftSaveStatus = null;
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        // Dispose is handled by DI container for DraftManager
+        return ValueTask.CompletedTask;
+    }
+
+    private class DraftStatus
+    {
+        public string Message { get; set; } = string.Empty;
+        public bool IsError { get; set; }
     }
 }

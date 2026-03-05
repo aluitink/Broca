@@ -125,34 +125,24 @@ public class CollectionsController : ActivityPubControllerBase
                 return StatusCode(403, new { error = "Collection is private" });
             }
 
-            var offset = page * limit;
-            var items = await _collectionService.GetCollectionItemsAsync(username, collectionId, limit, offset);
-            var totalCount = await _collectionService.GetCollectionItemCountAsync(username, collectionId);
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
+            var collectionUrl = $"{baseUrl}/users/{username}/collections/{collectionId}";
+            var totalCount = await _collectionService.GetCollectionItemCountAsync(username, collectionId);
 
-            // Enrich items with collection information
-            await _enrichmentService.EnrichActivitiesAsync(items, baseUrl);
-
-            var collection = new OrderedCollectionPage
+            var hasPageParam = Request.Query.ContainsKey("page") || Request.Query.ContainsKey("limit");
+            IEnumerable<IObjectOrLink> items;
+            if (hasPageParam)
             {
-                JsonLDContext = new List<ITermDefinition>
-                {
-                    new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
-                },
-                Id = $"{baseUrl}/users/{username}/collections/{collectionId}?page={page}&limit={limit}",
-                Type = new List<string> { "OrderedCollectionPage" },
-                PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/collections/{collectionId}") },
-                TotalItems = (uint)totalCount,
-                OrderedItems = items.ToList(),
-                Next = (offset + limit < totalCount)
-                    ? new Link { Href = new Uri($"{baseUrl}/users/{username}/collections/{collectionId}?page={page + 1}&limit={limit}") }
-                    : null,
-                Prev = page > 0
-                    ? new Link { Href = new Uri($"{baseUrl}/users/{username}/collections/{collectionId}?page={page - 1}&limit={limit}") }
-                    : null
-            };
+                var offset = page * limit;
+                items = await _collectionService.GetCollectionItemsAsync(username, collectionId, limit, offset);
+                await _enrichmentService.EnrichActivitiesAsync(items, baseUrl);
+            }
+            else
+            {
+                items = Enumerable.Empty<IObjectOrLink>();
+            }
 
-            return Ok(collection);
+            return BuildCollectionResponse(collectionUrl, items, totalCount, page, limit, itemsAlreadyPaginated: true);
         }
         catch (Exception ex)
         {

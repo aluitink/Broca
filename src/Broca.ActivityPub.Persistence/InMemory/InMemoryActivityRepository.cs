@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Broca.ActivityPub.Core.Interfaces;
+using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 using Microsoft.Extensions.Logging;
 
@@ -8,7 +9,7 @@ namespace Broca.ActivityPub.Persistence.InMemory;
 /// <summary>
 /// In-memory implementation of activity repository for testing and development
 /// </summary>
-public class InMemoryActivityRepository : IActivityRepository, IActivityStatistics
+public class InMemoryActivityRepository : IActivityRepository, IActivityStatistics, ISearchableActivityRepository
 {
     private readonly ConcurrentDictionary<string, List<(string Id, IObjectOrLink Activity, DateTime Timestamp)>> _inboxes = new();
     private readonly ConcurrentDictionary<string, List<(string Id, IObjectOrLink Activity, DateTime Timestamp)>> _outboxes = new();
@@ -23,11 +24,13 @@ public class InMemoryActivityRepository : IActivityRepository, IActivityStatisti
     // Index for tracking replies: objectId -> list of reply activities
     private readonly ConcurrentDictionary<string, List<(string ActivityId, DateTime Timestamp)>> _replies = new();
     
+    private readonly ICollectionSearchEngine? _searchEngine;
     private readonly ILogger<InMemoryActivityRepository>? _logger;
 
-    public InMemoryActivityRepository(ILogger<InMemoryActivityRepository>? logger = null)
+    public InMemoryActivityRepository(ILogger<InMemoryActivityRepository>? logger = null, ICollectionSearchEngine? searchEngine = null)
     {
         _logger = logger;
+        _searchEngine = searchEngine;
     }
 
     public Task SaveInboxActivityAsync(string username, string activityId, IObjectOrLink activity, CancellationToken cancellationToken = default)
@@ -640,6 +643,88 @@ public class InMemoryActivityRepository : IActivityRepository, IActivityStatisti
             }
         }
         return Task.FromResult(count);
+    }
+
+    public async Task<IEnumerable<IObjectOrLink>> GetInboxActivitiesAsync(
+        string username,
+        CollectionSearchParameters search,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetInboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
+        return ApplySearch(all, search, limit, offset);
+    }
+
+    public async Task<int> GetInboxCountAsync(
+        string username,
+        CollectionSearchParameters search,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetInboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
+        return ApplySearchCount(all, search);
+    }
+
+    public async Task<IEnumerable<IObjectOrLink>> GetOutboxActivitiesAsync(
+        string username,
+        CollectionSearchParameters search,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetOutboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
+        return ApplySearch(all, search, limit, offset);
+    }
+
+    public async Task<int> GetOutboxCountAsync(
+        string username,
+        CollectionSearchParameters search,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetOutboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
+        return ApplySearchCount(all, search);
+    }
+
+    public async Task<IEnumerable<IObjectOrLink>> GetRepliesAsync(
+        string objectId,
+        CollectionSearchParameters search,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetRepliesAsync(objectId, int.MaxValue, 0, cancellationToken);
+        return ApplySearch(all, search, limit, offset);
+    }
+
+    public async Task<int> GetRepliesCountAsync(
+        string objectId,
+        CollectionSearchParameters search,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetRepliesAsync(objectId, int.MaxValue, 0, cancellationToken);
+        return ApplySearchCount(all, search);
+    }
+
+    private IEnumerable<IObjectOrLink> ApplySearch(
+        IEnumerable<IObjectOrLink> items,
+        CollectionSearchParameters search,
+        int limit,
+        int offset)
+    {
+        if (_searchEngine == null)
+            return items.Skip(offset).Take(limit);
+
+        var (filtered, _) = _searchEngine.Apply(items, search);
+        return filtered.Skip(offset).Take(limit);
+    }
+
+    private int ApplySearchCount(IEnumerable<IObjectOrLink> items, CollectionSearchParameters search)
+    {
+        if (_searchEngine == null)
+            return items.Count();
+
+        var (_, count) = _searchEngine.Apply(items, search);
+        return count;
     }
 
     public Task<int> CountActiveActorsSinceAsync(DateTime since, CancellationToken cancellationToken = default)

@@ -1,90 +1,119 @@
 ﻿@page "/"
 @using Broca.Web.Services
 @using Broca.ActivityPub.Components
+@using Broca.ActivityPub.Core.Interfaces
+@implements IDisposable
+@inject IActivityPubClient Client
+@inject HttpClient Http
 @inject AuthenticationStateService AuthState
 @inject NavigationManager Navigation
 
 <PageTitle>Home - Broca</PageTitle>
 
-@if (!AuthState.IsAuthenticated)
-{
-    <div class="welcome-container">
-        <FluentCard Class="welcome-card">
-            <h1>Welcome to Broca</h1>
-            <p class="subtitle">A modern ActivityPub client for the decentralized web</p>
-            
-            <div class="features">
-                <div class="feature">
-                    <FluentIcon Value="@(new Icons.Regular.Size24.Shield())" Color="Color.Accent" />
-                    <h3>Decentralized</h3>
-                    <p>Connect directly with ActivityPub servers using standard protocols</p>
-                </div>
-                <div class="feature">
-                    <FluentIcon Value="@(new Icons.Regular.Size24.Key())" Color="Color.Accent" />
-                    <h3>Secure</h3>
-                    <p>HTTP signatures ensure authenticated and verified requests</p>
-                </div>
-                <div class="feature">
-                    <FluentIcon Value="@(new Icons.Regular.Size24.Globe())" Color="Color.Accent" />
-                    <h3>Federated</h3>
-                    <p>Interact with users across the Fediverse</p>
-                </div>
-            </div>
+<div class="home-container">
+    @if (AuthState.IsAuthenticated)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Class="home-header">
+            <FluentLabel Typo="Typography.PageTitle">Welcome back, @GetDisplayName()</FluentLabel>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="home-header">
+            <FluentLabel Typo="Typography.PageTitle">Welcome to Broca</FluentLabel>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">A modern ActivityPub client for the decentralized web</FluentLabel>
+            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/login"))">
+                Get Started
+            </FluentButton>
+        </FluentStack>
+    }
 
-            <div class="cta">
-                <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/login"))">
-                    Get Started
-                </FluentButton>
-            </div>
+    @if (_sysInboxUrl != null)
+    {
+        <ActivityFeed 
+            CollectionUrl="@_sysInboxUrl" 
+            Title="Public Stream"
+            PageSize="20"
+            UseVirtualization="true"
+            ShowObjects="true"
+            ShowRecipients="false">
+            <EmptyTemplate>
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
+                    <FluentIcon Value="@(new Icons.Regular.Size48.Globe())" Color="Color.Neutral" />
+                    <FluentLabel Typo="Typography.Subject">No public activity yet</FluentLabel>
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Public activities from the server will appear here.</FluentLabel>
+                </FluentStack>
+            </EmptyTemplate>
+            <ErrorTemplate Context="error">
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
+                    <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
+                    <FluentLabel Typo="Typography.Subject">Failed to load public stream</FluentLabel>
+                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@error</FluentLabel>
+                </FluentStack>
+            </ErrorTemplate>
+        </ActivityFeed>
+    }
+    else if (_loading)
+    {
+        <FluentCard>
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                         Style="padding: 2rem; text-align: center;" VerticalGap="16">
+                <FluentProgressRing />
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Loading public stream...</FluentLabel>
+            </FluentStack>
         </FluentCard>
-    </div>
-}
-else
-{
-    <div class="home-authenticated">
-        <FluentCard Class="home-header">
-            <h1>Welcome back, @GetDisplayName()</h1>
-            <p>Here's your latest activity</p>
+    }
+    else if (_error != null)
+    {
+        <FluentCard>
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                         Style="padding: 2rem; text-align: center;" VerticalGap="16">
+                <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
+                <FluentLabel Typo="Typography.Subject">Unable to load public stream</FluentLabel>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@_error</FluentLabel>
+            </FluentStack>
         </FluentCard>
-
-        @if (_inboxUrl != null)
-        {
-            <ActivityFeed 
-                CollectionUrl="@_inboxUrl" 
-                Title="Recent Inbox Activity"
-                PageSize="10"
-                UseVirtualization="false"
-                ShowObjects="true"
-                ShowRecipients="false">
-            </ActivityFeed>
-
-            <FluentCard Class="view-all">
-                <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo("/inbox"))">
-                    View Full Inbox
-                </FluentButton>
-            </FluentCard>
-        }
-    </div>
-}
+    }
+</div>
 
 @code {
-    private Uri? _inboxUrl;
+    private Uri? _sysInboxUrl;
+    private bool _loading = true;
+    private string? _error;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         AuthState.AuthenticationStateChanged += OnAuthStateChanged;
-        UpdateInboxUrl();
+        await ResolveSysInboxUrlAsync();
+    }
+
+    private async Task ResolveSysInboxUrlAsync()
+    {
+        try
+        {
+            _loading = true;
+            var baseAddress = Http.BaseAddress!;
+            var sysActorUri = new Uri(baseAddress, "ap/users/sys");
+            var sysActor = await Client.GetActorAsync(sysActorUri);
+            _sysInboxUrl = sysActor?.Inbox?.Href;
+            if (_sysInboxUrl == null)
+                _error = "System actor does not have an inbox configured.";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load the public stream: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private void OnAuthStateChanged(object? sender, bool isAuthenticated)
     {
-        UpdateInboxUrl();
         InvokeAsync(StateHasChanged);
-    }
-
-    private void UpdateInboxUrl()
-    {
-        _inboxUrl = AuthState.GetInboxUrl();
     }
 
     private string GetDisplayName()
@@ -105,68 +134,7 @@ else
 }
 
 <style>
-    .welcome-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 70vh;
-        padding: 20px;
-    }
-
-    .welcome-card {
-        max-width: 800px;
-        width: 100%;
-        padding: 3rem;
-        text-align: center;
-    }
-
-    .welcome-card h1 {
-        margin: 0 0 1rem 0;
-        font-size: 2.5rem;
-    }
-
-    .subtitle {
-        font-size: 1.25rem;
-        color: var(--neutral-foreground-hint);
-        margin-bottom: 3rem;
-    }
-
-    .features {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 2rem;
-        margin-bottom: 3rem;
-    }
-
-    .feature {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .feature h3 {
-        margin: 0.5rem 0 0.25rem 0;
-    }
-
-    .feature p {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
-        font-size: 0.875rem;
-    }
-
-    .composer-card {
-        padding: 1.5rem;
-    }
-
-    .composer-card h3 {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin: 0 0 1rem 0;
-    }
-
-    .home-authenticated {
+    .home-container {
         max-width: 800px;
         margin: 0 auto;
         display: flex;
@@ -174,18 +142,8 @@ else
         gap: 1.5rem;
     }
 
-    .home-header h1 {
-        margin: 0 0 0.5rem 0;
-    }
-
-    .home-header p {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
-    }
-
-    .view-all {
-        display: flex;
-        justify-content: center;
-        padding: 1.5rem;
+    .home-header {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 </style>

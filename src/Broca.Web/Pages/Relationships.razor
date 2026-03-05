@@ -9,23 +9,25 @@
 @if (!AuthState.IsAuthenticated)
 {
     <FluentCard>
-        <h2>Authentication Required</h2>
-        <p>Please login to view your relationships.</p>
-        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/relationships")}"))">
-            Login
-        </FluentButton>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentLabel Typo="Typography.Subject">Authentication Required</FluentLabel>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Please login to view your relationships.</FluentLabel>
+            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/relationships")}"))">
+                Login
+            </FluentButton>
+        </FluentStack>
     </FluentCard>
 }
 else
 {
     <div class="relationships-container">
-        <FluentCard Class="relationships-header">
-            <h1>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Class="relationships-header">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
                 <FluentIcon Value="@(new Icons.Regular.Size24.People())" Color="Color.Accent" />
-                Relationships
-            </h1>
-            <p>Manage your followers and following</p>
-        </FluentCard>
+                <FluentLabel Typo="Typography.PageTitle">Relationships</FluentLabel>
+            </FluentStack>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Manage your followers and following</FluentLabel>
+        </FluentStack>
 
         <FluentTabs>
             <FluentTab Label="Followers">
@@ -43,25 +45,27 @@ else
                                 </FluentCard>
                             </ActorTemplate>
                             <EmptyTemplate>
-                                <FluentCard Class="empty-state">
+                                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
                                     <FluentIcon Value="@(new Icons.Regular.Size48.People())" Color="Color.Neutral" />
-                                    <h3>No followers yet</h3>
-                                    <p>When others follow you, they will appear here.</p>
-                                </FluentCard>
+                                    <FluentLabel Typo="Typography.Subject">No followers yet</FluentLabel>
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">When others follow you, they will appear here.</FluentLabel>
+                                </FluentStack>
                             </EmptyTemplate>
                             <ErrorTemplate Context="error">
-                                <FluentCard Class="error-state">
+                                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
                                     <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
-                                    <h3>Failed to load followers</h3>
-                                    <p>@error</p>
-                                </FluentCard>
+                                    <FluentLabel Typo="Typography.Subject">Failed to load followers</FluentLabel>
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@error</FluentLabel>
+                                </FluentStack>
                             </ErrorTemplate>
                         </FollowersList>
                     }
                     else
                     {
                         <FluentCard>
-                            <p>Unable to determine followers URL.</p>
+                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Unable to determine followers URL.</FluentLabel>
                         </FluentCard>
                     }
                 </div>
@@ -82,25 +86,27 @@ else
                                 </FluentCard>
                             </ActorTemplate>
                             <EmptyTemplate>
-                                <FluentCard Class="empty-state">
+                                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
                                     <FluentIcon Value="@(new Icons.Regular.Size48.PersonAdd())" Color="Color.Neutral" />
-                                    <h3>Not following anyone yet</h3>
-                                    <p>Start following other actors to see them here.</p>
-                                </FluentCard>
+                                    <FluentLabel Typo="Typography.Subject">Not following anyone yet</FluentLabel>
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Start following other actors to see them here.</FluentLabel>
+                                </FluentStack>
                             </EmptyTemplate>
                             <ErrorTemplate Context="error">
-                                <FluentCard Class="error-state">
+                                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
                                     <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
-                                    <h3>Failed to load following</h3>
-                                    <p>@error</p>
-                                </FluentCard>
+                                    <FluentLabel Typo="Typography.Subject">Failed to load following</FluentLabel>
+                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@error</FluentLabel>
+                                </FluentStack>
                             </ErrorTemplate>
                         </FollowingList>
                     }
                     else
                     {
                         <FluentCard>
-                            <p>Unable to determine following URL.</p>
+                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Unable to determine following URL.</FluentLabel>
                         </FluentCard>
                     }
                 </div>
@@ -146,16 +152,9 @@ else
         margin: 0 auto;
     }
 
-    .relationships-header h1 {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin: 0 0 0.5rem 0;
-    }
-
-    .relationships-header p {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
+    .relationships-header {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .tab-content {
@@ -164,27 +163,5 @@ else
 
     .actor-card {
         margin-bottom: 1rem;
-    }
-
-    .empty-state,
-    .error-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 3rem 2rem;
-        text-align: center;
-        gap: 1rem;
-    }
-
-    .empty-state h3,
-    .error-state h3 {
-        margin: 0;
-    }
-
-    .empty-state p,
-    .error-state p {
-        margin: 0;
-        color: var(--neutral-foreground-hint);
     }
 </style>

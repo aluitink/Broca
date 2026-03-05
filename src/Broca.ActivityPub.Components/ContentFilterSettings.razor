@@ -1,0 +1,279 @@
+@using KristofferStrube.ActivityStreams
+
+<div class="activitypub-content-filter-settings">
+    @if (SettingsTemplate != null)
+    {
+        @SettingsTemplate(this)
+    }
+    else
+    {
+        <div class="filter-settings">
+            <section class="filter-section">
+                <h3>Keyword Filters</h3>
+                <p class="section-description">Hide posts containing specific words or phrases.</p>
+                
+                <div class="keyword-list">
+                    @foreach (var filter in KeywordFilters)
+                    {
+                        <div class="keyword-item">
+                            <span class="keyword-text">@filter.Keyword</span>
+                            <span class="keyword-context">@GetContextLabel(filter.Context)</span>
+                            <button type="button" class="btn-remove" @onclick="() => RemoveKeywordFilter(filter)">
+                                ×
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                <div class="add-keyword">
+                    <input type="text" 
+                           @bind="NewKeyword" 
+                           @bind:event="oninput"
+                           @onkeydown="HandleKeywordKeyDown"
+                           placeholder="Add keyword or phrase..."
+                           maxlength="100" />
+                    <select @bind="NewKeywordContext">
+                        <option value="@FilterContext.HomeTimeline">Home</option>
+                        <option value="@FilterContext.PublicTimeline">Public</option>
+                        <option value="@FilterContext.Notifications">Notifications</option>
+                        <option value="@FilterContext.Conversations">Conversations</option>
+                        <option value="@FilterContext.All">All contexts</option>
+                    </select>
+                    <button type="button" 
+                            class="btn-add" 
+                            @onclick="AddKeywordFilter"
+                            disabled="@string.IsNullOrWhiteSpace(NewKeyword)">
+                        Add
+                    </button>
+                </div>
+            </section>
+
+            <section class="filter-section">
+                <h3>Content Warning Preferences</h3>
+                <p class="section-description">Control how content warnings are displayed.</p>
+                
+                <label class="setting-option">
+                    <input type="checkbox" @bind="AlwaysExpandContentWarnings" />
+                    <span>Always show content with warnings (don't hide by default)</span>
+                </label>
+                
+                <label class="setting-option">
+                    <input type="checkbox" @bind="HideContentWithoutWarnings" />
+                    <span>Hide all media without content warnings</span>
+                </label>
+            </section>
+
+            <section class="filter-section">
+                <h3>Media Filtering</h3>
+                <p class="section-description">Control what types of media are displayed automatically.</p>
+                
+                <label class="setting-option">
+                    <input type="checkbox" @bind="AutoPlayGifs" />
+                    <span>Automatically play GIFs</span>
+                </label>
+                
+                <label class="setting-option">
+                    <input type="checkbox" @bind="AutoPlayVideos" />
+                    <span>Automatically play videos</span>
+                </label>
+                
+                <label class="setting-option">
+                    <input type="checkbox" @bind="HideMediaInPublicTimeline" />
+                    <span>Hide media in public timeline</span>
+                </label>
+                
+                <label class="setting-option">
+                    <input type="checkbox" @bind="BlurNsfwMedia" />
+                    <span>Blur media marked as sensitive/NSFW</span>
+                </label>
+            </section>
+
+            <section class="filter-section">
+                <h3>Additional Filters</h3>
+                
+                <label class="setting-option">
+                    <input type="checkbox" @bind="HideBoosts" />
+                    <span>Hide boosts/shares in timeline</span>
+                </label>
+                
+                <label class="setting-option">
+                    <input type="checkbox" @bind="HideReplies" />
+                    <span>Hide replies in timeline</span>
+                </label>
+                
+                <label class="setting-option">
+                    <input type="checkbox" @bind="HideBotPosts" />
+                    <span>Hide posts from bot accounts</span>
+                </label>
+            </section>
+
+            <div class="settings-actions">
+                <button type="button" class="btn-reset" @onclick="ResetToDefaults">
+                    Reset to Defaults
+                </button>
+                <button type="button" class="btn-save" @onclick="SaveSettings" disabled="@IsSaving">
+                    @if (IsSaving)
+                    {
+                        <span>Saving...</span>
+                    }
+                    else
+                    {
+                        <span>Save Settings</span>
+                    }
+                </button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(StatusMessage))
+            {
+                <div class="status-message @(IsError ? "error" : "success")" role="status">
+                    @StatusMessage
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<KeywordFilter> KeywordFilters { get; set; } = new();
+    [Parameter] public bool AlwaysExpandContentWarnings { get; set; }
+    [Parameter] public bool HideContentWithoutWarnings { get; set; }
+    [Parameter] public bool AutoPlayGifs { get; set; } = true;
+    [Parameter] public bool AutoPlayVideos { get; set; }
+    [Parameter] public bool HideMediaInPublicTimeline { get; set; }
+    [Parameter] public bool BlurNsfwMedia { get; set; } = true;
+    [Parameter] public bool HideBoosts { get; set; }
+    [Parameter] public bool HideReplies { get; set; }
+    [Parameter] public bool HideBotPosts { get; set; }
+    [Parameter] public EventCallback<ContentFilterSettingsData> OnSave { get; set; }
+    [Parameter] public RenderFragment<ContentFilterSettings>? SettingsTemplate { get; set; }
+
+    public string NewKeyword { get; set; } = "";
+    public FilterContext NewKeywordContext { get; set; } = FilterContext.All;
+    public bool IsSaving { get; set; }
+    public string? StatusMessage { get; set; }
+    public bool IsError { get; set; }
+
+    public void AddKeywordFilter()
+    {
+        if (string.IsNullOrWhiteSpace(NewKeyword)) return;
+
+        var filter = new KeywordFilter
+        {
+            Keyword = NewKeyword.Trim(),
+            Context = NewKeywordContext,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        KeywordFilters.Add(filter);
+        NewKeyword = "";
+        StateHasChanged();
+    }
+
+    public void RemoveKeywordFilter(KeywordFilter filter)
+    {
+        KeywordFilters.Remove(filter);
+        StateHasChanged();
+    }
+
+    public async Task HandleKeywordKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddKeywordFilter();
+        }
+    }
+
+    public async Task SaveSettings()
+    {
+        IsSaving = true;
+        IsError = false;
+        StatusMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var settings = new ContentFilterSettingsData
+            {
+                KeywordFilters = KeywordFilters,
+                AlwaysExpandContentWarnings = AlwaysExpandContentWarnings,
+                HideContentWithoutWarnings = HideContentWithoutWarnings,
+                AutoPlayGifs = AutoPlayGifs,
+                AutoPlayVideos = AutoPlayVideos,
+                HideMediaInPublicTimeline = HideMediaInPublicTimeline,
+                BlurNsfwMedia = BlurNsfwMedia,
+                HideBoosts = HideBoosts,
+                HideReplies = HideReplies,
+                HideBotPosts = HideBotPosts
+            };
+
+            await OnSave.InvokeAsync(settings);
+            StatusMessage = "Settings saved successfully!";
+        }
+        catch (Exception ex)
+        {
+            IsError = true;
+            StatusMessage = $"Failed to save settings: {ex.Message}";
+        }
+        finally
+        {
+            IsSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    public void ResetToDefaults()
+    {
+        KeywordFilters.Clear();
+        AlwaysExpandContentWarnings = false;
+        HideContentWithoutWarnings = false;
+        AutoPlayGifs = true;
+        AutoPlayVideos = false;
+        HideMediaInPublicTimeline = false;
+        BlurNsfwMedia = true;
+        HideBoosts = false;
+        HideReplies = false;
+        HideBotPosts = false;
+        StateHasChanged();
+    }
+
+    public string GetContextLabel(FilterContext context) => context switch
+    {
+        FilterContext.HomeTimeline => "Home",
+        FilterContext.PublicTimeline => "Public",
+        FilterContext.Notifications => "Notifications",
+        FilterContext.Conversations => "Conversations",
+        FilterContext.All => "All",
+        _ => "Unknown"
+    };
+
+    public enum FilterContext
+    {
+        HomeTimeline,
+        PublicTimeline,
+        Notifications,
+        Conversations,
+        All
+    }
+
+    public class KeywordFilter
+    {
+        public string Keyword { get; set; } = "";
+        public FilterContext Context { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public bool WholeWord { get; set; } = true;
+    }
+
+    public class ContentFilterSettingsData
+    {
+        public List<KeywordFilter> KeywordFilters { get; set; } = new();
+        public bool AlwaysExpandContentWarnings { get; set; }
+        public bool HideContentWithoutWarnings { get; set; }
+        public bool AutoPlayGifs { get; set; }
+        public bool AutoPlayVideos { get; set; }
+        public bool HideMediaInPublicTimeline { get; set; }
+        public bool BlurNsfwMedia { get; set; }
+        public bool HideBoosts { get; set; }
+        public bool HideReplies { get; set; }
+        public bool HideBotPosts { get; set; }
+    }
+}

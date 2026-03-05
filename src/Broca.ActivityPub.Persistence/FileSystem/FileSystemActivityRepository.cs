@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Broca.ActivityPub.Core.Interfaces;
+using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -9,19 +10,22 @@ namespace Broca.ActivityPub.Persistence.FileSystem;
 /// <summary>
 /// File system implementation of activity repository
 /// </summary>
-public class FileSystemActivityRepository : IActivityRepository, IActivityStatistics
+public class FileSystemActivityRepository : IActivityRepository, IActivityStatistics, ISearchableActivityRepository
 {
     private readonly string _dataPath;
     private readonly ILogger<FileSystemActivityRepository> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly ICollectionSearchEngine? _searchEngine;
 
     public FileSystemActivityRepository(
         IOptions<FileSystemPersistenceOptions> options,
-        ILogger<FileSystemActivityRepository> logger)
+        ILogger<FileSystemActivityRepository> logger,
+        ICollectionSearchEngine? searchEngine = null)
     {
         _dataPath = options.Value.DataPath ?? throw new ArgumentNullException(nameof(options.Value.DataPath));
         _logger = logger;
+        _searchEngine = searchEngine;
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -758,5 +762,87 @@ public class FileSystemActivityRepository : IActivityRepository, IActivityStatis
         }
 
         return activeUsernames.Count;
+    }
+
+    public async Task<IEnumerable<IObjectOrLink>> GetInboxActivitiesAsync(
+        string username,
+        CollectionSearchParameters search,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetInboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
+        return ApplySearch(all, search, limit, offset);
+    }
+
+    public async Task<int> GetInboxCountAsync(
+        string username,
+        CollectionSearchParameters search,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetInboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
+        return ApplySearchCount(all, search);
+    }
+
+    public async Task<IEnumerable<IObjectOrLink>> GetOutboxActivitiesAsync(
+        string username,
+        CollectionSearchParameters search,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetOutboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
+        return ApplySearch(all, search, limit, offset);
+    }
+
+    public async Task<int> GetOutboxCountAsync(
+        string username,
+        CollectionSearchParameters search,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetOutboxActivitiesAsync(username, int.MaxValue, 0, cancellationToken);
+        return ApplySearchCount(all, search);
+    }
+
+    public async Task<IEnumerable<IObjectOrLink>> GetRepliesAsync(
+        string objectId,
+        CollectionSearchParameters search,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetRepliesAsync(objectId, int.MaxValue, 0, cancellationToken);
+        return ApplySearch(all, search, limit, offset);
+    }
+
+    public async Task<int> GetRepliesCountAsync(
+        string objectId,
+        CollectionSearchParameters search,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetRepliesAsync(objectId, int.MaxValue, 0, cancellationToken);
+        return ApplySearchCount(all, search);
+    }
+
+    private IEnumerable<IObjectOrLink> ApplySearch(
+        IEnumerable<IObjectOrLink> items,
+        CollectionSearchParameters search,
+        int limit,
+        int offset)
+    {
+        if (_searchEngine == null)
+            return items.Skip(offset).Take(limit);
+
+        var (filtered, _) = _searchEngine.Apply(items, search);
+        return filtered.Skip(offset).Take(limit);
+    }
+
+    private int ApplySearchCount(IEnumerable<IObjectOrLink> items, CollectionSearchParameters search)
+    {
+        if (_searchEngine == null)
+            return items.Count();
+
+        var (_, count) = _searchEngine.Apply(items, search);
+        return count;
     }
 }

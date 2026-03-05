@@ -187,16 +187,12 @@ public class CustomCollectionsTests : IAsyncLifetime
         await CreateTestCollectionAsync(username, "featured", "Featured Posts");
 
         // Act
-        var response = await _client.GetAsync($"/users/{username}/collections/featured");
+        var collectionUri = new Uri($"{_server.BaseUrl}/users/{username}/collections/featured");
+        var collection = await _authenticatedClient.GetAsync<OrderedCollection>(collectionUri);
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        
-        var content = await response.Content.ReadAsStringAsync();
-        var collection = JsonSerializer.Deserialize<OrderedCollectionPage>(content, _jsonOptions);
-        
         Assert.NotNull(collection);
-        Assert.Equal("OrderedCollectionPage", collection.Type?.FirstOrDefault());
+        Assert.Equal(0u, collection.TotalItems ?? 0u);
     }
 
     [Fact]
@@ -299,12 +295,9 @@ public class CustomCollectionsTests : IAsyncLifetime
         Assert.True(response.IsSuccessStatusCode, $"Expected success but got {response.StatusCode}");
 
         // Verify collection contains the object
-        var collectionResponse = await _client.GetAsync($"/users/{username}/collections/featured");
-        Assert.Equal(HttpStatusCode.OK, collectionResponse.StatusCode);
-        var collectionContent = await collectionResponse.Content.ReadAsStringAsync();
-        
-        // Collection should return the full object, not just the ID
-        Assert.Contains("This is a featured post!", collectionContent);
+        var collectionNotes = await GetCollectionItemsAsync<Note>($"/users/{username}/collections/featured");
+
+        Assert.Contains(collectionNotes, n => n.Content?.Contains("This is a featured post!") == true);
     }
 
     [Fact]
@@ -334,42 +327,9 @@ public class CustomCollectionsTests : IAsyncLifetime
         Assert.True(addResponse.IsSuccessStatusCode);
 
         // Get the created note's ID from the featured collection
-        var featuredResponse = await _client.GetAsync($"/users/{username}/collections/featured");
-        var featuredContent = await featuredResponse.Content.ReadAsStringAsync();
-        
-        // Parse to get the note ID
-        using var doc = JsonDocument.Parse(featuredContent);
-        var root = doc.RootElement;
-        
-        string? noteId = null;
-        
-        if (root.TryGetProperty("orderedItems", out var orderedItemsElement))
-        {
-            // Handle both single object and array
-            if (orderedItemsElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in orderedItemsElement.EnumerateArray())
-                {
-                    if (item.TryGetProperty("type", out var typeElement) && 
-                        typeElement.GetString() == "Note" &&
-                        item.TryGetProperty("id", out var idElement))
-                    {
-                        noteId = idElement.GetString();
-                        break;
-                    }
-                }
-            }
-            else if (orderedItemsElement.ValueKind == JsonValueKind.Object)
-            {
-                if (orderedItemsElement.TryGetProperty("type", out var typeElement) && 
-                    typeElement.GetString() == "Note" &&
-                    orderedItemsElement.TryGetProperty("id", out var idElement))
-                {
-                    noteId = idElement.GetString();
-                }
-            }
-        }
-        
+        var featuredNotes = await GetCollectionItemsAsync<Note>($"/users/{username}/collections/featured");
+        var noteId = featuredNotes.FirstOrDefault()?.Id;
+
         Assert.NotNull(noteId);
 
         // Use ActivityBuilder to create an Add activity with just a link reference
@@ -383,13 +343,10 @@ public class CustomCollectionsTests : IAsyncLifetime
         Assert.True(response.IsSuccessStatusCode);
 
         // Verify collection contains the object with full content
-        var collectionResponse = await _client.GetAsync($"/users/{username}/collections/favorites");
-        Assert.Equal(HttpStatusCode.OK, collectionResponse.StatusCode);
-        var collectionContent = await collectionResponse.Content.ReadAsStringAsync();
-        
-        // Should return the full object
-        Assert.Contains("Original post content", collectionContent);
-        Assert.Contains(noteId, collectionContent);
+        var favNotes = await GetCollectionItemsAsync<Note>($"/users/{username}/collections/favorites");
+
+        Assert.Contains(favNotes, n => n.Content?.Contains("Original post content") == true);
+        Assert.Contains(favNotes, n => n.Id == noteId);
     }
 
     [Fact]
@@ -449,43 +406,10 @@ public class CustomCollectionsTests : IAsyncLifetime
 
         await PostToOutboxAsync(username, addActivity);
 
-        // Get the note ID from the collection - it should have been stored there
-        var collectionResponse = await _client.GetAsync($"/users/{username}/collections/featured");
-        var collectionContent = await collectionResponse.Content.ReadAsStringAsync();
-        
-        // Parse to get the note ID
-        using var doc = JsonDocument.Parse(collectionContent);
-        var root = doc.RootElement;
-        
-        string? noteId = null;
-        
-        if (root.TryGetProperty("orderedItems", out var orderedItemsElement))
-        {
-            // Handle both single object and array
-            if (orderedItemsElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in orderedItemsElement.EnumerateArray())
-                {
-                    if (item.TryGetProperty("type", out var typeElement) && 
-                        typeElement.GetString() == "Note" &&
-                        item.TryGetProperty("id", out var idElement))
-                    {
-                        noteId = idElement.GetString();
-                        break;
-                    }
-                }
-            }
-            else if (orderedItemsElement.ValueKind == JsonValueKind.Object)
-            {
-                if (orderedItemsElement.TryGetProperty("type", out var typeElement) && 
-                    typeElement.GetString() == "Note" &&
-                    orderedItemsElement.TryGetProperty("id", out var idElement))
-                {
-                    noteId = idElement.GetString();
-                }
-            }
-        }
-        
+        // Get the note ID from the collection
+        var featuredNotes = await GetCollectionItemsAsync<Note>($"/users/{username}/collections/featured");
+        var noteId = featuredNotes.FirstOrDefault()?.Id;
+
         Assert.NotNull(noteId);
 
         // Use ActivityBuilder to create Remove activity
@@ -498,11 +422,9 @@ public class CustomCollectionsTests : IAsyncLifetime
         Assert.True(response.IsSuccessStatusCode);
 
         // Verify collection no longer contains the object
-        var collectionResponseAfter = await _client.GetAsync($"/users/{username}/collections/featured");
-        var collectionContentAfter = await collectionResponseAfter.Content.ReadAsStringAsync();
-        
-        // The removed item should not be in the collection
-        Assert.DoesNotContain("Post to remove", collectionContentAfter);
+        var remainingNotes = await GetCollectionItemsAsync<Note>($"/users/{username}/collections/featured");
+
+        Assert.DoesNotContain(remainingNotes, n => n.Content?.Contains("Post to remove") == true);
     }
 
     [Fact]
@@ -532,23 +454,14 @@ public class CustomCollectionsTests : IAsyncLifetime
             await PostToOutboxAsync(username, addActivity);
         }
 
-        // Act - Get collection items
-        var response = await _client.GetAsync($"/users/{username}/collections/featured");
+        // Act - Get collection items via the ActivityPub client (handles paging automatically)
+        var notes = await GetCollectionItemsAsync<Note>($"/users/{username}/collections/featured");
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var content = await response.Content.ReadAsStringAsync();
-        
-        // Verify all objects are returned with full content
-        Assert.Contains("Featured post number 1", content);
-        Assert.Contains("Featured post number 2", content);
-        Assert.Contains("Featured post number 3", content);
-        
-        // Verify it's an OrderedCollectionPage
-        var collection = JsonSerializer.Deserialize<OrderedCollectionPage>(content, _jsonOptions);
-        Assert.NotNull(collection);
-        Assert.NotNull(collection.OrderedItems);
-        Assert.Equal(3, collection.OrderedItems.Count());
+        Assert.Equal(3, notes.Count);
+        Assert.Contains(notes, n => n.Content?.Contains("Featured post number 1") == true);
+        Assert.Contains(notes, n => n.Content?.Contains("Featured post number 2") == true);
+        Assert.Contains(notes, n => n.Content?.Contains("Featured post number 3") == true);
     }
 
     [Fact]
@@ -712,5 +625,15 @@ public class CustomCollectionsTests : IAsyncLifetime
             activity);
         
         return new HttpResponseMessage(response.IsSuccessStatusCode ? HttpStatusCode.Accepted : HttpStatusCode.BadRequest);
+    }
+
+    private async Task<List<T>> GetCollectionItemsAsync<T>(string collectionPath)
+    {
+        var client = TestClientFactory.CreateClient(() => _server.CreateClient());
+        var uri = new Uri($"{_server.BaseUrl}{collectionPath}");
+        var items = new List<T>();
+        await foreach (var item in client.GetCollectionAsync<T>(uri))
+            items.Add(item);
+        return items;
     }
 }

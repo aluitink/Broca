@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Broca.ActivityPub.Server.Services;
@@ -20,7 +19,7 @@ public class OutboxController : ActivityPubControllerBase
     private readonly OutboxProcessor _outboxProcessor;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ObjectEnrichmentService _enrichmentService;
-    private readonly HttpSignatureService _signatureService;
+    private readonly IHttpSignatureVerifier _signatureVerifier;
     private readonly IMemoryCache _cache;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<OutboxController> _logger;
@@ -33,7 +32,7 @@ public class OutboxController : ActivityPubControllerBase
         OutboxProcessor outboxProcessor,
         AttachmentProcessingService attachmentProcessingService,
         ObjectEnrichmentService enrichmentService,
-        HttpSignatureService signatureService,
+        IHttpSignatureVerifier signatureVerifier,
         IMemoryCache cache,
         IOptions<ActivityPubServerOptions> options,
         ILogger<OutboxController> logger)
@@ -43,7 +42,7 @@ public class OutboxController : ActivityPubControllerBase
         _outboxProcessor = outboxProcessor;
         _attachmentProcessingService = attachmentProcessingService;
         _enrichmentService = enrichmentService;
-        _signatureService = signatureService;
+        _signatureVerifier = signatureVerifier;
         _cache = cache;
         _options = options.Value;
         _logger = logger;
@@ -67,11 +66,33 @@ public class OutboxController : ActivityPubControllerBase
                 return NotFound(new { error = "Actor not found" });
             }
 
+            var search = GetSearchParameters();
             var offset = page * limit;
-            var activities = await _activityRepository.GetOutboxActivitiesAsync(username, limit, offset);
-            
             var baseUrl = GetBaseUrl(_options.NormalizedRoutePrefix);
-            
+
+            IEnumerable<IObjectOrLink> activities;
+            int totalCount;
+            bool itemsAlreadyPaginated;
+
+            if (search?.HasSearchCriteria == true && _activityRepository is ISearchableActivityRepository searchableRepo)
+            {
+                activities = await searchableRepo.GetOutboxActivitiesAsync(username, search, limit, offset);
+                totalCount = await searchableRepo.GetOutboxCountAsync(username, search);
+                itemsAlreadyPaginated = true;
+            }
+            else if (search?.HasSearchCriteria == true)
+            {
+                activities = await _activityRepository.GetOutboxActivitiesAsync(username, int.MaxValue, 0);
+                totalCount = activities.Count();
+                itemsAlreadyPaginated = false;
+            }
+            else
+            {
+                activities = await _activityRepository.GetOutboxActivitiesAsync(username, limit, offset);
+                totalCount = await _activityRepository.GetOutboxCountAsync(username);
+                itemsAlreadyPaginated = true;
+            }
+
             // Rewrite attachment URLs and enrich with collection metadata
             foreach (var activity in activities)
             {
@@ -83,52 +104,13 @@ public class OutboxController : ActivityPubControllerBase
                 // Enrich activities with collection information (replies, likes, shares counts)
                 await _enrichmentService.EnrichActivityAsync(activity, baseUrl);
             }
-            
-            var totalCount = await _activityRepository.GetOutboxCountAsync(username);
 
-            // Check if pagination parameters were explicitly provided
-            var hasPageParam = Request.Query.ContainsKey("page");
-            var hasLimitParam = Request.Query.ContainsKey("limit");
-
-            if (!hasPageParam && !hasLimitParam)
-            {
-                // Return the collection wrapper when no pagination params provided
-                var collection = new OrderedCollection
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/outbox",
-                    TotalItems = (uint)totalCount,
-                    First = totalCount > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/outbox?page=0&limit={limit}") } 
-                        : null
-                };
-                return Ok(collection);
-            }
-            else
-            {
-                // Return a collection page
-                var collectionPage = new OrderedCollectionPage
-                {
-                    JsonLDContext = new List<ITermDefinition> 
-                    { 
-                        new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams")) 
-                    },
-                    Id = $"{baseUrl}/users/{username}/outbox?page={page}&limit={limit}",
-                    PartOf = new Link { Href = new Uri($"{baseUrl}/users/{username}/outbox") },
-                    TotalItems = (uint)totalCount,
-                    OrderedItems = activities.ToList(),
-                    Next = (offset + limit < totalCount) 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/outbox?page={page + 1}&limit={limit}") }
-                        : null,
-                    Prev = page > 0 
-                        ? new Link { Href = new Uri($"{baseUrl}/users/{username}/outbox?page={page - 1}&limit={limit}") }
-                        : null
-                };
-                return Ok(collectionPage);
-            }
+            var collectionUrl = $"{baseUrl}/users/{username}/outbox";
+            return BuildCollectionResponse(collectionUrl, activities, totalCount, page, limit, search, itemsAlreadyPaginated);
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest(new { error = $"Invalid search parameter: {ex.Message}" });
         }
         catch (Exception ex)
         {
@@ -207,7 +189,7 @@ public class OutboxController : ActivityPubControllerBase
         if (!Request.Headers.TryGetValue("Signature", out var signatureHeader) || string.IsNullOrEmpty(signatureHeader))
             return Unauthorized(new { error = "Signature header is missing" });
 
-        var keyId = _signatureService.GetSignatureKeyId(signatureHeader!);
+        var keyId = _signatureVerifier.GetSignatureKeyId(signatureHeader!);
 
         ValidateRequestClockSkew(Request);
 
@@ -232,13 +214,11 @@ public class OutboxController : ActivityPubControllerBase
             && Request.Headers.TryGetValue("Digest", out var digestHeader))
         {
             var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
-            var expectedDigest = _signatureService.ComputeContentDigestHash(bodyBytes);
-            var digestValue = digestHeader.ToString();
-            if (digestValue.StartsWith("SHA-256=") && digestValue.Substring(8) != expectedDigest)
+            if (!_signatureVerifier.VerifyDigest(bodyBytes, digestHeader.ToString()))
                 throw new InvalidOperationException("Digest header does not match request body");
         }
 
-        var isValid = await _signatureService.VerifyHttpSignatureAsync(headers, publicKeyPem, cancellationToken);
+        var isValid = await _signatureVerifier.VerifyAsync(headers, publicKeyPem, cancellationToken);
         if (!isValid)
             return Unauthorized(new { error = "Invalid signature" });
 

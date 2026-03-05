@@ -1,0 +1,176 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@inherits ComponentBase
+
+<div class="@($"fluent-page {CssClass}")">
+    @if (Page != null)
+    {
+        @if (CompactMode)
+        {
+            <FluentCard Class="page-compact-card">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Document())" Color="Color.Accent" />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="flex: 1;">
+                        @if (!string.IsNullOrEmpty(GetPageTitle()))
+                        {
+                            <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold">
+                                @GetPageTitle()
+                            </FluentLabel>
+                        }
+                        @if (ShowUrl && !string.IsNullOrEmpty(GetPageUrl()))
+                        {
+                            <FluentAnchor Href="@GetPageUrl()" Target="_blank" Appearance="Appearance.Hypertext">
+                                @GetDisplayUrl()
+                            </FluentAnchor>
+                        }
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        }
+        else
+        {
+            <FluentCard Class="page-card">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                    @if (ShowPreview && !string.IsNullOrEmpty(GetPreviewImageUrl()))
+                    {
+                        <div class="page-preview">
+                            <img src="@GetPreviewImageUrl()" 
+                                 alt="@GetPageTitle()" 
+                                 loading="lazy" />
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(GetPageTitle()))
+                    {
+                        @if (!string.IsNullOrEmpty(GetPageUrl()))
+                        {
+                            <FluentAnchor Href="@GetPageUrl()" Target="_blank" Appearance="Appearance.Hypertext">
+                                <FluentLabel Typo="Typography.Subject" Weight="FontWeight.Bold">
+                                    @GetPageTitle()
+                                </FluentLabel>
+                            </FluentAnchor>
+                        }
+                        else
+                        {
+                            <FluentLabel Typo="Typography.Subject" Weight="FontWeight.Bold">
+                                @GetPageTitle()
+                            </FluentLabel>
+                        }
+                    }
+
+                    @if (Page.Summary?.Any() == true)
+                    {
+                        <div class="page-summary">
+                            @((MarkupString)(Page.Summary.First() ?? string.Empty))
+                        </div>
+                    }
+
+                    @if (Page.Content?.Any() == true && ShowContent)
+                    {
+                        <div class="page-content">
+                            @((MarkupString)(Page.Content.First() ?? string.Empty))
+                        </div>
+                    }
+
+                    @if (ShowUrl && !string.IsNullOrEmpty(GetPageUrl()))
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Link())" />
+                            <FluentAnchor Href="@GetPageUrl()" Target="_blank" Appearance="Appearance.Hypertext">
+                                @GetDisplayUrl()
+                            </FluentAnchor>
+                        </FluentStack>
+                    }
+
+                    @if (ShowMetadata)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="16" Wrap="true" class="page-metadata">
+                            @if (Page.Updated != null)
+                            {
+                                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" VerticalAlignment="VerticalAlignment.Center">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Clock())" />
+                                    <span>Updated @FormatTimestamp(Page.Updated.Value)</span>
+                                </FluentStack>
+                            }
+                            @if (Page.MediaType != null)
+                            {
+                                <FluentBadge Appearance="Appearance.Neutral">@Page.MediaType</FluentBadge>
+                            }
+                        </FluentStack>
+                    }
+                </FluentStack>
+            </FluentCard>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Page? Page { get; set; }
+    [Parameter] public bool ShowActor { get; set; } = true;
+    [Parameter] public bool ShowPreview { get; set; } = true;
+    [Parameter] public bool ShowUrl { get; set; } = true;
+    [Parameter] public bool ShowContent { get; set; } = false;
+    [Parameter] public bool ShowMetadata { get; set; } = false;
+    [Parameter] public bool CompactMode { get; set; } = false;
+    [Parameter] public string? CssClass { get; set; }
+
+    private string GetPageTitle() => Page?.Name?.FirstOrDefault() ?? "Untitled Page";
+
+    private string GetPageUrl()
+    {
+        if (Page?.Url?.Any() == true)
+        {
+            var urlLink = Page.Url.FirstOrDefault();
+            if (urlLink?.Href != null) return urlLink.Href.ToString();
+        }
+        if (Page?.Id != null) return Page.Id;
+        return string.Empty;
+    }
+
+    private string GetDisplayUrl()
+    {
+        var url = GetPageUrl();
+        if (string.IsNullOrEmpty(url)) return string.Empty;
+        try
+        {
+            var uri = new Uri(url);
+            return uri.Host;
+        }
+        catch { return url; }
+    }
+
+    private string GetPreviewImageUrl()
+    {
+        if (Page?.Image?.Any() == true)
+        {
+            var image = Page.Image.FirstOrDefault();
+            if (image is Image img && img.Url?.Any() == true)
+            {
+                var urlLink = img.Url.FirstOrDefault();
+                if (urlLink?.Href != null) return urlLink.Href.ToString();
+            }
+        }
+        if (Page?.Icon?.Any() == true)
+        {
+            var icon = Page.Icon.FirstOrDefault();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var urlLink = img.Url.FirstOrDefault();
+                if (urlLink?.Href != null) return urlLink.Href.ToString();
+            }
+        }
+        return string.Empty;
+    }
+
+    private string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - timestamp;
+        if (diff.TotalMinutes < 1) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+        return timestamp.ToString("MMM d, yyyy");
+    }
+}

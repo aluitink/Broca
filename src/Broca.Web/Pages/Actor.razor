@@ -3,6 +3,7 @@
 @using Broca.Web.Services
 @inject NavigationManager Navigation
 @inject AuthenticationStateService AuthState
+@inject HttpClient Http
 
 <PageTitle>Actor Profile - Broca</PageTitle>
 
@@ -20,21 +21,24 @@
         <ActorView ActorUri="@actorUri"
                    InitialTab="@initialTab"
                    ShowFollowButton="true"
-                   ShowOpenProfileButton="true" />
+                   ShowOpenProfileButton="true"
+                   ApiBaseUrl="@Http.BaseAddress?.ToString()" />
     }
     else if (!string.IsNullOrEmpty(actorHandle))
     {
         <ActorView ActorHandle="@actorHandle"
                    InitialTab="@initialTab"
                    ShowFollowButton="true"
-                   ShowOpenProfileButton="true" />
+                   ShowOpenProfileButton="true"
+                   ApiBaseUrl="@Http.BaseAddress?.ToString()" />
     }
     else if (!string.IsNullOrEmpty(username))
     {
         <ActorView Username="@username"
                    InitialTab="@initialTab"
                    ShowFollowButton="false"
-                   ShowOpenProfileButton="false" />
+                   ShowOpenProfileButton="false"
+                   ApiBaseUrl="@Http.BaseAddress?.ToString()" />
     }
     else
     {

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -59,7 +60,8 @@ public class HttpSignatureService
         var headers = new Dictionary<string, string>();
 
         // Add (request-target) pseudo-header
-        string requestTarget = $"{requestMethod.ToLower()} {requestUri.AbsolutePath}";
+        // Per the HTTP Signatures spec, (request-target) is method + path + query string
+        string requestTarget = $"{requestMethod.ToLower()} {requestUri.PathAndQuery}";
         headers.Add("(request-target)", requestTarget);
 
         // Add host header (include port if non-default)
@@ -121,6 +123,32 @@ public class HttpSignatureService
         // Create Signature header
         string signatureHeader = $"keyId=\"{senderPublicKeyId}\",algorithm=\"rsa-sha256\",headers=\"{headersList}\",signature=\"{signatureBase64}\"";
         addHeaderAction("Signature", signatureHeader);
+    }
+
+    /// <summary>
+    /// Sends a signed ActivityPub GET request using the provided credentials.
+    /// </summary>
+    public async Task<HttpResponseMessage> SendSignedGetAsync(
+        HttpClient httpClient,
+        Uri uri,
+        string publicKeyId,
+        string privateKeyPem,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/activity+json"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/ld+json", 0.9));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json", 0.8));
+
+        await ApplyHttpSignatureAsync(
+            "GET",
+            uri,
+            (name, value) => request.Headers.TryAddWithoutValidation(name, value),
+            publicKeyId,
+            privateKeyPem,
+            cancellationToken: cancellationToken);
+
+        return await httpClient.SendAsync(request, cancellationToken);
     }
 
     /// <summary>

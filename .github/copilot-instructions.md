@@ -51,5 +51,11 @@ else if (ref is Actor actor)
 
 **To dereference:** use `IActivityPubClient.GetAsync<T>(link.Href)`. Never assume an `IObjectOrLink` is a full object without checking `is IObject` first.
 
+## JSON Serialization
+
+**The KristofferStrube.ActivityStreams library types already have JSON converters attributed on them.** 
+Standard `JsonSerializerOptions` with camelCase naming is sufficient — no custom converters need to be registered.
+
 ## 3rd Party Libraries
 - If we need details for Kristoffer Strube's ActivityStreams .NET library, refer to the official GitHub repository: https://github.com/KristofferStrube/ActivityStreams
+- Check the Blazor Fluent UI repository for component usage patterns.

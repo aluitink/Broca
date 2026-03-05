@@ -1,0 +1,168 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+@using Broca.ActivityPub.Components.Models
+@using static Broca.ActivityPub.Components.AttachmentList
+
+<div class="fluent-attachment-list @CssClass">
+    @if (Attachments != null && Attachments.Any())
+    {
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8" VerticalGap="8">
+            @foreach (var (attachment, index) in Attachments.Select((a, i) => (a, i)))
+            {
+                <FluentCard Class="attachment-card">
+                    <div class="attachment-preview">
+                        @if (IsImage(attachment.MimeType))
+                        {
+                            <img src="@attachment.Url" alt="@attachment.AltText" class="preview-image" />
+                        }
+                        else if (IsVideo(attachment.MimeType))
+                        {
+                            <video src="@attachment.Url" class="preview-video" controls></video>
+                        }
+                        else if (IsAudio(attachment.MimeType))
+                        {
+                            <div class="preview-audio">
+                                <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" />
+                                <audio src="@attachment.Url" controls class="audio-player"></audio>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="preview-file">
+                                <FluentIcon Value="@GetFileIconFluent(attachment.MimeType)" />
+                                <FluentLabel Typo="Typography.Body">@attachment.FileName</FluentLabel>
+                            </div>
+                        }
+                    </div>
+
+                    @if (ShowAltText && !string.IsNullOrEmpty(attachment.AltText))
+                    {
+                        <FluentLabel Typo="Typography.Body" 
+                                    Color="Color.Neutral" 
+                                    Style="margin-top: 0.5rem; display: block; font-size: 12px;"
+                                    Title="@attachment.AltText">
+                            @TruncateText(attachment.AltText, 50)
+                        </FluentLabel>
+                    }
+
+                    @if (AllowEdit)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" 
+                                    HorizontalGap="4" 
+                                    Style="margin-top: 0.5rem;">
+                            @if (ShowAltTextEditor)
+                            {
+                                <FluentButton Appearance="Appearance.Lightweight" 
+                                            IconStart="@(new Icons.Regular.Size16.Edit())"
+                                            Title="Edit description"
+                                            OnClick="@(() => EditAltText(index))" />
+                            }
+                            <FluentButton Appearance="Appearance.Lightweight" 
+                                        IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                        Title="Remove"
+                                        OnClick="@(() => RemoveAttachment(index))" />
+                        </FluentStack>
+                    }
+                </FluentCard>
+            }
+        </FluentStack>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<AttachmentInfo>? Attachments { get; set; }
+
+    [Parameter]
+    public EventCallback<List<AttachmentInfo>> AttachmentsChanged { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public bool AllowEdit { get; set; } = true;
+
+    [Parameter]
+    public bool ShowAltText { get; set; } = true;
+
+    [Parameter]
+    public bool ShowAltTextEditor { get; set; } = true;
+
+    [Parameter]
+    public EventCallback<int> OnRemove { get; set; }
+
+    [Parameter]
+    public EventCallback<(int Index, string NewAltText)> OnAltTextChanged { get; set; }
+
+    private async Task RemoveAttachment(int index)
+    {
+        if (Attachments != null && index >= 0 && index < Attachments.Count)
+        {
+            Attachments.RemoveAt(index);
+            
+            if (AttachmentsChanged.HasDelegate)
+            {
+                await AttachmentsChanged.InvokeAsync(Attachments);
+            }
+
+            if (OnRemove.HasDelegate)
+            {
+                await OnRemove.InvokeAsync(index);
+            }
+        }
+    }
+
+    private async Task EditAltText(int index)
+    {
+        if (Attachments != null && index >= 0 && index < Attachments.Count)
+        {
+            var attachment = Attachments[index];
+            if (OnAltTextChanged.HasDelegate)
+            {
+                await OnAltTextChanged.InvokeAsync((index, attachment.AltText ?? ""));
+            }
+        }
+    }
+
+    private bool IsImage(string? mimeType)
+    {
+        return mimeType?.StartsWith("image/") == true;
+    }
+
+    private bool IsVideo(string? mimeType)
+    {
+        return mimeType?.StartsWith("video/") == true;
+    }
+
+    private bool IsAudio(string? mimeType)
+    {
+        return mimeType?.StartsWith("audio/") == true;
+    }
+
+    private Icon GetFileIconFluent(string? mimeType)
+    {
+        if (mimeType == null) return new Icons.Regular.Size24.Document();
+        
+        return mimeType.ToLowerInvariant() switch
+        {
+            var t when t.StartsWith("image/") => new Icons.Regular.Size24.Image(),
+            var t when t.StartsWith("video/") => new Icons.Regular.Size24.Video(),
+            var t when t.StartsWith("audio/") => new Icons.Regular.Size24.MusicNote2(),
+            var t when t.Contains("pdf") => new Icons.Regular.Size24.DocumentPdf(),
+            var t when t.Contains("word") || t.Contains("document") => new Icons.Regular.Size24.DocumentText(),
+            var t when t.Contains("excel") || t.Contains("spreadsheet") => new Icons.Regular.Size24.DocumentTable(),
+            var t when t.Contains("powerpoint") || t.Contains("presentation") => new Icons.Regular.Size24.SlideText(),
+            var t when t.Contains("zip") || t.Contains("archive") || t.Contains("compressed") => new Icons.Regular.Size24.FolderZip(),
+            var t when t.Contains("text") => new Icons.Regular.Size24.DocumentText(),
+            _ => new Icons.Regular.Size24.Document()
+        };
+    }
+
+    private string TruncateText(string text, int maxLength)
+    {
+        if (text.Length <= maxLength)
+            return text;
+        return text.Substring(0, maxLength) + "...";
+    }
+}

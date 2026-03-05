@@ -145,7 +145,10 @@ public class FileSystemDeliveryQueueRepository : IDeliveryQueueRepository
             await WriteEnvelopeAsync(GetDeliveredFilePath(deliveryId), item, cancellationToken);
             File.Delete(queueFile);
 
-            _logger.LogDebug("Delivery {DeliveryId} to {InboxUrl} completed successfully", deliveryId, item.InboxUrl);
+            _logger.LogInformation(
+                "Delivery {DeliveryId} completed: {ActivityType} from {Sender} to {InboxUrl}{TargetActor} after {Attempts} attempt(s)",
+                deliveryId, item.Activity.Type?.FirstOrDefault() ?? "Unknown", item.SenderUsername, item.InboxUrl,
+                item.TargetActorId != null ? $" (actor: {item.TargetActorId})" : "", item.AttemptCount);
         }
         finally
         {
@@ -352,6 +355,7 @@ public class FileSystemDeliveryQueueRepository : IDeliveryQueueRepository
         {
             Id = item.Id,
             InboxUrl = item.InboxUrl,
+            TargetActorId = item.TargetActorId,
             SenderActorId = item.SenderActorId,
             SenderUsername = item.SenderUsername,
             Status = item.Status,
@@ -391,6 +395,7 @@ public class FileSystemDeliveryQueueRepository : IDeliveryQueueRepository
             Id = envelope.Id,
             Activity = activity,
             InboxUrl = envelope.InboxUrl,
+            TargetActorId = envelope.TargetActorId,
             SenderActorId = envelope.SenderActorId,
             SenderUsername = envelope.SenderUsername,
             Status = envelope.Status,
@@ -434,6 +439,7 @@ public class FileSystemDeliveryQueueRepository : IDeliveryQueueRepository
     {
         public string Id { get; set; } = "";
         public string InboxUrl { get; set; } = "";
+        public string? TargetActorId { get; set; }
         public string SenderActorId { get; set; } = "";
         public string SenderUsername { get; set; } = "";
         public DeliveryStatus Status { get; set; }

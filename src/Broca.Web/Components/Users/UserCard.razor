@@ -16,7 +16,7 @@
         <div class="user-info">
             <div class="user-header">
                 <div class="user-names">
-                    <h4 class="user-name">@GetActorName()</h4>
+                    <FluentLabel Typo="Typography.Subject">@GetActorName()</FluentLabel>
                     @if (!string.IsNullOrEmpty(GetActorHandle()))
                     {
                         <span class="user-handle">@GetActorHandle()</span>
@@ -32,7 +32,7 @@
             </div>
             @if (!Compact && !string.IsNullOrEmpty(GetBio()))
             {
-                <p class="user-bio">@GetBio()</p>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@GetBio()</FluentLabel>
             }
             @if (ShowStats)
             {

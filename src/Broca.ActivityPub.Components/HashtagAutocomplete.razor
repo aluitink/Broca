@@ -1,0 +1,220 @@
+@implements IDisposable
+
+<div class="activitypub-hashtag-autocomplete @CssClass">
+    @if (isVisible && suggestions.Count > 0)
+    {
+        <div class="hashtag-suggestions" style="@GetPositionStyle()">
+            @if (SuggestionTemplate != null)
+            {
+                @foreach (var (tag, index) in suggestions.Select((t, i) => (t, i)))
+                {
+                    <div class="suggestion-item @(index == selectedIndex ? "selected" : "")"
+                         @onclick="@(() => SelectSuggestion(tag))"
+                         @onmouseenter="@(() => selectedIndex = index)">
+                        @SuggestionTemplate(tag)
+                    </div>
+                }
+            }
+            else
+            {
+                @foreach (var (tag, index) in suggestions.Select((t, i) => (t, i)))
+                {
+                    <div class="suggestion-item @(index == selectedIndex ? "selected" : "")"
+                         @onclick="@(() => SelectSuggestion(tag))"
+                         @onmouseenter="@(() => selectedIndex = index)">
+                        <span class="hashtag-text">#@tag</span>
+                        @if (tagUsage.ContainsKey(tag))
+                        {
+                            <span class="usage-count">@tagUsage[tag] uses</span>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<string> suggestions = new();
+    private Dictionary<string, int> tagUsage = new();
+    private bool isVisible;
+    private int selectedIndex;
+    private string currentQuery = string.Empty;
+    private System.Threading.Timer? _debounceTimer;
+    private (int Top, int Left)? position;
+
+    // Common/trending hashtags that could be shown initially
+    private List<string> commonTags = new()
+    {
+        "introduction", "activitypub", "fediverse", "mastodon",
+        "photography", "art", "music", "books", "gaming",
+        "technology", "programming", "design", "opensource"
+    };
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public int DebounceMilliseconds { get; set; } = 200;
+
+    [Parameter]
+    public int MaxSuggestions { get; set; } = 5;
+
+    [Parameter]
+    public List<string>? RecentTags { get; set; }
+
+    [Parameter]
+    public Dictionary<string, int>? TagUsageStats { get; set; }
+
+    [Parameter]
+    public RenderFragment<string>? SuggestionTemplate { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnHashtagSelected { get; set; }
+
+    /// <summary>
+    /// Searches for hashtags matching the query.
+    /// </summary>
+    public void SearchHashtags(string query, int cursorTop, int cursorLeft)
+    {
+        currentQuery = query;
+        position = (cursorTop, cursorLeft);
+        
+        _debounceTimer?.Dispose();
+        _debounceTimer = null;
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            Hide();
+            return;
+        }
+
+        _debounceTimer = new System.Threading.Timer(
+            _ => InvokeAsync(() => PerformSearch(query)),
+            null,
+            DebounceMilliseconds,
+            System.Threading.Timeout.Infinite);
+    }
+
+    /// <summary>
+    /// Hides the autocomplete suggestions.
+    /// </summary>
+    public void Hide()
+    {
+        isVisible = false;
+        suggestions.Clear();
+        selectedIndex = 0;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Selects the currently highlighted suggestion.
+    /// </summary>
+    public async Task SelectCurrentAsync()
+    {
+        if (isVisible && selectedIndex >= 0 && selectedIndex < suggestions.Count)
+        {
+            await SelectSuggestion(suggestions[selectedIndex]);
+        }
+    }
+
+    /// <summary>
+    /// Moves the selection up.
+    /// </summary>
+    public void MoveUp()
+    {
+        if (isVisible && suggestions.Count > 0)
+        {
+            selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : suggestions.Count - 1;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Moves the selection down.
+    /// </summary>
+    public void MoveDown()
+    {
+        if (isVisible && suggestions.Count > 0)
+        {
+            selectedIndex = (selectedIndex + 1) % suggestions.Count;
+            StateHasChanged();
+        }
+    }
+
+    private void PerformSearch(string query)
+    {
+        var lowerQuery = query.ToLowerInvariant();
+        
+        // Combine recent tags and common tags
+        var allTags = new List<string>();
+        if (RecentTags != null)
+        {
+            allTags.AddRange(RecentTags);
+        }
+        allTags.AddRange(commonTags);
+
+        // Filter and rank tags
+        suggestions = allTags
+            .Where(tag => tag.ToLowerInvariant().StartsWith(lowerQuery))
+            .Distinct()
+            .OrderByDescending(tag => 
+            {
+                // Prefer exact matches
+                if (tag.Equals(lowerQuery, StringComparison.OrdinalIgnoreCase))
+                    return 1000;
+                
+                // Then by usage count
+                if (TagUsageStats != null && TagUsageStats.ContainsKey(tag))
+                    return TagUsageStats[tag];
+                
+                // Then by whether it's a recent tag
+                if (RecentTags != null && RecentTags.Contains(tag))
+                    return 100;
+                
+                return 0;
+            })
+            .Take(MaxSuggestions)
+            .ToList();
+
+        // Update tag usage for display
+        tagUsage.Clear();
+        if (TagUsageStats != null)
+        {
+            foreach (var tag in suggestions)
+            {
+                if (TagUsageStats.ContainsKey(tag))
+                {
+                    tagUsage[tag] = TagUsageStats[tag];
+                }
+            }
+        }
+
+        isVisible = suggestions.Count > 0;
+        selectedIndex = 0;
+        StateHasChanged();
+    }
+
+    private async Task SelectSuggestion(string tag)
+    {
+        if (OnHashtagSelected.HasDelegate)
+        {
+            await OnHashtagSelected.InvokeAsync(tag);
+        }
+        Hide();
+    }
+
+    private string GetPositionStyle()
+    {
+        if (position.HasValue)
+        {
+            return $"top: {position.Value.Top}px; left: {position.Value.Left}px;";
+        }
+        return string.Empty;
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+    }
+}

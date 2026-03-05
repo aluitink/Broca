@@ -10,29 +10,31 @@
 @if (!AuthState.IsAuthenticated)
 {
     <FluentCard>
-        <h2>Authentication Required</h2>
-        <p>Please login to view your profile.</p>
-        <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/profile")}"))">
-            Login
-        </FluentButton>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentLabel Typo="Typography.Subject">Authentication Required</FluentLabel>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Please login to view your profile.</FluentLabel>
+            <FluentButton Appearance="Appearance.Accent" OnClick="@(() => Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString("/profile")}"))">
+                Login
+            </FluentButton>
+        </FluentStack>
     </FluentCard>
 }
 else if (AuthState.CurrentActorId != null)
 {
     <div class="profile-container">
-        <FluentCard Class="profile-header">
-            <h1>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Class="profile-header">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
                 <FluentIcon Value="@(new Icons.Regular.Size24.Person())" Color="Color.Accent" />
-                Your Profile
-            </h1>
-        </FluentCard>
+                <FluentLabel Typo="Typography.PageTitle">Your Profile</FluentLabel>
+            </FluentStack>
+        </FluentStack>
 
         <ActorProfile ActorUri="@(new Uri(AuthState.CurrentActorId))" />
 
         <ProfileEditor Actor="@AuthState.CurrentActor" OnProfileUpdated="@HandleProfileUpdatedAsync" />
 
         <FluentCard Class="profile-info">
-            <h3>Account Information</h3>
+            <FluentLabel Typo="Typography.Subject" Style="display: block; margin-bottom: 1rem;">Account Information</FluentLabel>
             <FluentDataGrid Items="@GetProfileData()" GridTemplateColumns="200px 1fr">
                 <PropertyColumn Property="@(p => p.Label)" Title="Property" Class="property-label" />
                 <PropertyColumn Property="@(p => p.Value)" Title="Value" Class="property-value" />
@@ -40,14 +42,16 @@ else if (AuthState.CurrentActorId != null)
         </FluentCard>
 
         <FluentCard Class="danger-zone">
-            <h3>
-                <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Color="Color.Error" />
-                Danger Zone
-            </h3>
-            <p>Logging out will clear your session and require you to login again.</p>
-            <FluentButton Appearance="Appearance.Outline" OnClick="@HandleLogoutAsync">
-                Logout
-            </FluentButton>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Color="Color.Error" />
+                    <FluentLabel Typo="Typography.Subject" Style="color: var(--error-foreground-rest);">Danger Zone</FluentLabel>
+                </FluentStack>
+                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Logging out will clear your session and require you to login again.</FluentLabel>
+                <FluentButton Appearance="Appearance.Outline" OnClick="@HandleLogoutAsync">
+                    Logout
+                </FluentButton>
+            </FluentStack>
         </FluentCard>
     </div>
 }
@@ -109,16 +113,9 @@ else if (AuthState.CurrentActorId != null)
         margin: 0 auto;
     }
 
-    .profile-header h1 {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin: 0;
-    }
-
-    .profile-info h3 {
-        margin-top: 0;
-        margin-bottom: 1rem;
+    .profile-header {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
     }
 
     .property-label {
@@ -134,19 +131,5 @@ else if (AuthState.CurrentActorId != null)
 
     .danger-zone {
         border: 1px solid var(--error-foreground-rest);
-    }
-
-    .danger-zone h3 {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-top: 0;
-        margin-bottom: 0.5rem;
-        color: var(--error-foreground-rest);
-    }
-
-    .danger-zone p {
-        margin-bottom: 1rem;
-        color: var(--neutral-foreground-hint);
     }
 </style>

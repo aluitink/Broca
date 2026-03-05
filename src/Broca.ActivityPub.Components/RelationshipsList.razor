@@ -1,0 +1,153 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+<div class="activitypub-relationships-list @CssClass">
+    @if (!string.IsNullOrEmpty(Title))
+    {
+        <div class="list-header">
+            <h3>@Title</h3>
+        </div>
+    }
+
+    @if (CollectionUrl != null)
+    {
+        <CollectionLoader TItem="KristofferStrube.ActivityStreams.Object"
+                         CollectionUrl="@CollectionUrl"
+                         PageSize="@PageSize"
+                         UseVirtualization="@UseVirtualization">
+            <ItemTemplate Context="actor">
+                @if (ActorTemplate != null)
+                {
+                    @ActorTemplate(actor)
+                }
+                else
+                {
+                    <div class="relationship-item">
+                        <ActorRenderer Actor="@actor" ShowDetails="false" />
+
+                        @if (ShowActionButton)
+                        {
+                            <div class="relationship-actions">
+                                <button class="action-button"
+                                        @onclick="() => HandleActionClick(actor)"
+                                        disabled="@IsProcessing(actor)">
+                                    @if (IsProcessing(actor))
+                                    {
+                                        <span>Processing...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@ActionLabel</span>
+                                    }
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </ItemTemplate>
+            <LoadingTemplate>
+                @if (LoadingTemplate != null)
+                {
+                    @LoadingTemplate
+                }
+                else
+                {
+                    <div class="list-loading">Loading...</div>
+                }
+            </LoadingTemplate>
+            <EmptyTemplate>
+                @if (EmptyTemplate != null)
+                {
+                    @EmptyTemplate
+                }
+                else
+                {
+                    <div class="list-empty">
+                        <p>No @(Title?.ToLowerInvariant() ?? "entries") found</p>
+                    </div>
+                }
+            </EmptyTemplate>
+            <ErrorTemplate Context="error">
+                @if (ErrorTemplate != null)
+                {
+                    @ErrorTemplate(error)
+                }
+                else
+                {
+                    <div class="list-error">@error</div>
+                }
+            </ErrorTemplate>
+        </CollectionLoader>
+    }
+    else
+    {
+        <div class="list-empty">
+            <p>No collection URL specified</p>
+        </div>
+    }
+</div>
+
+@code {
+    private HashSet<string> processingIds = new();
+
+    [Parameter]
+    public Uri? CollectionUrl { get; set; }
+
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public string ActionLabel { get; set; } = "Remove";
+
+    [Parameter]
+    public bool ShowActionButton { get; set; } = true;
+
+    [Parameter]
+    public int PageSize { get; set; } = 20;
+
+    [Parameter]
+    public bool UseVirtualization { get; set; } = false;
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? ActorTemplate { get; set; }
+
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    [Parameter]
+    public RenderFragment? EmptyTemplate { get; set; }
+
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnActionClick { get; set; }
+
+    private bool CanAct => Client.ActorId != null;
+
+    private bool IsProcessing(KristofferStrube.ActivityStreams.Object actor)
+        => actor.Id != null && processingIds.Contains(actor.Id);
+
+    private async Task HandleActionClick(KristofferStrube.ActivityStreams.Object actor)
+    {
+        if (actor.Id == null || !CanAct) return;
+
+        processingIds.Add(actor.Id);
+        StateHasChanged();
+
+        try
+        {
+            if (OnActionClick.HasDelegate)
+                await OnActionClick.InvokeAsync(actor.Id);
+        }
+        finally
+        {
+            processingIds.Remove(actor.Id);
+            StateHasChanged();
+        }
+    }
+}

@@ -1,12 +1,10 @@
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
-using Broca.ActivityPub.Client.Services;
+using Broca.ActivityPub.Server.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using KristofferStrube.ActivityStreams;
-using System.Net.Http.Json;
 
 namespace Broca.ActivityPub.Server.Controllers;
 
@@ -24,24 +22,18 @@ namespace Broca.ActivityPub.Server.Controllers;
 [Route("[controller]")]
 public class ProxyController : ControllerBase
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly HttpSignatureService _signatureService;
-    private readonly ISystemIdentityService _systemIdentityService;
+    private readonly SignedClientProvider _signedClientProvider;
     private readonly ActivityPubServerOptions _options;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ILogger<ProxyController> _logger;
 
     public ProxyController(
-        IHttpClientFactory httpClientFactory,
-        HttpSignatureService signatureService,
-        ISystemIdentityService systemIdentityService,
+        SignedClientProvider signedClientProvider,
         IOptions<ActivityPubServerOptions> options,
         IOptions<JsonSerializerOptions> jsonOptions,
         ILogger<ProxyController> logger)
     {
-        _httpClientFactory = httpClientFactory;
-        _signatureService = signatureService;
-        _systemIdentityService = systemIdentityService;
+        _signedClientProvider = signedClientProvider;
         _options = options.Value;
         _jsonOptions = jsonOptions.Value;
         _logger = logger;
@@ -73,47 +65,11 @@ public class ProxyController : ControllerBase
 
         try
         {
-            // Get system actor credentials
-            var systemActor = await _systemIdentityService.GetSystemActorAsync();
-            var privateKey = await _systemIdentityService.GetSystemPrivateKeyAsync();
-            var publicKeyId = $"{systemActor.Id}#main-key";
+            var client = await _signedClientProvider.CreateForSystemActorAsync(HttpContext.RequestAborted);
+            var result = await client.GetAsync<JsonElement>(targetUri, useCache: false, HttpContext.RequestAborted);
 
-            using var httpClient = _httpClientFactory.CreateClient();
-            httpClient.Timeout = TimeSpan.FromSeconds(30);
-            
-            using var request = new HttpRequestMessage(HttpMethod.Get, targetUri);
-            
-            // Set ActivityPub headers
-            request.Headers.Accept.Clear();
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/activity+json"));
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/ld+json", 0.9));
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json", 0.8));
-            request.Headers.UserAgent.ParseAdd(_options.UserAgent);
-
-            // Sign the request with the system actor credentials using Date header
-            await _signatureService.ApplyHttpSignatureAsync(
-                request.Method.ToString(),
-                targetUri,
-                (headerName, headerValue) => request.Headers.TryAddWithoutValidation(headerName, headerValue),
-                publicKeyId,
-                privateKey,
-                accept: request.Headers.Accept.ToString(),
-                contentType: null,
-                getContentFunc: null,
-                cancellationToken: HttpContext.RequestAborted);
-
-            var response = await httpClient.SendAsync(request, HttpContext.RequestAborted);
-            
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Proxied GET request failed with status {StatusCode}", response.StatusCode);
-                return StatusCode((int)response.StatusCode, new { error = $"Remote server returned {response.StatusCode}" });
-            }
-
-            var content = await response.Content.ReadAsStringAsync();
-            var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/json";
-            
-            return Content(content, contentType);
+            var json = JsonSerializer.Serialize(result, _jsonOptions);
+            return Content(json, "application/activity+json");
         }
         catch (HttpRequestException ex)
         {
@@ -154,38 +110,9 @@ public class ProxyController : ControllerBase
 
         try
         {
-            // Get system actor credentials
-            var systemActor = await _systemIdentityService.GetSystemActorAsync();
-            var privateKey = await _systemIdentityService.GetSystemPrivateKeyAsync();
-            var publicKeyId = $"{systemActor.Id}#main-key";
+            var client = await _signedClientProvider.CreateForSystemActorAsync(HttpContext.RequestAborted);
+            using var response = await client.PostAsync(targetUri, data, HttpContext.RequestAborted);
 
-            using var httpClient = _httpClientFactory.CreateClient();
-            httpClient.Timeout = TimeSpan.FromSeconds(30);
-            
-            using var request = new HttpRequestMessage(HttpMethod.Post, targetUri);
-            
-            // Set content as JSON
-            request.Content = JsonContent.Create(data, new MediaTypeHeaderValue("application/activity+json"), _jsonOptions);
-            
-            // Set headers
-            request.Headers.Accept.Clear();
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/activity+json"));
-            request.Headers.UserAgent.ParseAdd(_options.UserAgent);
-
-            // Sign the request with the system actor credentials using Date header
-            await _signatureService.ApplyHttpSignatureAsync(
-                request.Method.ToString(),
-                targetUri,
-                (headerName, headerValue) => request.Headers.TryAddWithoutValidation(headerName, headerValue),
-                publicKeyId,
-                privateKey,
-                accept: request.Headers.Accept.ToString(),
-                contentType: request.Content.Headers.ContentType?.ToString(),
-                getContentFunc: async (ct) => await request.Content.ReadAsByteArrayAsync(ct),
-                cancellationToken: HttpContext.RequestAborted);
-
-            var response = await httpClient.SendAsync(request, HttpContext.RequestAborted);
-            
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Proxied POST request failed with status {StatusCode}", response.StatusCode);
@@ -196,7 +123,7 @@ public class ProxyController : ControllerBase
 
             var content = await response.Content.ReadAsStringAsync();
             var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/json";
-            
+
             return Content(content, contentType);
         }
         catch (HttpRequestException ex)

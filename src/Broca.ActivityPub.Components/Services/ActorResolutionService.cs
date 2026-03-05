@@ -5,14 +5,13 @@ using Microsoft.Extensions.Logging;
 namespace Broca.ActivityPub.Components.Services;
 
 /// <summary>
-/// Service for resolving and caching actor information from URIs
+/// Service for resolving actor information from URIs with in-flight request deduplication
 /// </summary>
 public class ActorResolutionService
 {
     private readonly IActivityPubClient _client;
     private readonly ILogger<ActorResolutionService> _logger;
-    private readonly Dictionary<string, ActorInfo> _cache = new();
-    private readonly TimeSpan _cacheExpiration = TimeSpan.FromMinutes(15);
+    private readonly Dictionary<string, Task<ActorInfo?>> _inFlightRequests = new();
 
     public ActorResolutionService(IActivityPubClient client, ILogger<ActorResolutionService> logger)
     {
@@ -49,37 +48,53 @@ public class ActorResolutionService
         if (actorUri == null)
             return null;
 
-        // Check cache
-        lock (_cache)
+        var uriString = actorUri.ToString();
+
+        // Check for in-flight request to avoid duplicate concurrent fetches
+        Task<ActorInfo?>? existingTask = null;
+        lock (_inFlightRequests)
         {
-            if (_cache.TryGetValue(actorUri.ToString(), out var cachedInfo))
+            if (_inFlightRequests.TryGetValue(uriString, out existingTask))
             {
-                if (DateTime.UtcNow - cachedInfo.CachedAt < _cacheExpiration)
-                {
-                    _logger.LogDebug("Returning cached actor info for {ActorUri}", actorUri);
-                    return cachedInfo;
-                }
-                else
-                {
-                    _cache.Remove(actorUri.ToString());
-                }
+                _logger.LogDebug("Reusing in-flight request for {ActorUri}", actorUri);
             }
         }
 
-        // Fetch actor
+        if (existingTask != null)
+        {
+            return await existingTask;
+        }
+
+        // Create new fetch task
+        var fetchTask = FetchActorAsync(actorUri, cancellationToken);
+
+        // Store in-flight request
+        lock (_inFlightRequests)
+        {
+            _inFlightRequests[uriString] = fetchTask;
+        }
+
+        try
+        {
+            return await fetchTask;
+        }
+        finally
+        {
+            // Clean up in-flight request
+            lock (_inFlightRequests)
+            {
+                _inFlightRequests.Remove(uriString);
+            }
+        }
+    }
+
+    private async Task<ActorInfo?> FetchActorAsync(Uri actorUri, CancellationToken cancellationToken)
+    {
         try
         {
             _logger.LogDebug("Fetching actor from {ActorUri}", actorUri);
             var fetchedActor = await _client.GetActorAsync(actorUri, cancellationToken);
-            var actorInfo = CreateActorInfo(fetchedActor);
-
-            // Cache result
-            lock (_cache)
-            {
-                _cache[actorUri.ToString()] = actorInfo;
-            }
-
-            return actorInfo;
+            return CreateActorInfo(fetchedActor);
         }
         catch (Exception ex)
         {
@@ -115,13 +130,13 @@ public class ActorResolutionService
     }
 
     /// <summary>
-    /// Clears the actor cache
+    /// Clears any in-flight requests (useful for testing or reset scenarios)
     /// </summary>
-    public void ClearCache()
+    public void ClearInFlightRequests()
     {
-        lock (_cache)
+        lock (_inFlightRequests)
         {
-            _cache.Clear();
+            _inFlightRequests.Clear();
         }
     }
 
@@ -140,7 +155,6 @@ public class ActorResolutionService
             Handle = handle,
             IconUrl = iconUrl,
             Summary = actor.Summary?.FirstOrDefault(),
-            CachedAt = DateTime.UtcNow,
             Actor = actor
         };
     }
@@ -173,7 +187,7 @@ public class ActorResolutionService
 }
 
 /// <summary>
-/// Cached actor information for display
+/// Resolved actor information for display
 /// </summary>
 public class ActorInfo
 {
@@ -183,6 +197,5 @@ public class ActorInfo
     public required string Handle { get; set; }
     public string? IconUrl { get; set; }
     public string? Summary { get; set; }
-    public DateTime CachedAt { get; set; }
     public Actor? Actor { get; set; }
 }

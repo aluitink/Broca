@@ -1,0 +1,193 @@
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+@using Broca.ActivityPub.Components
+
+@* 
+    FluentFeedFilterRenderer - A Fluent UI renderer for the FeedFilter component.
+    Usage: <FeedFilter FilterTemplate="FluentFeedFilterRenderer.Template" ... />
+*@
+
+<FluentCard Class="fluent-feed-filter">
+    <div class="filter-header">
+        <FluentIcon Value="@(new Icons.Regular.Size20.Filter())" Color="Color.Accent" />
+        <FluentLabel Typo="Typography.Subject">Filter Feed</FluentLabel>
+    </div>
+
+    <div class="filter-sections">
+        @if (Context.Filter.ShowActivityTypeFilter)
+        {
+            <div class="filter-section">
+                <FluentLabel Weight="FontWeight.Bold">Activity Type</FluentLabel>
+                <div class="filter-chips">
+                    @foreach (var type in Context.Filter.ActivityTypes)
+                    {
+                        var isSelected = Context.Filter.IsActivityTypeSelected(type);
+                        <FluentButton 
+                            Appearance="@(isSelected ? Appearance.Accent : Appearance.Outline)"
+                            OnClick="@(() => Context.Filter.ToggleActivityType(type, !isSelected))"
+                            class="filter-chip">
+                            @type
+                        </FluentButton>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (Context.Filter.ShowContentTypeFilter)
+        {
+            <FluentCard Class="filter-section">
+                <FluentLabel Weight="FontWeight.Bold">Content Type</FluentLabel>
+                <div class="filter-chips">
+                    @foreach (var type in Context.Filter.ContentTypes)
+                    {
+                        var isSelected = Context.Filter.IsContentTypeSelected(type);
+                        <FluentButton 
+                            Appearance="@(isSelected ? Appearance.Accent : Appearance.Outline)"
+                            OnClick="@(() => Context.Filter.ToggleContentType(type, !isSelected))"
+                            class="filter-chip">
+                            @type
+                        </FluentButton>
+                    }
+                </div>
+            </FluentCard>
+        }
+
+        @if (Context.Filter.ShowActorFilter)
+        {
+            <div class="filter-section">
+                <FluentLabel Weight="FontWeight.Bold">Actor</FluentLabel>
+                <FluentTextField 
+                    Placeholder="Filter by actor ID or name..."
+                    Value="@Context.Filter.ActorFilter"
+                    ValueChanged="@(value => Context.Filter.OnActorFilterChanged(new Microsoft.AspNetCore.Components.ChangeEventArgs { Value = value }))"
+                    Style="width: 100%;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                    @if (!string.IsNullOrEmpty(Context.Filter.ActorFilter))
+                    {
+                        <FluentButton 
+                            Appearance="Appearance.Lightweight" 
+                            IconEnd="@(new Icons.Regular.Size16.Dismiss())"
+                            OnClick="@Context.Filter.ClearActorFilter"
+                            Slot="end"
+                            Title="Clear" />
+                    }
+                </FluentTextField>
+            </div>
+        }
+
+        @if (Context.Filter.ShowDateRangeFilter)
+        {
+            <div class="filter-section">
+                <FluentLabel Weight="FontWeight.Bold">Date Range</FluentLabel>
+                <div class="date-range-inputs">
+                    <FluentTextField 
+                        Type="InputType.Date"
+                        Label="From"
+                        Value="@(Context.Filter.StartDate?.ToString("yyyy-MM-dd"))"
+                        ValueChanged="@(value => Context.Filter.OnStartDateChanged(new Microsoft.AspNetCore.Components.ChangeEventArgs { Value = value }))"
+                        Style="flex: 1;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.CalendarLtr())" Slot="start" />
+                    </FluentTextField>
+                    <FluentTextField 
+                        Type="InputType.Date"
+                        Label="To"
+                        Value="@(Context.Filter.EndDate?.ToString("yyyy-MM-dd"))"
+                        ValueChanged="@(value => Context.Filter.OnEndDateChanged(new Microsoft.AspNetCore.Components.ChangeEventArgs { Value = value }))"
+                        Style="flex: 1;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.CalendarLtr())" Slot="start" />
+                    </FluentTextField>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="filter-actions">
+        <FluentButton 
+            Appearance="Appearance.Accent"
+            IconStart="@(new Icons.Regular.Size20.Checkmark())"
+            OnClick="@Context.Filter.ApplyFilter">
+            Apply Filters
+        </FluentButton>
+        <FluentButton 
+            Appearance="Appearance.Outline"
+            IconStart="@(new Icons.Regular.Size20.ArrowReset())"
+            OnClick="@Context.Filter.ResetFilter">
+            Reset
+        </FluentButton>
+    </div>
+</FluentCard>
+
+@code {
+    /// <summary>
+    /// The FeedFilter context containing the component state and methods.
+    /// </summary>
+    [Parameter]
+    public FeedFilter.FeedFilterContext Context { get; set; } = null!;
+
+    /// <summary>
+    /// Template that can be passed to FeedFilter component.
+    /// </summary>
+    public static RenderFragment<FeedFilter.FeedFilterContext> Template => context => builder =>
+    {
+        builder.OpenComponent<FluentFeedFilterRenderer>(0);
+        builder.AddAttribute(1, nameof(Context), context);
+        builder.CloseComponent();
+    };
+}
+
+<style>
+    .fluent-feed-filter {
+        margin-bottom: 1.5rem;
+    }
+
+    .filter-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .filter-header h3 {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+    }
+
+    .filter-sections {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .filter-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .filter-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .filter-chip {
+        font-size: 0.875rem;
+        padding: 0.25rem 0.75rem;
+        height: auto;
+        min-height: 32px;
+    }
+
+    .date-range-inputs {
+        display: flex;
+        gap: 1rem;
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--neutral-stroke-divider-rest);
+    }
+</style>

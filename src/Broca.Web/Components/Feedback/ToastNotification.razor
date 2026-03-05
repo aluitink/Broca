@@ -10,7 +10,7 @@
                     <strong>@toast.Title</strong>
                     @if (!string.IsNullOrEmpty(toast.Message))
                     {
-                        <p>@toast.Message</p>
+                        <FluentLabel Typo="Typography.Body">@toast.Message</FluentLabel>
                     }
                 </div>
                 @if (toast.Action != null)

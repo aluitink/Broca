@@ -1,11 +1,11 @@
 @* Enhanced event renderer with Fluent UI *@
-<FluentCard Class="event-card">
+<FluentCard Class="fluent-event-card">
     <div class="event-header">
         <FluentIcon Value="@(new Icons.Regular.Size24.CalendarLtr())" Color="Color.Accent" />
         <div class="event-title-area">
             @if (!string.IsNullOrEmpty(Event?.Name?.FirstOrDefault()))
             {
-                <h3 class="event-title">@Event.Name.First()</h3>
+                <FluentLabel Typo="Typography.Subject">@Event.Name.First()</FluentLabel>
             }
             <FluentBadge Appearance="Appearance.Accent">Event</FluentBadge>
         </div>
@@ -76,14 +76,3 @@
         return "See event details";
     }
 }
-
-<style>
-    .event-card { padding: 1.5rem; }
-    .event-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
-    .event-title-area { flex: 1; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-    .event-title { margin: 0; font-size: 1.25rem; font-weight: 600; flex: 1; }
-    .event-description { margin-bottom: 1.5rem; padding: 1rem; background: var(--neutral-layer-2); border-radius: var(--control-corner-radius); line-height: 1.6; }
-    .event-details { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem; padding: 1rem; background: var(--neutral-layer-1); border-radius: var(--control-corner-radius); }
-    .event-detail { display: flex; align-items: flex-start; gap: 0.75rem; }
-    .event-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-</style>

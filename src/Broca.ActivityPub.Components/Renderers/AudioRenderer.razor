@@ -1,0 +1,158 @@
+@using KristofferStrube.ActivityStreams
+@inherits ComponentBase
+
+<div class="activitypub-audio @CssClass">
+    @if (Audio != null && !string.IsNullOrEmpty(GetAudioUrl()))
+    {
+        <figure class="audio-figure">
+            <audio class="audio-player @(FullWidth ? "full-width" : "")"
+                   controls="@ShowControls"
+                   autoplay="@AutoPlay"
+                   loop="@Loop"
+                   muted="@Muted"
+                   preload="@PreloadMode">
+                <source src="@GetAudioUrl()" type="@GetMediaType()" />
+                Your browser does not support the audio tag.
+            </audio>
+
+            @if (ShowCaption && !string.IsNullOrEmpty(GetCaption()))
+            {
+                <figcaption class="audio-caption">
+                    @GetCaption()
+                </figcaption>
+            }
+
+            @if (ShowMetadata)
+            {
+                <div class="audio-metadata">
+                    @if (Audio.Duration.HasValue)
+                    {
+                        <span class="metadata-item">⏱ @FormatDuration(Audio.Duration.Value)</span>
+                    }
+                    @if (!string.IsNullOrEmpty(Audio.MediaType))
+                    {
+                        <span class="metadata-item">@Audio.MediaType</span>
+                    }
+                </div>
+            }
+        </figure>
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Audio)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Audio object to render.
+    /// </summary>
+    [Parameter]
+    public Audio? Audio { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show controls.
+    /// </summary>
+    [Parameter]
+    public bool ShowControls { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the caption.
+    /// </summary>
+    [Parameter]
+    public bool ShowCaption { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show metadata.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to auto-play.
+    /// </summary>
+    [Parameter]
+    public bool AutoPlay { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to loop.
+    /// </summary>
+    [Parameter]
+    public bool Loop { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to mute by default.
+    /// </summary>
+    [Parameter]
+    public bool Muted { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to display at full width.
+    /// </summary>
+    [Parameter]
+    public bool FullWidth { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the preload mode (none, metadata, auto).
+    /// </summary>
+    [Parameter]
+    public string PreloadMode { get; set; } = "metadata";
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Audio>? AdditionalContent { get; set; }
+
+    private string GetAudioUrl()
+    {
+        if (Audio?.Url?.Any() == true)
+        {
+            var urlLink = Audio.Url.FirstOrDefault();
+            if (urlLink?.Href != null)
+            {
+                return urlLink.Href.ToString();
+            }
+        }
+        return string.Empty;
+    }
+
+    private string GetMediaType()
+    {
+        if (!string.IsNullOrEmpty(Audio?.MediaType))
+        {
+            return Audio.MediaType;
+        }
+
+        var url = GetAudioUrl().ToLowerInvariant();
+        if (url.EndsWith(".mp3")) return "audio/mpeg";
+        if (url.EndsWith(".ogg")) return "audio/ogg";
+        if (url.EndsWith(".wav")) return "audio/wav";
+        if (url.EndsWith(".m4a")) return "audio/mp4";
+        if (url.EndsWith(".flac")) return "audio/flac";
+
+        return "audio/mpeg";
+    }
+
+    private string GetCaption()
+    {
+        return Audio?.Name?.FirstOrDefault() ?? 
+               Audio?.Summary?.FirstOrDefault() ?? 
+               string.Empty;
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+            return duration.ToString(@"h\:mm\:ss");
+        
+        return duration.ToString(@"m\:ss");
+    }
+}

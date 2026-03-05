@@ -1,0 +1,537 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+
+<div class="activitypub-media-upload @CssClass">
+    @if (ShowUploadArea)
+    {
+        <div class="upload-area @(IsDragging ? "dragging" : "")"
+             @ondragenter="HandleDragEnter"
+             @ondragover="HandleDragOver"
+             @ondragleave="HandleDragLeave"
+             @ondrop="HandleDrop">
+            
+            <div class="upload-content">
+                @if (UploadAreaContent != null)
+                {
+                    @UploadAreaContent
+                }
+                else
+                {
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">
+                        <strong>Drag and drop files here</strong> or click to browse
+                    </div>
+                    @if (!string.IsNullOrEmpty(AcceptedFileTypes))
+                    {
+                        <div class="upload-hint">
+                            Accepted: @GetAcceptedTypesDisplay()
+                        </div>
+                    }
+                    @if (MaxFileSizeMB > 0)
+                    {
+                        <div class="upload-hint">
+                            Max size: @MaxFileSizeMB MB per file
+                        </div>
+                    }
+                }
+            </div>
+
+            <InputFile OnChange="HandleFileSelected"
+                       multiple="@AllowMultiple"
+                       accept="@AcceptedFileTypes"
+                       class="upload-input" />
+        </div>
+    }
+
+    @if (uploadedFiles.Any() || uploadingFiles.Any())
+    {
+        <div class="upload-list">
+            @foreach (var file in uploadingFiles)
+            {
+                <div class="upload-item uploading">
+                    <div class="upload-item-preview">
+                        @if (file.PreviewUrl != null)
+                        {
+                            <img src="@file.PreviewUrl" alt="Preview" class="preview-image" />
+                        }
+                        else
+                        {
+                            <div class="preview-placeholder">@GetFileIcon(file.MimeType)</div>
+                        }
+                    </div>
+                    
+                    <div class="upload-item-info">
+                        <div class="upload-item-name" title="@file.FileName">@file.FileName</div>
+                        <div class="upload-item-size">@FormatFileSize(file.Size)</div>
+                        
+                        @if (file.Error != null)
+                        {
+                            <div class="upload-item-error">@file.Error</div>
+                        }
+                        else if (file.Progress < 100)
+                        {
+                            <div class="upload-progress">
+                                <div class="progress-bar" style="width: @file.Progress%"></div>
+                            </div>
+                            <div class="upload-item-status">Uploading @file.Progress%</div>
+                        }
+                    </div>
+
+                    <div class="upload-item-actions">
+                        @if (file.Error != null && AllowRetry)
+                        {
+                            <button type="button" class="action-button retry-button" 
+                                    @onclick="() => RetryUpload(file)" 
+                                    title="Retry upload">
+                                🔄
+                            </button>
+                        }
+                        <button type="button" class="action-button remove-button" 
+                                @onclick="() => RemoveUploadingFile(file)" 
+                                title="Remove">
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            }
+
+            @foreach (var file in uploadedFiles)
+            {
+                <div class="upload-item uploaded">
+                    <div class="upload-item-preview">
+                        @if (file.ThumbnailUrl != null || file.Url != null)
+                        {
+                            <img src="@(file.ThumbnailUrl ?? file.Url)" alt="@file.AltText" class="preview-image" />
+                        }
+                        else
+                        {
+                            <div class="preview-placeholder">@GetFileIcon(file.MimeType)</div>
+                        }
+                    </div>
+                    
+                    <div class="upload-item-info">
+                        <div class="upload-item-name" title="@file.FileName">@file.FileName</div>
+                        <div class="upload-item-size">@FormatFileSize(file.Size)</div>
+                        
+                        @if (ShowAltTextInput)
+                        {
+                            <input type="text" 
+                                   class="alt-text-input" 
+                                   placeholder="Add alt text (for accessibility)" 
+                                   value="@file.AltText"
+                                   @onchange="e => UpdateAltText(file, e.Value?.ToString())" 
+                                   maxlength="@MaxAltTextLength" />
+                        }
+                    </div>
+
+                    <div class="upload-item-actions">
+                        <button type="button" class="action-button remove-button" 
+                                @onclick="() => RemoveUploadedFile(file)" 
+                                title="Remove">
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<UploadingFile> uploadingFiles = new();
+    private List<UploadedFile> uploadedFiles = new();
+    private bool isDragging = false;
+
+    /// <summary>
+    /// Gets or sets the accepted file types (e.g., "image/*,video/*").
+    /// </summary>
+    [Parameter]
+    public string AcceptedFileTypes { get; set; } = "image/*,video/*,audio/*";
+
+    /// <summary>
+    /// Gets or sets the maximum file size in megabytes.
+    /// </summary>
+    [Parameter]
+    public int MaxFileSizeMB { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets whether multiple files can be uploaded.
+    /// </summary>
+    [Parameter]
+    public bool AllowMultiple { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the maximum number of files that can be uploaded.
+    /// </summary>
+    [Parameter]
+    public int MaxFiles { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets whether to show the upload area.
+    /// </summary>
+    [Parameter]
+    public bool ShowUploadArea { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show alt text input.
+    /// </summary>
+    [Parameter]
+    public bool ShowAltTextInput { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the maximum length for alt text.
+    /// </summary>
+    [Parameter]
+    public int MaxAltTextLength { get; set; } = 1000;
+
+    /// <summary>
+    /// Gets or sets whether retry is allowed for failed uploads.
+    /// </summary>
+    [Parameter]
+    public bool AllowRetry { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets custom content for the upload area.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? UploadAreaContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets the upload endpoint URL.
+    /// </summary>
+    [Parameter]
+    public string? UploadUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the HTTP client for uploads.
+    /// </summary>
+    [Parameter]
+    public HttpClient? HttpClient { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when files are uploaded.
+    /// </summary>
+    [Parameter]
+    public EventCallback<List<UploadedFile>> OnFilesUploaded { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when a file is removed.
+    /// </summary>
+    [Parameter]
+    public EventCallback<UploadedFile> OnFileRemoved { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for validation errors.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnValidationError { get; set; }
+
+    private bool IsDragging => isDragging;
+
+    private void HandleDragEnter()
+    {
+        isDragging = true;
+    }
+
+    private void HandleDragOver()
+    {
+        isDragging = true;
+    }
+
+    private void HandleDragLeave()
+    {
+        isDragging = false;
+    }
+
+    private void HandleDrop()
+    {
+        isDragging = false;
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var files = e.GetMultipleFiles(AllowMultiple ? MaxFiles : 1);
+        
+        if (uploadedFiles.Count + uploadingFiles.Count + files.Count > MaxFiles)
+        {
+            var error = $"Cannot upload more than {MaxFiles} files";
+            await OnValidationError.InvokeAsync(error);
+            return;
+        }
+
+        foreach (var file in files)
+        {
+            await ProcessFile(file);
+        }
+    }
+
+    private async Task ProcessFile(IBrowserFile file)
+    {
+        var uploadingFile = new UploadingFile
+        {
+            FileName = file.Name,
+            Size = file.Size,
+            MimeType = file.ContentType
+        };
+
+        if (!ValidateFile(uploadingFile, out var validationError))
+        {
+            uploadingFile.Error = validationError;
+            uploadingFiles.Add(uploadingFile);
+            await OnValidationError.InvokeAsync(validationError);
+            StateHasChanged();
+            return;
+        }
+
+        uploadingFiles.Add(uploadingFile);
+        StateHasChanged();
+
+        try
+        {
+            if (uploadingFile.MimeType?.StartsWith("image/") == true)
+            {
+                var resizedImage = await file.RequestImageFileAsync(file.ContentType, 800, 600);
+                await using var stream = resizedImage.OpenReadStream(MaxFileSizeMB * 1024 * 1024);
+                var buffer = new byte[stream.Length];
+                await stream.ReadAsync(buffer);
+                uploadingFile.PreviewUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(buffer)}";
+                StateHasChanged();
+            }
+
+            await UploadFile(uploadingFile, file);
+        }
+        catch (Exception ex)
+        {
+            uploadingFile.Error = ex.Message;
+            uploadingFile.Progress = 0;
+            StateHasChanged();
+        }
+    }
+
+    private bool ValidateFile(UploadingFile file, out string? error)
+    {
+        error = null;
+
+        var maxBytes = MaxFileSizeMB * 1024 * 1024;
+        if (file.Size > maxBytes)
+        {
+            error = $"{file.FileName}: File size exceeds {MaxFileSizeMB}MB limit";
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(AcceptedFileTypes))
+        {
+            var acceptedTypes = AcceptedFileTypes.Split(',').Select(t => t.Trim()).ToList();
+            var isAccepted = acceptedTypes.Any(type =>
+            {
+                if (type.EndsWith("/*"))
+                {
+                    var prefix = type.Substring(0, type.Length - 2);
+                    return file.MimeType?.StartsWith(prefix) == true;
+                }
+                return file.MimeType == type;
+            });
+
+            if (!isAccepted)
+            {
+                error = $"{file.FileName}: File type not accepted";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private async Task UploadFile(UploadingFile uploadingFile, IBrowserFile file)
+    {
+        if (HttpClient == null || string.IsNullOrEmpty(UploadUrl))
+        {
+            uploadingFile.Error = "Upload not configured";
+            return;
+        }
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(file.OpenReadStream(MaxFileSizeMB * 1024 * 1024));
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+            content.Add(fileContent, "file", file.Name);
+
+            uploadingFile.Progress = 10;
+            StateHasChanged();
+
+            var response = await HttpClient.PostAsync(UploadUrl, content);
+
+            uploadingFile.Progress = 90;
+            StateHasChanged();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<UploadResponse>();
+                
+                var uploadedFile = new UploadedFile
+                {
+                    FileName = uploadingFile.FileName,
+                    Size = uploadingFile.Size,
+                    MimeType = uploadingFile.MimeType,
+                    Url = result?.Url ?? string.Empty,
+                    ThumbnailUrl = uploadingFile.PreviewUrl,
+                    BlobId = result?.BlobId
+                };
+
+                uploadingFiles.Remove(uploadingFile);
+                uploadedFiles.Add(uploadedFile);
+                
+                uploadingFile.Progress = 100;
+                StateHasChanged();
+
+                if (OnFilesUploaded.HasDelegate)
+                {
+                    await OnFilesUploaded.InvokeAsync(uploadedFiles);
+                }
+            }
+            else
+            {
+                uploadingFile.Error = $"Upload failed: {response.StatusCode}";
+                uploadingFile.Progress = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            uploadingFile.Error = $"Upload failed: {ex.Message}";
+            uploadingFile.Progress = 0;
+        }
+
+        StateHasChanged();
+    }
+
+    private void RetryUpload(UploadingFile file)
+    {
+        file.Error = null;
+        file.Progress = 0;
+        StateHasChanged();
+    }
+
+    private void RemoveUploadingFile(UploadingFile file)
+    {
+        uploadingFiles.Remove(file);
+        StateHasChanged();
+    }
+
+    private async Task RemoveUploadedFile(UploadedFile file)
+    {
+        uploadedFiles.Remove(file);
+        
+        if (OnFileRemoved.HasDelegate)
+        {
+            await OnFileRemoved.InvokeAsync(file);
+        }
+        
+        StateHasChanged();
+    }
+
+    private void UpdateAltText(UploadedFile file, string? altText)
+    {
+        file.AltText = altText;
+        
+        if (OnFilesUploaded.HasDelegate)
+        {
+            _ = OnFilesUploaded.InvokeAsync(uploadedFiles);
+        }
+    }
+
+    private string GetAcceptedTypesDisplay()
+    {
+        var types = AcceptedFileTypes.Split(',').Select(t => t.Trim()).ToList();
+        var display = new List<string>();
+        
+        foreach (var type in types)
+        {
+            if (type == "image/*") display.Add("Images");
+            else if (type == "video/*") display.Add("Videos");
+            else if (type == "audio/*") display.Add("Audio");
+            else display.Add(type.Replace("image/", "").Replace("video/", "").Replace("audio/", "").ToUpper());
+        }
+        
+        return string.Join(", ", display.Distinct());
+    }
+
+    private string GetFileIcon(string? mimeType)
+    {
+        if (mimeType == null) return "📄";
+        if (mimeType.StartsWith("image/")) return "🖼️";
+        if (mimeType.StartsWith("video/")) return "🎬";
+        if (mimeType.StartsWith("audio/")) return "🎵";
+        return "📄";
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+
+    /// <summary>
+    /// Gets the list of uploaded files.
+    /// </summary>
+    public List<UploadedFile> GetUploadedFiles() => uploadedFiles;
+
+    /// <summary>
+    /// Clears all uploaded files.
+    /// </summary>
+    public void ClearFiles()
+    {
+        uploadedFiles.Clear();
+        uploadingFiles.Clear();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Represents a file being uploaded.
+    /// </summary>
+    public class UploadingFile
+    {
+        public string FileName { get; set; } = string.Empty;
+        public long Size { get; set; }
+        public string? MimeType { get; set; }
+        public string? PreviewUrl { get; set; }
+        public int Progress { get; set; }
+        public string? Error { get; set; }
+    }
+
+    /// <summary>
+    /// Represents an uploaded file.
+    /// </summary>
+    public class UploadedFile
+    {
+        public string FileName { get; set; } = string.Empty;
+        public long Size { get; set; }
+        public string? MimeType { get; set; }
+        public string Url { get; set; } = string.Empty;
+        public string? ThumbnailUrl { get; set; }
+        public string? BlobId { get; set; }
+        public string? AltText { get; set; }
+    }
+
+    private class UploadResponse
+    {
+        public string? Url { get; set; }
+        public string? BlobId { get; set; }
+        public string? ContentType { get; set; }
+    }
+}

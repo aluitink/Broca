@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
 @using Broca.ActivityPub.Core.Interfaces
+@using Broca.Web.Components.Media
 @inject IActivityPubClient Client
 @inject ILogger<ProfileEditor> Logger
 
@@ -11,17 +12,17 @@
     {
         <div class="editor-loading">
             <FluentProgressRing />
-            <p>Loading...</p>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Loading...</FluentLabel>
         </div>
     }
     else if (isEditing)
     {
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
-                <h3>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
                     <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" Color="Color.Accent" />
-                    Edit Profile
-                </h3>
+                    <FluentLabel Typo="Typography.Subject">Edit Profile</FluentLabel>
+                </FluentStack>
             </FluentStack>
 
             @if (!string.IsNullOrEmpty(errorMessage))
@@ -78,25 +79,92 @@
                     </div>
 
                     <div class="form-field">
-                        <FluentTextField 
-                            @bind-Value="editModel.IconUrl"
-                            Label="Profile Picture URL"
-                            Placeholder="https://example.com/avatar.jpg"
-                            Style="width: 100%;">
-                            <FluentIcon Value="@(new Icons.Regular.Size20.Image())" Slot="start" Color="Color.Neutral" />
-                        </FluentTextField>
-                        <ValidationMessage For="@(() => editModel.IconUrl)" />
+                        <FluentLabel>Profile Picture</FluentLabel>
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-bottom: 0.5rem;">
+                            <FluentButton Appearance="@(useAvatarUpload ? Appearance.Outline : Appearance.Accent)"
+                                          OnClick="@(() => useAvatarUpload = false)">URL</FluentButton>
+                            <FluentButton Appearance="@(useAvatarUpload ? Appearance.Accent : Appearance.Outline)"
+                                          OnClick="@(() => useAvatarUpload = true)">Upload</FluentButton>
+                        </FluentStack>
+                        @if (useAvatarUpload)
+                        {
+                            <FluentMediaUpload UploadUrl="@MediaUploadUrl"
+                                               AcceptedFileTypes="image/*"
+                                               AllowMultiple="false"
+                                               MaxFiles="1"
+                                               ShowAltTextInput="false"
+                                               OnFilesUploaded="@HandleAvatarFilesUploaded" />
+                        }
+                        else
+                        {
+                            <FluentTextField 
+                                @bind-Value="editModel.IconUrl"
+                                Placeholder="https://example.com/avatar.jpg"
+                                Style="width: 100%;">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.Image())" Slot="start" Color="Color.Neutral" />
+                            </FluentTextField>
+                            <ValidationMessage For="@(() => editModel.IconUrl)" />
+                        }
+                        @if (!string.IsNullOrEmpty(editModel.IconUrl))
+                        {
+                            <img src="@editModel.IconUrl" alt="Avatar preview" style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover; margin-top: 0.5rem;" />
+                        }
                     </div>
 
                     <div class="form-field">
-                        <FluentTextField 
-                            @bind-Value="editModel.ImageUrl"
-                            Label="Header/Banner Image URL"
-                            Placeholder="https://example.com/banner.jpg"
-                            Style="width: 100%;">
-                            <FluentIcon Value="@(new Icons.Regular.Size20.ImageMultiple())" Slot="start" Color="Color.Neutral" />
-                        </FluentTextField>
-                        <ValidationMessage For="@(() => editModel.ImageUrl)" />
+                        <FluentLabel>Header / Banner Image</FluentLabel>
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-bottom: 0.5rem;">
+                            <FluentButton Appearance="@(useBannerUpload ? Appearance.Outline : Appearance.Accent)"
+                                          OnClick="@(() => useBannerUpload = false)">URL</FluentButton>
+                            <FluentButton Appearance="@(useBannerUpload ? Appearance.Accent : Appearance.Outline)"
+                                          OnClick="@(() => useBannerUpload = true)">Upload</FluentButton>
+                        </FluentStack>
+                        @if (useBannerUpload)
+                        {
+                            <FluentMediaUpload UploadUrl="@MediaUploadUrl"
+                                               AcceptedFileTypes="image/*"
+                                               AllowMultiple="false"
+                                               MaxFiles="1"
+                                               ShowAltTextInput="false"
+                                               OnFilesUploaded="@HandleBannerFilesUploaded" />
+                        }
+                        else
+                        {
+                            <FluentTextField 
+                                @bind-Value="editModel.ImageUrl"
+                                Placeholder="https://example.com/banner.jpg"
+                                Style="width: 100%;">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.ImageMultiple())" Slot="start" Color="Color.Neutral" />
+                            </FluentTextField>
+                            <ValidationMessage For="@(() => editModel.ImageUrl)" />
+                        }
+                        @if (!string.IsNullOrEmpty(editModel.ImageUrl))
+                        {
+                            <img src="@editModel.ImageUrl" alt="Banner preview" style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px; margin-top: 0.5rem;" />
+                        }
+                    </div>
+
+                    <div class="form-field">
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                            <FluentLabel>Custom Fields</FluentLabel>
+                            <FluentButton Appearance="Appearance.Outline"
+                                          OnClick="@AddCustomField"
+                                          Disabled="@(customFields.Count >= 4)">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Slot="start" />
+                                Add Field
+                            </FluentButton>
+                        </FluentStack>
+                        @foreach (var field in customFields)
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Style="margin-top: 0.5rem;">
+                                <FluentTextField @bind-Value="field.Name" Placeholder="Label" Style="flex: 1;" />
+                                <FluentTextField @bind-Value="field.Value" Placeholder="Value or URL" Style="flex: 2;" />
+                                <FluentButton Appearance="Appearance.Outline"
+                                              OnClick="@(() => RemoveCustomField(field))">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Color="Color.Error" />
+                                </FluentButton>
+                            </FluentStack>
+                        }
                     </div>
 
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
@@ -122,7 +190,7 @@
     {
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
-                <h3>Profile Information</h3>
+                <FluentLabel Typo="Typography.Subject">Profile Information</FluentLabel>
                 <FluentButton 
                     Appearance="Appearance.Accent"
                     OnClick="@StartEdit">
@@ -149,12 +217,18 @@
     [Parameter]
     public EventCallback<Actor> OnProfileUpdated { get; set; }
 
+    [Parameter]
+    public string? MediaUploadUrl { get; set; }
+
     private bool isEditing = false;
     private bool isLoading = false;
     private bool isSaving = false;
+    private bool useAvatarUpload = false;
+    private bool useBannerUpload = false;
     private string? errorMessage;
     private string? successMessage;
     private ProfileEditModel editModel = new();
+    private List<CustomFieldEntry> customFields = new();
 
     protected override void OnParametersSet()
     {
@@ -177,6 +251,19 @@
             IconUrl = GetIconUrl(person),
             ImageUrl = GetImageUrl(person)
         };
+
+        customFields = new List<CustomFieldEntry>();
+        if (person.Attachment != null)
+        {
+            foreach (var item in person.Attachment)
+            {
+                if (item is KristofferStrube.ActivityStreams.Object obj && obj.Name?.FirstOrDefault() is { } name)
+                {
+                    var value = obj.Url?.FirstOrDefault()?.Href?.ToString() ?? obj.Id ?? string.Empty;
+                    customFields.Add(new CustomFieldEntry { Name = name, Value = value });
+                }
+            }
+        }
     }
 
     private string? GetIconUrl(Person person)
@@ -345,6 +432,25 @@
             updatedPerson.Image = person.Image;
         }
 
+        if (customFields.Any(f => !string.IsNullOrWhiteSpace(f.Name)))
+        {
+            updatedPerson.Attachment = customFields
+                .Where(f => !string.IsNullOrWhiteSpace(f.Name))
+                .Select(f =>
+                {
+                    ILink[]? url = null;
+                    if (!string.IsNullOrWhiteSpace(f.Value) && Uri.TryCreate(f.Value, UriKind.Absolute, out var uri))
+                        url = new ILink[] { new Link { Href = uri } };
+                    return (IObjectOrLink)new KristofferStrube.ActivityStreams.Object
+                    {
+                        Type = new[] { "PropertyValue" },
+                        Name = new[] { f.Name },
+                        Url = url
+                    };
+                })
+                .ToArray();
+        }
+
         return await Task.FromResult(updatedPerson);
     }
 
@@ -402,6 +508,37 @@
         public string? Summary { get; set; }
         public string? IconUrl { get; set; }
         public string? ImageUrl { get; set; }
+    }
+
+    private class CustomFieldEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+    }
+
+    private void AddCustomField()
+    {
+        if (customFields.Count < 4)
+            customFields.Add(new CustomFieldEntry());
+    }
+
+    private void RemoveCustomField(CustomFieldEntry field)
+    {
+        customFields.Remove(field);
+    }
+
+    private void HandleAvatarFilesUploaded(List<FluentMediaUpload.UploadedFile> files)
+    {
+        if (files.FirstOrDefault() is { } file)
+            editModel.IconUrl = file.Url;
+        StateHasChanged();
+    }
+
+    private void HandleBannerFilesUploaded(List<FluentMediaUpload.UploadedFile> files)
+    {
+        if (files.FirstOrDefault() is { } file)
+            editModel.ImageUrl = file.Url;
+        StateHasChanged();
     }
 
     private class DisplayDataItem

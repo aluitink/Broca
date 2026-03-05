@@ -1,0 +1,276 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+
+<div class="activitypub-bookmarks-list">
+    @if (ListTemplate != null)
+    {
+        @ListTemplate(this)
+    }
+    else
+    {
+        <div class="bookmarks-container">
+            <div class="bookmarks-header">
+                <h2>Bookmarks</h2>
+                <div class="header-actions">
+                    <input type="text" 
+                           class="search-input"
+                           @bind="SearchQuery" 
+                           @bind:event="oninput"
+                           placeholder="Search bookmarks..." />
+                    
+                    @if (AllowFolders)
+                    {
+                        <button type="button" class="btn-new-folder" @onclick="ShowNewFolderDialog">
+                            New Folder
+                        </button>
+                    }
+                    
+                    @if (AllowExport)
+                    {
+                        <button type="button" class="btn-export" @onclick="ExportBookmarks">
+                            Export
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="bookmarks-layout">
+                @if (AllowFolders && Folders.Any())
+                {
+                    <div class="folders-sidebar">
+                        <div class="folder-item @(SelectedFolder == null ? "active" : "")" 
+                             @onclick="() => SelectFolder(null)">
+                            <span class="folder-icon">📑</span>
+                            <span class="folder-name">All Bookmarks</span>
+                            <span class="folder-count">@TotalCount</span>
+                        </div>
+                        
+                        @foreach (var folder in Folders)
+                        {
+                            <div class="folder-item @(SelectedFolder?.Id == folder.Id ? "active" : "")" 
+                                 @onclick="() => SelectFolder(folder)">
+                                <span class="folder-icon">📁</span>
+                                <span class="folder-name">@folder.Name</span>
+                                <span class="folder-count">@folder.Count</span>
+                                @if (AllowFolderEdit)
+                                {
+                                    <button type="button" 
+                                            class="btn-folder-menu" 
+                                            @onclick:stopPropagation="true"
+                                            @onclick="() => ShowFolderMenu(folder)">
+                                        ⋮
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="bookmarks-content">
+                    @if (IsLoading)
+                    {
+                        <div class="loading-state">
+                            <span>Loading bookmarks...</span>
+                        </div>
+                    }
+                    else if (!FilteredBookmarks.Any())
+                    {
+                        <div class="empty-state">
+                            <p>@(string.IsNullOrWhiteSpace(SearchQuery) ? "No bookmarks yet" : "No bookmarks found")</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="bookmarks-grid" data-view="@ViewMode">
+                            @foreach (var bookmark in FilteredBookmarks)
+                            {
+                                <div class="bookmark-item" data-bookmark-id="@bookmark.Id">
+                                    @if (ItemTemplate != null)
+                                    {
+                                        @ItemTemplate(bookmark)
+                                    }
+                                    else
+                                    {
+                                        <div class="bookmark-content">
+                                            @if (bookmark.Object != null)
+                                            {
+                                                <div class="bookmark-preview">
+                                                    @if (bookmark.Object.Content?.FirstOrDefault() is string content)
+                                                    {
+                                                        <p>@content</p>
+                                                    }
+                                                </div>
+                                            }
+                                            <div class="bookmark-meta">
+                                                <span class="bookmark-date">@bookmark.CreatedAt.ToString("MMM d, yyyy")</span>
+                                                @if (bookmark.Folder != null)
+                                                {
+                                                    <span class="bookmark-folder">@bookmark.Folder.Name</span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="bookmark-actions">
+                                            @if (AllowFolders)
+                                            {
+                                                <button type="button" @onclick="() => ShowMoveDialog(bookmark)">
+                                                    Move
+                                                </button>
+                                            }
+                                            <button type="button" @onclick="() => RemoveBookmark(bookmark)">
+                                                Remove
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        @if (HasMore)
+                        {
+                            <div class="load-more">
+                                <button type="button" 
+                                        class="btn-load-more" 
+                                        @onclick="LoadMore"
+                                        disabled="@IsLoadingMore">
+                                    @if (IsLoadingMore)
+                                    {
+                                        <span>Loading...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Load More</span>
+                                    }
+                                </button>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<BookmarkItem> Bookmarks { get; set; } = new();
+    [Parameter] public List<BookmarkFolder> Folders { get; set; } = new();
+    [Parameter] public bool AllowFolders { get; set; } = true;
+    [Parameter] public bool AllowFolderEdit { get; set; } = true;
+    [Parameter] public bool AllowExport { get; set; } = true;
+    [Parameter] public int PageSize { get; set; } = 20;
+    [Parameter] public BookmarksViewMode ViewMode { get; set; } = BookmarksViewMode.List;
+    [Parameter] public EventCallback<BookmarkItem> OnRemove { get; set; }
+    [Parameter] public EventCallback<(BookmarkItem, BookmarkFolder?)> OnMove { get; set; }
+    [Parameter] public EventCallback<BookmarkFolder> OnCreateFolder { get; set; }
+    [Parameter] public EventCallback<BookmarkFolder> OnEditFolder { get; set; }
+    [Parameter] public EventCallback<BookmarkFolder> OnDeleteFolder { get; set; }
+    [Parameter] public EventCallback OnExport { get; set; }
+    [Parameter] public EventCallback<int> OnLoadMore { get; set; }
+    [Parameter] public RenderFragment<BookmarksList>? ListTemplate { get; set; }
+    [Parameter] public RenderFragment<BookmarkItem>? ItemTemplate { get; set; }
+
+    public string SearchQuery { get; set; } = "";
+    public BookmarkFolder? SelectedFolder { get; set; }
+    public bool IsLoading { get; set; }
+    public bool IsLoadingMore { get; set; }
+    public bool HasMore { get; set; } = true;
+    public int CurrentPage { get; set; } = 1;
+
+    public List<BookmarkItem> FilteredBookmarks => Bookmarks
+        .Where(b => (SelectedFolder == null || b.Folder?.Id == SelectedFolder.Id) &&
+                   (string.IsNullOrWhiteSpace(SearchQuery) || MatchesSearch(b)))
+        .OrderByDescending(b => b.CreatedAt)
+        .Take(CurrentPage * PageSize)
+        .ToList();
+
+    public int TotalCount => Bookmarks.Count;
+
+    public bool MatchesSearch(BookmarkItem bookmark)
+    {
+        var query = SearchQuery.ToLowerInvariant();
+        if (bookmark.Object?.Content?.FirstOrDefault() is string content)
+        {
+            return content.ToLowerInvariant().Contains(query);
+        }
+        return false;
+    }
+
+    public void SelectFolder(BookmarkFolder? folder)
+    {
+        SelectedFolder = folder;
+        CurrentPage = 1;
+        StateHasChanged();
+    }
+
+    public async Task HandleSearch()
+    {
+        CurrentPage = 1;
+        await Task.Delay(300);
+        StateHasChanged();
+    }
+
+    public async Task RemoveBookmark(BookmarkItem bookmark)
+    {
+        await OnRemove.InvokeAsync(bookmark);
+        Bookmarks.Remove(bookmark);
+        StateHasChanged();
+    }
+
+    public async Task LoadMore()
+    {
+        IsLoadingMore = true;
+        StateHasChanged();
+
+        try
+        {
+            CurrentPage++;
+            await OnLoadMore.InvokeAsync(CurrentPage);
+        }
+        finally
+        {
+            IsLoadingMore = false;
+            StateHasChanged();
+        }
+    }
+
+    public void ShowNewFolderDialog()
+    {
+    }
+
+    public void ShowFolderMenu(BookmarkFolder folder)
+    {
+    }
+
+    public void ShowMoveDialog(BookmarkItem bookmark)
+    {
+    }
+
+    public async Task ExportBookmarks()
+    {
+        await OnExport.InvokeAsync();
+    }
+
+    public enum BookmarksViewMode
+    {
+        List,
+        Grid,
+        Compact
+    }
+
+    public class BookmarkItem
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public IObject? Object { get; set; }
+        public string? ObjectId { get; set; }
+        public BookmarkFolder? Folder { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public class BookmarkFolder
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Name { get; set; } = "";
+        public int Count { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+    }
+}

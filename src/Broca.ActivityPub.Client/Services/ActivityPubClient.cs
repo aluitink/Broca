@@ -2,11 +2,11 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Broca.ActivityPub.Client.Services;
 
@@ -180,7 +180,7 @@ public class ActivityPubClient : IActivityPubClient
     }
 
     /// <inheritdoc/>
-    public async Task<Actor> GetActorByAliasAsync(string alias, CancellationToken cancellationToken = default)
+    public virtual async Task<Actor> GetActorByAliasAsync(string alias, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(alias);
 
@@ -206,7 +206,7 @@ public class ActivityPubClient : IActivityPubClient
     }
 
     /// <inheritdoc/>
-    public async Task<T?> GetAsync<T>(Uri uri, bool useCache = true, CancellationToken cancellationToken = default)
+    public virtual async Task<T?> GetAsync<T>(Uri uri, bool useCache = true, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(uri);
 
@@ -322,7 +322,10 @@ public class ActivityPubClient : IActivityPubClient
                 yield break;
 
             // Top-level collection with no inline items: navigate to first page
-            if (collection is not CollectionPage && collection.Items == null && collection.OrderedItems == null)
+            var hasInlineItems = (collection.Items != null && collection.Items.Any()) || 
+                                 (collection.OrderedItems != null && collection.OrderedItems.Any());
+            
+            if (collection is not CollectionPage && !hasInlineItems)
             {
                 if (collection.First is CollectionPage inlineFirstPage)
                 {
@@ -356,6 +359,23 @@ public class ActivityPubClient : IActivityPubClient
                 ? GetCollectionPageUri(collectionPage.Next)
                 : null;
         }
+    }
+
+    /// <inheritdoc/>
+    public IAsyncEnumerable<T> GetCollectionAsync<T>(
+        Uri collectionUri,
+        CollectionSearchParameters search,
+        int? limit = null,
+        CancellationToken cancellationToken = default)
+    {
+        var searchQuery = search.ToQueryString();
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var separator = collectionUri.Query.Length > 0 ? "&" : "?";
+            collectionUri = new Uri($"{collectionUri}{separator}{searchQuery}");
+        }
+
+        return GetCollectionAsync<T>(collectionUri, limit, cancellationToken);
     }
 
     private static Uri? GetCollectionPageUri(ICollectionPageOrLink? pageOrLink) =>
@@ -473,20 +493,31 @@ public class ActivityPubClient : IActivityPubClient
             throw new InvalidOperationException("PublicKeyId and PrivateKeyPem are required for signing requests");
         }
 
+        // Validate PEM format
+        if (!_options.PrivateKeyPem.Contains("BEGIN") || !_options.PrivateKeyPem.Contains("PRIVATE KEY"))
+        {
+            _logger.LogError("PrivateKeyPem does not appear to be a valid PEM format. First 50 chars: {PemPrefix}", 
+                _options.PrivateKeyPem.Substring(0, Math.Min(50, _options.PrivateKeyPem.Length)));
+            throw new InvalidOperationException("PrivateKeyPem does not appear to be in valid PEM format");
+        }
+
         _logger.LogDebug("Signing request to {Uri} with key ID {KeyId}", request.RequestUri, _options.PublicKeyId);
 
         var method = request.Method.ToString();
         var uri = request.RequestUri!;
         var contentType = request.Content?.Headers.ContentType?.ToString();
-        var accept = request.Headers.Accept.Count > 0 ? request.Headers.Accept.ToString() : null;
 
+        // Accept is already set on the request; passing it here would cause ApplyHttpSignatureAsync
+        // to add it a second time via TryAddWithoutValidation, producing a duplicate Accept header
+        // whose value no longer matches the signed value — breaking signature verification on
+        // servers like Threads that check all signed headers.
         await _signatureService.ApplyHttpSignatureAsync(
             method,
             uri,
             (headerName, headerValue) => request.Headers.TryAddWithoutValidation(headerName, headerValue),
             _options.PublicKeyId,
             _options.PrivateKeyPem,
-            accept,
+            accept: null,
             contentType,
             async (ct) => request.Content != null ? await request.Content.ReadAsByteArrayAsync(ct) : Array.Empty<byte>(),
             cancellationToken);

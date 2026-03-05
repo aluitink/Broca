@@ -20,6 +20,7 @@ public class BrocaTestServer : WebApplicationFactory<Broca.API.Program>, IAsyncD
     private readonly string _instanceName;
     private readonly TestServerRoutingHandler? _routingHandler;
     private readonly Dictionary<string, string?>? _additionalConfiguration;
+    private readonly Action<IServiceCollection>? _configureServices;
     private bool _initialized;
 
     public string BaseUrl => _baseUrl;
@@ -39,13 +40,15 @@ public class BrocaTestServer : WebApplicationFactory<Broca.API.Program>, IAsyncD
         string domain, 
         string instanceName, 
         TestServerRoutingHandler? routingHandler = null,
-        Dictionary<string, string?>? additionalConfiguration = null)
+        Dictionary<string, string?>? additionalConfiguration = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         _baseUrl = baseUrl;
         _domain = domain;
         _instanceName = instanceName;
         _routingHandler = routingHandler;
         _additionalConfiguration = additionalConfiguration;
+        _configureServices = configureServices;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -76,6 +79,8 @@ public class BrocaTestServer : WebApplicationFactory<Broca.API.Program>, IAsyncD
         builder.ConfigureServices(services =>
         {
             services.AddInMemoryPersistence();
+
+            _configureServices?.Invoke(services);
 
             // If routing is configured, replace the HttpClientFactory
             if (_routingHandler != null)

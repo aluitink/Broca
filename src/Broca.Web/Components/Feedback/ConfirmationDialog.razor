@@ -8,10 +8,10 @@
                 <FluentIcon Value="@Icon" Color="@GetIconColor()" />
             </div>
         }
-        <h3 class="confirmation-title">@Title</h3>
+        <FluentLabel Typo="Typography.Subject">@Title</FluentLabel>
         @if (!string.IsNullOrEmpty(Message))
         {
-            <p class="confirmation-message">@Message</p>
+            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@Message</FluentLabel>
         }
         @if (ShowInput)
         {

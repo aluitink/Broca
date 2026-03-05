@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
@@ -15,7 +14,6 @@ public class InboxProcessor : IInboxHandler
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
     private readonly IActivityBuilderFactory _activityBuilderFactory;
-    private readonly HttpSignatureService _signatureService;
     private readonly AdminOperationsHandler _adminOperationsHandler;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ActivityDeliveryService _deliveryService;
@@ -27,7 +25,6 @@ public class InboxProcessor : IInboxHandler
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
         IActivityBuilderFactory activityBuilderFactory,
-        HttpSignatureService signatureService,
         AdminOperationsHandler adminOperationsHandler,
         AttachmentProcessingService attachmentProcessingService,
         ActivityDeliveryService deliveryService,
@@ -38,7 +35,6 @@ public class InboxProcessor : IInboxHandler
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
         _activityBuilderFactory = activityBuilderFactory;
-        _signatureService = signatureService;
         _adminOperationsHandler = adminOperationsHandler;
         _attachmentProcessingService = attachmentProcessingService;
         _deliveryService = deliveryService;
@@ -250,22 +246,26 @@ public class InboxProcessor : IInboxHandler
         return false;
     }
 
-    private Task<bool> HandleAcceptAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task<bool> HandleAcceptAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {
-        // A remote actor accepted our Follow request.
-        // The following collection is updated optimistically when the Follow is sent (in OutboxProcessor),
-        // so no further action is required here beyond acknowledging receipt.
-        if (activity is Activity acceptActivity)
+        if (activity is not Activity acceptActivity)
+            return true;
+
+        var acceptingActorId = acceptActivity.Actor?.FirstOrDefault() switch
         {
-            var acceptingActorId = acceptActivity.Actor?.FirstOrDefault() switch
-            {
-                ILink link => link.Href?.ToString(),
-                IObject obj => obj.Id,
-                _ => null
-            };
-            _logger.LogInformation("Follow request by {Username} accepted by {AcceptingActorId}", username, acceptingActorId);
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (acceptingActorId != null)
+        {
+            await _actorRepository.RemovePendingFollowingAsync(username, acceptingActorId, cancellationToken);
+            await _actorRepository.AddFollowingAsync(username, acceptingActorId, cancellationToken);
+            _logger.LogInformation("Follow of {AcceptingActorId} by {Username} accepted; added to following", acceptingActorId, username);
         }
-        return Task.FromResult(true);
+
+        return true;
     }
 
     private async Task<bool> HandleRejectAsync(string username, IObject? activity, CancellationToken cancellationToken)
@@ -299,8 +299,9 @@ public class InboxProcessor : IInboxHandler
 
             if (rejectingActorId != null)
             {
+                await _actorRepository.RemovePendingFollowingAsync(username, rejectingActorId, cancellationToken);
                 await _actorRepository.RemoveFollowingAsync(username, rejectingActorId, cancellationToken);
-                _logger.LogInformation("Follow of {RejectingActorId} by {Username} was rejected - removed from following",
+                _logger.LogInformation("Follow of {RejectingActorId} by {Username} was rejected - removed from pending-following",
                     rejectingActorId, username);
             }
         }

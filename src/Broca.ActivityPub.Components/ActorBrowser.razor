@@ -1,6 +1,7 @@
 @using Broca.ActivityPub.Core.Interfaces
 @using KristofferStrube.ActivityStreams
 @inject IActivityPubClient Client
+@implements IDisposable
 
 <div class="activitypub-actor-browser @CssClass">
     @if (SearchTemplate != null)
@@ -12,12 +13,66 @@
     else
     {
         <div class="actor-search-default">
-            <input type="text" 
-                   @bind="searchQuery" 
-                   @bind:event="oninput"
+            <input type="text"
+                   value="@searchQuery"
+                   @oninput="HandleSearchInput"
                    placeholder="Enter actor handle (e.g., user@domain.com)" 
                    class="search-input" />
             <button @onclick="SearchAsync" class="search-button">Search</button>
+        </div>
+    }
+
+    @if (ShowSearchHistory && searchHistory.Any() && string.IsNullOrWhiteSpace(searchQuery) && currentActor == null)
+    {
+        <div class="search-history">
+            <div class="history-header">
+                <span class="history-title">Recent Searches</span>
+                <button @onclick="ClearHistory" class="history-clear-button" title="Clear history">Clear</button>
+            </div>
+            <div class="history-items">
+                @foreach (var item in searchHistory)
+                {
+                    <button @onclick="@(() => SearchFromHistoryAsync(item))" class="history-item">
+                        <span class="history-icon">🔍</span>
+                        <span class="history-query">@item</span>
+                    </button>
+                }
+            </div>
+        </div>
+    }
+
+    @if (ShowSuggestedActors && suggestedActors.Any() && string.IsNullOrWhiteSpace(searchQuery) && currentActor == null)
+    {
+        <div class="suggested-actors">
+            <div class="suggestions-header">Suggested Accounts</div>
+            <div class="suggestions-list">
+                @foreach (var actor in suggestedActors)
+                {
+                    <div class="suggestion-item" @onclick="@(() => SelectSuggestedActor(actor))">
+                        @if (SuggestedActorTemplate != null)
+                        {
+                            @SuggestedActorTemplate(actor)
+                        }
+                        else
+                        {
+                            <div class="actor-card">
+                                @if (actor.Icon?.FirstOrDefault() is IImageOrLink icon && icon is Image img && img.Url?.Any() == true)
+                                {
+                                    <img src="@img.Url.First().Href" alt="Avatar" class="actor-avatar" />
+                                }
+                                else
+                                {
+                                    <div class="actor-avatar-placeholder">👤</div>
+                                }
+                                <div class="actor-info">
+                                    <div class="actor-name">@(actor.Name?.FirstOrDefault() ?? "Unknown")</div>
+                                    <div class="actor-handle">@GetActorHandle(actor)</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
         </div>
     }
 
@@ -52,7 +107,10 @@
             }
             else
             {
-                <ActorRenderer Actor="currentActor" />
+                <ActorProfile Actor="@currentActor" 
+                             ShowOutbox="false" 
+                             ShowFollowButton="@ShowFollowButton"
+                             OnFollowStateChanged="@HandleFollowStateChanged" />
             }
         </div>
     }
@@ -64,7 +122,9 @@
     private bool isLoading;
     private string? error;
     private List<string> searchHistory = new();
+    private List<KristofferStrube.ActivityStreams.Object> suggestedActors = new();
     private const int MaxHistorySize = 10;
+    private System.Threading.Timer? _debounceTimer;
 
     /// <summary>
     /// Gets or sets the CSS class for the container.
@@ -73,16 +133,39 @@
     public string? CssClass { get; set; }
 
     /// <summary>
+    /// Gets or sets the debounce delay in milliseconds for the search input.
+    /// </summary>
+    [Parameter]
+    public int DebounceMilliseconds { get; set; } = 400;
+
+    /// <summary>
     /// Gets or sets whether to show search history.
     /// </summary>
     [Parameter]
     public bool ShowSearchHistory { get; set; } = true;
+
+    /// <summary>whether to show suggested actors.
+    /// </summary>
+    [Parameter]
+    public bool ShowSuggestedActors { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the list of suggested actors to display.
+    /// </summary>
+    [Parameter]
+    public List<KristofferStrube.ActivityStreams.Object>? SuggestedActors { get; set; }
 
     /// <summary>
     /// Gets or sets the search input template.
     /// </summary>
     [Parameter]
     public RenderFragment<SearchContext>? SearchTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the suggested actor template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? SuggestedActorTemplate { get; set; }
 
     /// <summary>
     /// Gets or sets the profile display template.
@@ -101,12 +184,32 @@
     /// </summary>
     [Parameter]
     public RenderFragment<string>? ErrorTemplate { get; set; }
+protected override void OnParametersSet()
+    {
+        if (SuggestedActors != null)
+        {
+            suggestedActors = SuggestedActors;
+        }
+    }
 
+    
     /// <summary>
     /// Gets or sets a callback for when an actor is found.
     /// </summary>
     [Parameter]
     public EventCallback<KristofferStrube.ActivityStreams.Object> OnActorFound { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the follow button.
+    /// </summary>
+    [Parameter]
+    public bool ShowFollowButton { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a callback for when follow state changes.
+    /// </summary>
+    [Parameter]
+    public EventCallback<(KristofferStrube.ActivityStreams.Object Actor, bool IsFollowing)> OnFollowStateChanged { get; set; }
 
     /// <summary>
     /// Searches for an actor by handle or ID.
@@ -193,6 +296,61 @@
     {
         searchHistory.Clear();
         StateHasChanged();
+    }
+
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchQuery = e.Value?.ToString() ?? string.Empty;
+        _debounceTimer?.Dispose();
+        _debounceTimer = null;
+
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            _debounceTimer = new System.Threading.Timer(
+                _ => InvokeAsync(SearchAsync),
+                null,
+                DebounceMilliseconds,
+                System.Threading.Timeout.Infinite);
+        }
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+    }
+
+    private async Task HandleFollowStateChanged(bool isFollowing)
+    {
+        if (currentActor != null && OnFollowStateChanged.HasDelegate)
+        {
+            await OnFollowStateChanged.InvokeAsync((currentActor, isFollowing));
+        }
+    }
+
+    private async Task SelectSuggestedActor(KristofferStrube.ActivityStreams.Object actor)
+    {
+        currentActor = actor;
+        searchQuery = GetActorHandle(actor);
+        
+        if (OnActorFound.HasDelegate)
+        {
+            await OnActorFound.InvokeAsync(actor);
+        }
+        
+        StateHasChanged();
+    }
+
+    private string GetActorHandle(KristofferStrube.ActivityStreams.Object actor)
+    {
+        var preferredUsername = actor is Actor a ? a.PreferredUsername : null;
+        var id = actor.Id?.ToString() ?? "";
+        
+        if (!string.IsNullOrEmpty(preferredUsername) && Uri.TryCreate(id, UriKind.Absolute, out var uri))
+        {
+            return $"@{preferredUsername}@{uri.Host}";
+        }
+        
+        return id;
     }
 
     /// <summary>

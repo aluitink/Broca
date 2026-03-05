@@ -170,6 +170,11 @@ public interface INoteBuilder
     INoteBuilder ToFollowers();
 
     /// <summary>
+    /// Adds the actor's followers to the Cc field
+    /// </summary>
+    INoteBuilder CcFollowers();
+
+    /// <summary>
     /// Adds a tag or mention
     /// </summary>
     INoteBuilder WithMention(string actorId, string name);

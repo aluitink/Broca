@@ -753,14 +753,14 @@ public class ServerToServerTests : TwoServerFixture
             TimeSpan.FromSeconds(10));
 
         // Assert - Fetch Alice's following collection via HTTP
-        var aliceFollowingResponse = await ClientA.GetAsync("/users/alice/following");
+        var aliceFollowingResponse = await ClientA.GetAsync("/users/alice/following?page=0");
         Assert.True(aliceFollowingResponse.IsSuccessStatusCode);
         
         var aliceFollowingJson = await aliceFollowingResponse.Content.ReadAsStringAsync();
         Assert.Contains(bobId, aliceFollowingJson);
 
         // Assert - Fetch Bob's followers collection via HTTP
-        var bobFollowersResponse = await ClientB.GetAsync("/users/bob/followers");
+        var bobFollowersResponse = await ClientB.GetAsync("/users/bob/followers?page=0");
         Assert.True(bobFollowersResponse.IsSuccessStatusCode);
         
         var bobFollowersJson = await bobFollowersResponse.Content.ReadAsStringAsync();

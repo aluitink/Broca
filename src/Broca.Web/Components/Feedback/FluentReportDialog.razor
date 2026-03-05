@@ -1,0 +1,195 @@
+@using KristofferStrube.ActivityStreams
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Broca.ActivityPub.Components
+@using static Broca.ActivityPub.Components.ReportDialog
+@implements IDialogContentComponent<FluentReportDialogData>
+@using Microsoft.AspNetCore.Components.Forms
+
+<FluentDialogBody>
+    <div class="fluent-report-dialog">
+        <div class="dialog-icon">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Flag())" Color="Color.Error" />
+        </div>
+        
+        <FluentLabel Typo="Typography.Subject">Report @(Content.ReportType == ReportTargetType.Actor ? "User" : "Post")</FluentLabel>
+
+        <div class="report-form">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                <div class="report-section">
+                    <FluentLabel Weight="FontWeight.Bold">Why are you reporting this?</FluentLabel>
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                        @foreach (var reason in _reasonOptions)
+                        {
+                            <FluentCheckbox Label="@reason.Label" 
+                                          @bind-Value="@reason.Selected"
+                                          @bind-Value:after="StateHasChanged" />
+                        }
+                    </FluentStack>
+                </div>
+
+                <div class="report-section">
+                    <FluentTextArea Label="Additional details (optional)"
+                                   @bind-Value="@_notes"
+                                   Placeholder="Please provide any additional context..."
+                                   Maxlength="@Content.MaxNotesLength"
+                                   Rows="4"
+                                   Style="width: 100%;" />
+                    <div class="character-count">@_notes.Length / @Content.MaxNotesLength</div>
+                </div>
+
+                @if (Content.AllowForward && Content.ReportType == ReportTargetType.Post && !Content.IsLocalActor)
+                {
+                    <div class="report-section">
+                        <FluentCheckbox Label="Forward this report to the remote server" 
+                                      @bind-Value="@_forwardToRemoteServer" />
+                        <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 0.875rem;">
+                            This will send a copy of your report to the server where this content is hosted.
+                        </FluentLabel>
+                    </div>
+                }
+
+                @if (Content.AllowBlock)
+                {
+                    <div class="report-section">
+                        <FluentCheckbox Label="@($"Block this {(Content.ReportType == ReportTargetType.Actor ? "user" : "user")} after reporting")" 
+                                      @bind-Value="@_blockAfterReport" />
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <FluentMessageBar Intent="MessageIntent.Error" 
+                                    Title="Error submitting report">
+                        @_errorMessage
+                    </FluentMessageBar>
+                }
+            </FluentStack>
+        </div>
+    </div>
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="@HandleCancel" Disabled="@_isSubmitting">
+        Cancel
+    </FluentButton>
+    <FluentButton Appearance="Appearance.Accent" OnClick="@HandleSubmit" Disabled="@(!CanSubmit || _isSubmitting)">
+        @if (_isSubmitting)
+        {
+            <FluentProgressRing Style="width: 16px; height: 16px;" />
+            <span>Submitting...</span>
+        }
+        else
+        {
+            <span>Submit Report</span>
+        }
+    </FluentButton>
+</FluentDialogFooter>
+
+@code {
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    [Parameter]
+    public FluentReportDialogData Content { get; set; } = default!;
+
+    private List<ReasonOption> _reasonOptions = new()
+    {
+        new ReasonOption { Value = "spam", Label = "Spam" },
+        new ReasonOption { Value = "harassment", Label = "Harassment or bullying" },
+        new ReasonOption { Value = "hate-speech", Label = "Hate speech or symbols" },
+        new ReasonOption { Value = "violence", Label = "Violence or threats" },
+        new ReasonOption { Value = "nsfw", Label = "Inappropriate or NSFW content" },
+        new ReasonOption { Value = "illegal", Label = "Illegal activity" },
+        new ReasonOption { Value = "impersonation", Label = "Impersonation" },
+        new ReasonOption { Value = "other", Label = "Other" }
+    };
+
+    private string _notes = "";
+    private bool _forwardToRemoteServer = false;
+    private bool _blockAfterReport = false;
+    private bool _isSubmitting = false;
+    private string? _errorMessage;
+
+    private bool CanSubmit => _reasonOptions.Any(r => r.Selected) && !_isSubmitting;
+
+    private async Task HandleSubmit()
+    {
+        if (!CanSubmit) return;
+
+        _isSubmitting = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var submission = new ReportSubmission
+            {
+                TargetObject = Content.TargetObject,
+                TargetActor = Content.TargetActor,
+                ReportType = Content.ReportType,
+                Reasons = _reasonOptions.Where(r => r.Selected).Select(r => r.Value).ToList(),
+                Notes = _notes,
+                ForwardToRemoteServer = _forwardToRemoteServer,
+                BlockAfterReport = _blockAfterReport
+            };
+
+            if (Content.OnSubmit.HasDelegate)
+            {
+                await Content.OnSubmit.InvokeAsync(submission);
+            }
+
+            await Dialog.CloseAsync(DialogResult.Ok(submission));
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+            _isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleCancel()
+    {
+        if (Content.OnCancel.HasDelegate)
+        {
+            await Content.OnCancel.InvokeAsync();
+        }
+        await Dialog.CancelAsync();
+    }
+
+    private class ReasonOption
+    {
+        public string Value { get; set; } = "";
+        public string Label { get; set; } = "";
+        public bool Selected { get; set; }
+    }
+}
+
+<style>
+    .fluent-report-dialog {
+        padding: 1rem 0;
+    }
+
+    .dialog-icon {
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+
+    .fluent-report-dialog h3 {
+        text-align: center;
+        margin: 0 0 1.5rem 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+
+    .report-section {
+        width: 100%;
+    }
+
+    .character-count {
+        text-align: right;
+        font-size: 0.75rem;
+        color: var(--neutral-foreground-hint);
+        margin-top: 0.25rem;
+    }
+</style>

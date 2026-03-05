@@ -1,0 +1,31 @@
+/* Fluent Block Renderer Styles */
+.fluent-block-card {
+    margin-bottom: 16px;
+    border-left: 3px solid var(--error);
+}
+
+.block-header {
+    align-items: center;
+}
+
+.block-timestamp {
+    white-space: nowrap;
+}
+
+.block-target {
+    margin: 0;
+    padding: 12px;
+    background-color: var(--neutral-layer-2);
+    border-radius: var(--control-corner-radius);
+}
+
+.block-reason {
+    margin: 0;
+    padding: 8px;
+    font-style: italic;
+    color: var(--neutral-foreground-hint);
+}
+
+.actor-info-clickable:hover {
+    opacity: 0.8;
+}

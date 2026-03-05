@@ -1,0 +1,124 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Components
+@inherits ComponentBase
+
+<div class="activitypub-update @CssClass">
+    @if (Update != null)
+    {
+        <div class="update-header">
+            @if (ShowActor && Update.Actor?.Any() == true)
+            {
+                var actorRef = Update.Actor.FirstOrDefault();
+                <span class="update-actor">
+                    @if (actorRef is IObject actorObj && actorObj.Name?.Any() == true)
+                    {
+                        @actorObj.Name.First()
+                    }
+                    else if (actorRef is ILink link)
+                    {
+                        @link.Href?.ToString()
+                    }
+                    else if (actorRef != null)
+                    {
+                        @actorRef.ToString()
+                    }
+                </span>
+            }
+            <span class="update-action"> updated 
+                @if (Update.Object?.Any() == true)
+                {
+                    var obj = Update.Object.FirstOrDefault();
+                    if (obj is IObject objectItem && objectItem.Type?.Any() == true)
+                    {
+                        <span class="update-object-type">@objectItem.Type.First().ToLower()</span>
+                    }
+                    else
+                    {
+                        <span class="update-object-type">an object</span>
+                    }
+                }
+            </span>
+            
+            @if (ShowTimestamp && Update.Published.HasValue)
+            {
+                <time class="update-timestamp" datetime="@Update.Published.Value.ToString("o")" title="@Update.Published.Value.ToString("f")">
+                    @Update.Published.Value.ToString("g")
+                </time>
+            }
+        </div>
+
+        @if (ShowObject && Update.Object?.Any() == true)
+        {
+            <div class="update-object">
+                @foreach (var obj in Update.Object)
+                {
+                    @if (ObjectRenderer != null)
+                    {
+                        @ObjectRenderer(obj)
+                    }
+                    else
+                    {
+                        <ObjectDisplay Object="@obj" 
+                                     ShowMissingRenderer="@ShowMissingRenderer"
+                                     AutoResolveLinks="true" />
+                    }
+                }
+            </div>
+        }
+
+        @if (AdditionalContent != null)
+        {
+            @AdditionalContent(Update)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Gets or sets the Update activity to render.
+    /// </summary>
+    [Parameter]
+    public Update? Update { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to show the actor who performed the update.
+    /// </summary>
+    [Parameter]
+    public bool ShowActor { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the updated object.
+    /// </summary>
+    [Parameter]
+    public bool ShowObject { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the timestamp of the update.
+    /// </summary>
+    [Parameter]
+    public bool ShowTimestamp { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show a message when no renderer is available for objects.
+    /// </summary>
+    [Parameter]
+    public bool ShowMissingRenderer { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom renderer for the updated object.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<object>? ObjectRenderer { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional content to render after the update.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Update>? AdditionalContent { get; set; }
+}

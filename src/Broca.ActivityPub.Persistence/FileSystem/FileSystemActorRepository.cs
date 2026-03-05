@@ -129,42 +129,36 @@ public class FileSystemActorRepository : IActorRepository, IActorStatistics
 
     public async Task<IEnumerable<string>> GetFollowersAsync(string username, CancellationToken cancellationToken = default)
     {
-        var followersPath = GetFollowersFilePath(username);
-        if (!File.Exists(followersPath))
-        {
-            return Array.Empty<string>();
-        }
+        return await ReadListFileAsync(GetFollowersFilePath(username), username, "followers", cancellationToken);
+    }
 
-        try
-        {
-            var json = await File.ReadAllTextAsync(followersPath, cancellationToken);
-            return JsonSerializer.Deserialize<List<string>>(json, _jsonOptions) ?? new List<string>();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error reading followers for {Username}", username);
-            return Array.Empty<string>();
-        }
+    public async Task<IEnumerable<string>> GetFollowersAsync(string username, int limit, int offset, CancellationToken cancellationToken = default)
+    {
+        var all = await ReadListFileAsync(GetFollowersFilePath(username), username, "followers", cancellationToken);
+        return all.Skip(offset).Take(limit);
+    }
+
+    public async Task<int> GetFollowersCountAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var list = await ReadListFileAsync(GetFollowersFilePath(username), username, "followers", cancellationToken);
+        return list.Count;
     }
 
     public async Task<IEnumerable<string>> GetFollowingAsync(string username, CancellationToken cancellationToken = default)
     {
-        var followingPath = GetFollowingFilePath(username);
-        if (!File.Exists(followingPath))
-        {
-            return Array.Empty<string>();
-        }
+        return await ReadListFileAsync(GetFollowingFilePath(username), username, "following", cancellationToken);
+    }
 
-        try
-        {
-            var json = await File.ReadAllTextAsync(followingPath, cancellationToken);
-            return JsonSerializer.Deserialize<List<string>>(json, _jsonOptions) ?? new List<string>();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error reading following for {Username}", username);
-            return Array.Empty<string>();
-        }
+    public async Task<IEnumerable<string>> GetFollowingAsync(string username, int limit, int offset, CancellationToken cancellationToken = default)
+    {
+        var all = await ReadListFileAsync(GetFollowingFilePath(username), username, "following", cancellationToken);
+        return all.Skip(offset).Take(limit);
+    }
+
+    public async Task<int> GetFollowingCountAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var list = await ReadListFileAsync(GetFollowingFilePath(username), username, "following", cancellationToken);
+        return list.Count;
     }
 
     public async Task AddFollowerAsync(string username, string followerActorId, CancellationToken cancellationToken = default)
@@ -193,6 +187,23 @@ public class FileSystemActorRepository : IActorRepository, IActorStatistics
 
     // Helper methods
 
+    private async Task<List<string>> ReadListFileAsync(string filePath, string username, string listType, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(filePath))
+            return new List<string>();
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(filePath, cancellationToken);
+            return JsonSerializer.Deserialize<List<string>>(json, _jsonOptions) ?? new List<string>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading {ListType} for {Username}", listType, username);
+            return new List<string>();
+        }
+    }
+
     private string GetUserDirectory(string username)
     {
         return Path.Combine(_dataPath, "actors", username.ToLowerInvariant());
@@ -216,6 +227,11 @@ public class FileSystemActorRepository : IActorRepository, IActorStatistics
     private string GetPendingFollowersFilePath(string username)
     {
         return Path.Combine(GetUserDirectory(username), "pending_followers.json");
+    }
+
+    private string GetPendingFollowingFilePath(string username)
+    {
+        return Path.Combine(GetUserDirectory(username), "pending_following.json");
     }
 
     private string GetCollectionsDirectory(string username)
@@ -318,6 +334,36 @@ public class FileSystemActorRepository : IActorRepository, IActorStatistics
     {
         await RemoveFromListAsync(GetPendingFollowersFilePath(username), followerActorId, cancellationToken);
         _logger.LogInformation("Removed pending follower {FollowerId} for {Username}", followerActorId, username);
+    }
+
+    public async Task<IEnumerable<string>> GetPendingFollowingAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var path = GetPendingFollowingFilePath(username);
+        if (!File.Exists(path))
+            return Array.Empty<string>();
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(path, cancellationToken);
+            return JsonSerializer.Deserialize<List<string>>(json, _jsonOptions) ?? new List<string>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading pending following for {Username}", username);
+            return Array.Empty<string>();
+        }
+    }
+
+    public async Task AddPendingFollowingAsync(string username, string followingActorId, CancellationToken cancellationToken = default)
+    {
+        await AddToListAsync(GetPendingFollowingFilePath(username), followingActorId, cancellationToken);
+        _logger.LogInformation("Added pending following {FollowingId} for {Username}", followingActorId, username);
+    }
+
+    public async Task RemovePendingFollowingAsync(string username, string followingActorId, CancellationToken cancellationToken = default)
+    {
+        await RemoveFromListAsync(GetPendingFollowingFilePath(username), followingActorId, cancellationToken);
+        _logger.LogInformation("Removed pending following {FollowingId} for {Username}", followingActorId, username);
     }
 
     public Task<IEnumerable<string>> GetAllLocalUsernamesAsync(CancellationToken cancellationToken = default)

@@ -18,9 +18,14 @@ public class DeliveryQueueItem
     public required IObjectOrLink Activity { get; set; }
 
     /// <summary>
-    /// The target inbox URL
+    /// The target inbox URL. May be empty if not yet resolved; <see cref="TargetActorId"/> will be used to resolve it at delivery time.
     /// </summary>
-    public required string InboxUrl { get; set; }
+    public string InboxUrl { get; set; } = "";
+
+    /// <summary>
+    /// The target actor ID used to resolve the inbox URL at delivery time when <see cref="InboxUrl"/> is unknown at queue time.
+    /// </summary>
+    public string? TargetActorId { get; set; }
 
     /// <summary>
     /// The actor sending this activity (for signing requests)

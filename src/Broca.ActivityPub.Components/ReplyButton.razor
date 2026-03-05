@@ -1,0 +1,146 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@inject IActivityPubClient Client
+
+@if (ButtonTemplate != null)
+{
+    @ButtonTemplate(new ReplyButtonContext(this))
+}
+else
+{
+    <div class="activitypub-reply-button @CssClass">
+        <button class="reply-button @(IsReplying ? "active" : "")"
+                @onclick="HandleClick"
+                disabled="@IsDisabled"
+                title="Reply"
+                aria-label="@(IsReplying ? "Cancel reply" : "Reply")"
+                aria-pressed="@IsReplying">
+            <span class="icon">💬</span>
+            @if (ReplyCount > 0)
+            {
+                <span class="count">@FormatCount(ReplyCount)</span>
+            }
+        </button>
+
+        @if (IsReplying && InlineCompose && InReplyToId != null)
+        {
+            <div class="inline-reply-composer">
+                <PostComposer InReplyToId="@InReplyToId"
+                              ShowCancelButton="true"
+                              OnCancel="@HandleCancel"
+                              OnPostCreated="@HandleReplyCreated"
+                              Placeholder="@ReplyPlaceholder"
+                              PostButtonText="Reply"
+                              CssClass="reply-button-composer" />
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool isReplying;
+
+    [Parameter]
+    public string? InReplyToId { get; set; }
+
+    [Parameter]
+    public int ReplyCount { get; set; }
+
+    [Parameter]
+    public bool InlineCompose { get; set; } = true;
+
+    [Parameter]
+    public string ReplyPlaceholder { get; set; } = "Write your reply...";
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public RenderFragment<ReplyButtonContext>? ButtonTemplate { get; set; }
+
+    [Parameter]
+    public EventCallback OnReplyClick { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancelReply { get; set; }
+
+    [Parameter]
+    public EventCallback<Activity> OnReplyCreated { get; set; }
+
+    private bool IsReplying => isReplying;
+
+    private bool IsDisabled => Disabled || (!InlineCompose && !OnReplyClick.HasDelegate);
+
+    private async Task HandleClick()
+    {
+        if (InlineCompose)
+        {
+            isReplying = !isReplying;
+            StateHasChanged();
+        }
+
+        if (OnReplyClick.HasDelegate)
+        {
+            await OnReplyClick.InvokeAsync();
+        }
+    }
+
+    private async Task HandleCancel()
+    {
+        isReplying = false;
+        StateHasChanged();
+
+        if (OnCancelReply.HasDelegate)
+        {
+            await OnCancelReply.InvokeAsync();
+        }
+    }
+
+    private async Task HandleReplyCreated(Activity activity)
+    {
+        isReplying = false;
+        ReplyCount++;
+        StateHasChanged();
+
+        if (OnReplyCreated.HasDelegate)
+        {
+            await OnReplyCreated.InvokeAsync(activity);
+        }
+    }
+
+    private string FormatCount(int count)
+    {
+        if (count < 1000) return count.ToString();
+        if (count < 1000000) return $"{count / 1000.0:F1}K";
+        return $"{count / 1000000.0:F1}M";
+    }
+
+    public class ReplyButtonContext
+    {
+        private readonly ReplyButton _button;
+
+        public ReplyButtonContext(ReplyButton button)
+        {
+            _button = button;
+        }
+
+        public string? InReplyToId => _button.InReplyToId;
+        public int ReplyCount => _button.ReplyCount;
+        public bool IsReplying => _button.isReplying;
+        public bool InlineCompose => _button.InlineCompose;
+        public string ReplyPlaceholder => _button.ReplyPlaceholder;
+        public bool Disabled => _button.IsDisabled;
+        public string? CssClass => _button.CssClass;
+
+        public EventCallback OnReplyClick => _button.OnReplyClick;
+        public EventCallback OnCancelReply => _button.OnCancelReply;
+        public EventCallback<Activity> OnReplyCreated => _button.OnReplyCreated;
+
+        public Task HandleClick() => _button.HandleClick();
+        public Task HandleCancel() => _button.HandleCancel();
+        public Task HandleReplyCreated(Activity activity) => _button.HandleReplyCreated(activity);
+    }
+}

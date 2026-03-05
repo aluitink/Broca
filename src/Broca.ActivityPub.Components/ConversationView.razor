@@ -1,0 +1,555 @@
+@using KristofferStrube.ActivityStreams
+@using Broca.ActivityPub.Core.Interfaces
+@using Broca.ActivityPub.Components
+@inject IActivityPubClient Client
+
+<div class="activitypub-conversation-view @CssClass">
+    @if (ViewTemplate != null)
+    {
+        @ViewTemplate(new ConversationContext(this))
+    }
+    else
+    {
+        @if (isLoading && !allPosts.Any())
+        {
+            @if (LoadingTemplate != null)
+            {
+                @LoadingTemplate
+            }
+            else
+            {
+                <div class="conversation-loading">
+                    <span class="loading-spinner"></span>
+                    <span>Loading conversation...</span>
+                </div>
+            }
+        }
+
+        @if (error != null)
+        {
+            @if (ErrorTemplate != null)
+            {
+                @ErrorTemplate(error)
+            }
+            else
+            {
+                <div class="conversation-error">
+                    <span class="error-icon">⚠️</span>
+                    <span>@error</span>
+                </div>
+            }
+        }
+
+        @if (allPosts.Any())
+        {
+            @if (ShowParticipants && participants.Any())
+            {
+                <div class="conversation-participants">
+                    <div class="participants-header">
+                        <span class="participants-label">Participants (@participants.Count)</span>
+                    </div>
+                    <div class="participants-list">
+                        @foreach (var participant in participants)
+                        {
+                            <div class="participant-item" title="@GetParticipantDisplayName(participant)">
+                                @if (ParticipantTemplate != null)
+                                {
+                                    @ParticipantTemplate(participant)
+                                }
+                                else
+                                {
+                                    <div class="participant-avatar">
+                                        @GetParticipantInitials(participant)
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (ShowMetadata)
+            {
+                <div class="conversation-metadata">
+                    <span class="metadata-item">@allPosts.Count @(allPosts.Count == 1 ? "post" : "posts")</span>
+                    @if (dateRange.Start.HasValue && dateRange.End.HasValue)
+                    {
+                        <span class="metadata-item">
+                            @FormatDateRange(dateRange.Start.Value, dateRange.End.Value)
+                        </span>
+                    }
+                </div>
+            }
+
+            <div class="conversation-posts @(ViewMode == ConversationViewMode.Chronological ? "chronological-view" : "threaded-view")">
+                @if (ViewMode == ConversationViewMode.Chronological)
+                {
+                    @foreach (var post in GetChronologicalPosts())
+                    {
+                        <div class="conversation-post @(IsContextPost(post) ? "context-post" : "") @(IsFocalPost(post) ? "focal-post" : "")">
+                            @if (PostTemplate != null)
+                            {
+                                @PostTemplate(post)
+                            }
+                            else
+                            {
+                                <ObjectDisplay Object="@post" />
+                            }
+                        </div>
+                    }
+                }
+                else
+                {
+                    @* Threaded view: show parent chain, focal post, then reply tree *@
+                    @if (parentChain.Any())
+                    {
+                        <div class="parent-chain">
+                            @foreach (var parent in parentChain)
+                            {
+                                <div class="conversation-post context-post">
+                                    @if (PostTemplate != null)
+                                    {
+                                        @PostTemplate(parent)
+                                    }
+                                    else
+                                    {
+                                        <ObjectDisplay Object="@parent" />
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (focalPost != null)
+                    {
+                        <div class="conversation-post focal-post">
+                            @if (PostTemplate != null)
+                            {
+                                @PostTemplate(focalPost)
+                            }
+                            else
+                            {
+                                <ObjectDisplay Object="@focalPost" />
+                            }
+                        </div>
+                    }
+
+                    @if (ShowReplies && focalPost != null)
+                    {
+                        <div class="reply-section">
+                            <ReplyThread RootPostId="@focalPost.Id"
+                                       RootPost="@focalPost"
+                                       MaxDepth="@MaxReplyDepth"
+                                       PageSize="@ReplyPageSize"
+                                       ShowLoadMore="true"
+                                       ShowEmptyState="@ShowEmptyState"
+                                       PostTemplate="@PostTemplate"
+                                       CssClass="conversation-replies" />
+                        </div>
+                    }
+                }
+            </div>
+        }
+        else if (!isLoading)
+        {
+            @if (EmptyTemplate != null)
+            {
+                @EmptyTemplate
+            }
+            else
+            {
+                <div class="conversation-empty">
+                    <p>No conversation found</p>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    private List<KristofferStrube.ActivityStreams.Object> allPosts = new();
+    private List<KristofferStrube.ActivityStreams.Object> parentChain = new();
+    private KristofferStrube.ActivityStreams.Object? focalPost;
+    private List<IObjectOrLink> participants = new();
+    private (DateTimeOffset? Start, DateTimeOffset? End) dateRange;
+    private bool isLoading;
+    private string? error;
+
+    /// <summary>
+    /// View modes for displaying conversations.
+    /// </summary>
+    public enum ConversationViewMode
+    {
+        /// <summary>
+        /// Display all posts in chronological order.
+        /// </summary>
+        Chronological,
+
+        /// <summary>
+        /// Display in a threaded view (parent chain → focal → replies).
+        /// </summary>
+        Threaded
+    }
+
+    /// <summary>
+    /// Gets or sets the post ID to center the conversation around (the "focal" post).
+    /// </summary>
+    [Parameter]
+    public string? FocalPostId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the focal post object.
+    /// </summary>
+    [Parameter]
+    public KristofferStrube.ActivityStreams.Object? FocalPost { get; set; }
+
+    /// <summary>
+    /// Gets or sets the view mode (chronological or threaded).
+    /// </summary>
+    [Parameter]
+    public ConversationViewMode ViewMode { get; set; } = ConversationViewMode.Threaded;
+
+    /// <summary>
+    /// Gets or sets whether to show the list of participants.
+    /// </summary>
+    [Parameter]
+    public bool ShowParticipants { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show conversation metadata (post count, date range).
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show replies below the focal post.
+    /// </summary>
+    [Parameter]
+    public bool ShowReplies { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the empty state when no conversation is found.
+    /// </summary>
+    [Parameter]
+    public bool ShowEmptyState { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the maximum depth for reply threads.
+    /// </summary>
+    [Parameter]
+    public int MaxReplyDepth { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the page size for loading replies.
+    /// </summary>
+    [Parameter]
+    public int ReplyPageSize { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets the maximum number of parent posts to load.
+    /// </summary>
+    [Parameter]
+    public int MaxParentDepth { get; set; } = 50;
+
+    /// <summary>
+    /// Gets or sets additional CSS classes.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom template for rendering the entire conversation view.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<ConversationContext>? ViewTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom template for rendering individual posts.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<KristofferStrube.ActivityStreams.Object>? PostTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom template for rendering participants.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<IObjectOrLink>? ParticipantTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loading template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the empty state template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? EmptyTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error template.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<string>? ErrorTemplate { get; set; }
+
+    /// <summary>
+    /// Gets or sets a callback for when a post in the conversation is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<KristofferStrube.ActivityStreams.Object> OnPostClick { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if ((FocalPostId != null || FocalPost != null) && !allPosts.Any())
+        {
+            await LoadConversationAsync();
+        }
+    }
+
+    private async Task LoadConversationAsync()
+    {
+        if (isLoading) return;
+
+        isLoading = true;
+        error = null;
+        allPosts.Clear();
+        parentChain.Clear();
+        participants.Clear();
+        StateHasChanged();
+
+        try
+        {
+            // Determine the focal post
+            if (FocalPost != null)
+            {
+                focalPost = FocalPost;
+            }
+            else if (!string.IsNullOrEmpty(FocalPostId))
+            {
+                focalPost = await Client.GetAsync<KristofferStrube.ActivityStreams.Object>(new Uri(FocalPostId));
+            }
+            else
+            {
+                error = "No focal post specified";
+                return;
+            }
+
+            if (focalPost == null)
+            {
+                error = "Failed to load focal post";
+                return;
+            }
+
+            allPosts.Add(focalPost);
+
+            // Load parent chain (traverse InReplyTo)
+            await LoadParentChainAsync(focalPost);
+
+            // Extract participants and calculate date range
+            ExtractParticipants();
+            CalculateDateRange();
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load conversation: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadParentChainAsync(KristofferStrube.ActivityStreams.Object post)
+    {
+        var currentPost = post;
+        var depth = 0;
+
+        while (depth < MaxParentDepth)
+        {
+            var inReplyToUri = GetInReplyToUri(currentPost);
+            if (inReplyToUri == null) break;
+
+            try
+            {
+                var parentPost = await Client.GetAsync<KristofferStrube.ActivityStreams.Object>(inReplyToUri);
+                if (parentPost == null) break;
+
+                parentChain.Insert(0, parentPost); // Add to beginning to maintain order
+                allPosts.Add(parentPost);
+                currentPost = parentPost;
+                depth++;
+            }
+            catch
+            {
+                // Stop if we can't load a parent
+                break;
+            }
+        }
+    }
+
+    private Uri? GetInReplyToUri(KristofferStrube.ActivityStreams.Object obj)
+    {
+        // Try to get InReplyTo property using reflection (since not all object types have it)
+        var inReplyToProperty = obj.GetType().GetProperty("InReplyTo");
+        if (inReplyToProperty?.GetValue(obj) is IEnumerable<IObjectOrLink?> inReplyToList)
+        {
+            var firstInReplyTo = inReplyToList.FirstOrDefault();
+            if (firstInReplyTo is ILink link && link.Href != null)
+            {
+                return link.Href;
+            }
+            else if (firstInReplyTo is IObject objWithId && !string.IsNullOrEmpty(objWithId.Id))
+            {
+                return new Uri(objWithId.Id);
+            }
+        }
+
+        return null;
+    }
+
+    private void ExtractParticipants()
+    {
+        var participantSet = new HashSet<string>();
+        participants.Clear();
+
+        foreach (var post in allPosts)
+        {
+            // Get attributed to (author)
+            if (post.AttributedTo?.Any() == true)
+            {
+                foreach (var actor in post.AttributedTo)
+                {
+                    var actorId = GetActorId(actor);
+                    if (!string.IsNullOrEmpty(actorId) && participantSet.Add(actorId))
+                    {
+                        participants.Add(actor);
+                    }
+                }
+            }
+        }
+    }
+
+    private string? GetActorId(IObjectOrLink actor)
+    {
+        if (actor is IObject obj && !string.IsNullOrEmpty(obj.Id))
+            return obj.Id;
+        if (actor is ILink link && link.Href != null)
+            return link.Href.ToString();
+        return null;
+    }
+
+    private void CalculateDateRange()
+    {
+        var dates = allPosts
+            .Select(p => p.Published)
+            .Where(d => d.HasValue)
+            .Select(d => d!.Value)
+            .ToList();
+
+        if (dates.Any())
+        {
+            dateRange = (dates.Min(), dates.Max());
+        }
+    }
+
+    private IEnumerable<KristofferStrube.ActivityStreams.Object> GetChronologicalPosts()
+    {
+        return allPosts
+            .OrderBy(p => p.Published ?? DateTimeOffset.MinValue)
+            .ToList();
+    }
+
+    private bool IsContextPost(KristofferStrube.ActivityStreams.Object post)
+    {
+        return parentChain.Contains(post);
+    }
+
+    private bool IsFocalPost(KristofferStrube.ActivityStreams.Object post)
+    {
+        return post == focalPost;
+    }
+
+    private string GetParticipantDisplayName(IObjectOrLink participant)
+    {
+        if (participant is Actor actor)
+        {
+            return actor.Name?.FirstOrDefault() ?? actor.PreferredUsername ?? "Unknown";
+        }
+        if (participant is IObject obj)
+        {
+            return obj.Name?.FirstOrDefault() ?? "Unknown";
+        }
+        return "Unknown";
+    }
+
+    private string GetParticipantInitials(IObjectOrLink participant)
+    {
+        var name = GetParticipantDisplayName(participant);
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+        {
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        }
+        return name.Length > 0 ? name[0].ToString().ToUpper() : "?";
+    }
+
+    private string FormatDateRange(DateTimeOffset start, DateTimeOffset end)
+    {
+        var span = end - start;
+        if (span.TotalMinutes < 60)
+        {
+            return $"{(int)span.TotalMinutes} minutes";
+        }
+        else if (span.TotalHours < 24)
+        {
+            return $"{(int)span.TotalHours} hours";
+        }
+        else
+        {
+            return $"{(int)span.TotalDays} days";
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the conversation.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        allPosts.Clear();
+        await LoadConversationAsync();
+    }
+
+    /// <summary>
+    /// Context provided to the view template.
+    /// </summary>
+    public class ConversationContext
+    {
+        private readonly ConversationView _view;
+
+        public ConversationContext(ConversationView view)
+        {
+            _view = view;
+        }
+
+        public List<KristofferStrube.ActivityStreams.Object> AllPosts => _view.allPosts;
+        public List<KristofferStrube.ActivityStreams.Object> ParentChain => _view.parentChain;
+        public KristofferStrube.ActivityStreams.Object? FocalPost => _view.focalPost;
+        public List<IObjectOrLink> Participants => _view.participants;
+        public (DateTimeOffset? Start, DateTimeOffset? End) DateRange => _view.dateRange;
+        public bool IsLoading => _view.isLoading;
+        public string? Error => _view.error;
+        public ConversationViewMode ViewMode => _view.ViewMode;
+        public bool ShowParticipants => _view.ShowParticipants;
+        public bool ShowMetadata => _view.ShowMetadata;
+        public bool ShowReplies => _view.ShowReplies;
+
+        public bool IsContextPost(KristofferStrube.ActivityStreams.Object post) => _view.IsContextPost(post);
+        public bool IsFocalPost(KristofferStrube.ActivityStreams.Object post) => _view.IsFocalPost(post);
+        public string GetParticipantDisplayName(IObjectOrLink participant) => _view.GetParticipantDisplayName(participant);
+        public string GetParticipantInitials(IObjectOrLink participant) => _view.GetParticipantInitials(participant);
+        public IEnumerable<KristofferStrube.ActivityStreams.Object> GetChronologicalPosts() => _view.GetChronologicalPosts();
+        public Task RefreshAsync() => _view.RefreshAsync();
+    }
+}

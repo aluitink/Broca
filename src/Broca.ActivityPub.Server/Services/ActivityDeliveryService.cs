@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Microsoft.Extensions.Options;
@@ -15,33 +14,27 @@ public class ActivityDeliveryService
     private readonly IDeliveryQueueRepository _deliveryQueue;
     private readonly IActorRepository _actorRepository;
     private readonly IActivityRepository _activityRepository;
-    private readonly IActivityPubClient _activityPubClient;
-    private readonly HttpSignatureService _signatureService;
-    private readonly ICryptoProvider _cryptoProvider;
+    private readonly IActivityPubClientFactory _clientFactory;
+    private readonly SignedClientProvider _signedClientProvider;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<ActivityDeliveryService> _logger;
-    private readonly IHttpClientFactory _httpClientFactory;
 
     public ActivityDeliveryService(
         IDeliveryQueueRepository deliveryQueue,
         IActorRepository actorRepository,
         IActivityRepository activityRepository,
-        IActivityPubClient activityPubClient,
-        HttpSignatureService signatureService,
-        ICryptoProvider cryptoProvider,
+        IActivityPubClientFactory clientFactory,
+        SignedClientProvider signedClientProvider,
         IOptions<ActivityPubServerOptions> options,
-        ILogger<ActivityDeliveryService> logger,
-        IHttpClientFactory httpClientFactory)
+        ILogger<ActivityDeliveryService> logger)
     {
         _deliveryQueue = deliveryQueue;
         _actorRepository = actorRepository;
         _activityRepository = activityRepository;
-        _activityPubClient = activityPubClient;
-        _signatureService = signatureService;
-        _cryptoProvider = cryptoProvider;
+        _clientFactory = clientFactory;
+        _signedClientProvider = signedClientProvider;
         _options = options.Value;
         _logger = logger;
-        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
@@ -61,61 +54,54 @@ public class ActivityDeliveryService
             return;
         }
 
+        var senderActor = await _actorRepository.GetActorByUsernameAsync(senderUsername, cancellationToken);
+        if (senderActor == null)
+        {
+            _logger.LogWarning("Cannot queue activity for delivery: sender actor {Username} not found", senderUsername);
+            return;
+        }
+
+        var senderActorId = senderActor.Id;
+        if (string.IsNullOrEmpty(senderActorId))
+        {
+            _logger.LogWarning("Cannot queue activity for delivery: sender actor {Username} has no ID", senderUsername);
+            return;
+        }
+
+        _logger.LogInformation("Queueing activity {ActivityId} for direct delivery to {TargetActorId}",
+            activityId, targetActorId);
+
+        // Attempt to resolve the target actor's inbox now using a signed GET so that servers
+        // requiring authorized fetch (e.g. Threads) respond correctly. If resolution fails the
+        // item is still enqueued — the inbox will be resolved again on each delivery attempt.
+        string inboxUrl = "";
         try
         {
-            // Get sender actor
-            var senderActor = await _actorRepository.GetActorByUsernameAsync(senderUsername, cancellationToken);
-            if (senderActor == null)
+            var client = _signedClientProvider.CreateForActor(senderActor, senderActorId);
+            if (client != null)
             {
-                _logger.LogWarning("Cannot queue activity for delivery: sender actor {Username} not found", senderUsername);
-                return;
+                var targetActor = await client.GetActorAsync(new Uri(targetActorId), cancellationToken);
+                inboxUrl = targetActor?.Inbox?.Href?.ToString() ?? "";
             }
-
-            var senderActorId = senderActor.Id;
-            if (string.IsNullOrEmpty(senderActorId))
-            {
-                _logger.LogWarning("Cannot queue activity for delivery: sender actor {Username} has no ID", senderUsername);
-                return;
-            }
-
-            _logger.LogInformation("Queueing activity {ActivityId} for direct delivery to {TargetActorId}", 
-                activityId, targetActorId);
-
-            // Fetch the target actor to get their inbox
-            var targetActor = await _activityPubClient.GetActorAsync(new Uri(targetActorId), cancellationToken);
-            
-            if (targetActor?.Inbox == null)
-            {
-                _logger.LogWarning("Target actor {TargetActorId} has no inbox. Skipping delivery.", targetActorId);
-                return;
-            }
-
-            var inboxUrl = targetActor.Inbox?.Href?.ToString();
-
-            if (string.IsNullOrEmpty(inboxUrl))
-            {
-                _logger.LogWarning("Could not determine inbox URL for target actor {TargetActorId}. Skipping.", targetActorId);
-                return;
-            }
-
-            var deliveryItem = new DeliveryQueueItem
-            {
-                Activity = activity,
-                InboxUrl = inboxUrl,
-                SenderActorId = senderActorId,
-                SenderUsername = senderUsername,
-                Status = DeliveryStatus.Pending,
-                MaxRetries = 5
-            };
-
-            await _deliveryQueue.EnqueueAsync(deliveryItem, cancellationToken);
-            _logger.LogInformation("Queued direct delivery for activity {ActivityId} to {TargetActorId}", activityId, targetActorId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error queueing activity {ActivityId} for direct delivery to {TargetActorId}", 
-                activityId, targetActorId);
+            _logger.LogWarning(ex, "Could not resolve actor {TargetActorId} at queue time; inbox will be resolved at delivery time", targetActorId);
         }
+
+        var deliveryItem = new DeliveryQueueItem
+        {
+            Activity = activity,
+            InboxUrl = inboxUrl,
+            TargetActorId = targetActorId,
+            SenderActorId = senderActorId,
+            SenderUsername = senderUsername,
+            Status = DeliveryStatus.Pending,
+            MaxRetries = 5
+        };
+
+        await _deliveryQueue.EnqueueAsync(deliveryItem, cancellationToken);
+        _logger.LogInformation("Queued direct delivery for activity {ActivityId} to {TargetActorId}", activityId, targetActorId);
     }
 
     /// <summary>
@@ -169,7 +155,14 @@ public class ActivityDeliveryService
             {
                 try
                 {
-                    var followerActor = await _activityPubClient.GetActorAsync(new Uri(followerActorId), cancellationToken);
+                    var client = _signedClientProvider.CreateForActor(senderActor, senderActorId);
+                    if (client == null)
+                    {
+                        _logger.LogWarning("Cannot create signed client for sender {SenderActorId}. Skipping follower {FollowerActorId}.", senderActorId, followerActorId);
+                        continue;
+                    }
+
+                    var followerActor = await client.GetActorAsync(new Uri(followerActorId), cancellationToken);
 
                     if (followerActor == null)
                     {
@@ -317,8 +310,15 @@ public class ActivityDeliveryService
             {
                 try
                 {
+                    var client = _signedClientProvider.CreateForActor(senderActor, senderActorId);
+                    if (client == null)
+                    {
+                        _logger.LogWarning("Cannot create signed client for sender {SenderActorId}. Skipping recipient {RecipientId}.", senderActorId, recipientId);
+                        continue;
+                    }
+
                     // Fetch the recipient's actor to get their inbox
-                    var recipientActor = await _activityPubClient.GetActorAsync(new Uri(recipientId), cancellationToken);
+                    var recipientActor = await client.GetActorAsync(new Uri(recipientId), cancellationToken);
 
                     if (recipientActor == null)
                     {
@@ -444,10 +444,8 @@ public class ActivityDeliveryService
     {
         try
         {
-            _logger.LogDebug("Delivering activity to {InboxUrl} (attempt {AttemptCount})", 
-                item.InboxUrl, item.AttemptCount);
-
-            // Get sender's private key for signing
+            // Load sender credentials first — they are needed for both inbox resolution
+            // (signed GET for servers requiring authorized fetch, e.g. Threads) and delivery signing.
             var senderActor = await _actorRepository.GetActorByUsernameAsync(item.SenderUsername, cancellationToken);
             if (senderActor == null)
             {
@@ -455,7 +453,6 @@ public class ActivityDeliveryService
                 return;
             }
 
-            // Extract private key from actor's extension data
             string? privateKeyPem = null;
             if (senderActor.ExtensionData?.TryGetValue("privateKeyPem", out var privateKeyObj) == true)
             {
@@ -467,18 +464,16 @@ public class ActivityDeliveryService
 
             if (string.IsNullOrEmpty(privateKeyPem))
             {
-                // Log diagnostic information about what keys are available
                 var availableKeys = senderActor.ExtensionData?.Keys.ToList() ?? new List<string>();
                 _logger.LogWarning(
-                    "Sender {Username} has no private key. Available ExtensionData keys: {Keys}", 
-                    item.SenderUsername, 
+                    "Sender {Username} has no private key. Available ExtensionData keys: {Keys}",
+                    item.SenderUsername,
                     string.Join(", ", availableKeys));
-                    
+
                 await _deliveryQueue.MarkAsFailedAsync(item.Id, "Sender has no private key", cancellationToken);
                 return;
             }
 
-            // Determine public key ID
             var publicKeyId = $"{item.SenderActorId}#main-key";
             if (senderActor.ExtensionData?.TryGetValue("publicKey", out var publicKeyObj) == true)
             {
@@ -488,66 +483,46 @@ public class ActivityDeliveryService
                 }
             }
 
-            // Create HTTP client
-            using var httpClient = _httpClientFactory.CreateClient("ActivityPub");
-            var targetUri = new Uri(item.InboxUrl);
-
-            // Serialize activity
-            var activityJson = JsonSerializer.Serialize(item.Activity, new JsonSerializerOptions
+            // Resolve inbox URL if it wasn't available when the item was queued.
+            // Use a signed GET so servers that require authorized fetch (e.g. Threads) respond correctly.
+            if (string.IsNullOrEmpty(item.InboxUrl))
             {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-            });
-
-            var content = new StringContent(activityJson, System.Text.Encoding.UTF8, "application/activity+json");
-
-            // Create request message
-            using var request = new HttpRequestMessage(HttpMethod.Post, targetUri)
-            {
-                Content = content
-            };
-
-            // Get the actual Content-Type value (including charset) for signature calculation
-            var actualContentType = content.Headers.ContentType?.ToString();
-
-            // Apply HTTP signature
-            await _signatureService.ApplyHttpSignatureAsync(
-                "POST",
-                targetUri,
-                (name, value) => 
+                if (string.IsNullOrEmpty(item.TargetActorId))
                 {
-                    // Content-Type is already set by StringContent constructor
-                    if (name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Don't override it
-                        return;
-                    }
-                    // Digest is a content header
-                    else if (name.Equals("Digest", StringComparison.OrdinalIgnoreCase))
-                    {
-                        request.Content?.Headers.TryAddWithoutValidation(name, value);
-                    }
-                    // All other headers are request headers
-                    else
-                    {
-                        request.Headers.TryAddWithoutValidation(name, value);
-                    }
-                },
-                publicKeyId,
-                privateKeyPem,
-                accept: "application/activity+json",
-                contentType: actualContentType,
-                getContentFunc: ct => Task.FromResult(System.Text.Encoding.UTF8.GetBytes(activityJson)),
-                cancellationToken: cancellationToken
-            );
+                    await _deliveryQueue.MarkAsFailedAsync(item.Id, "No inbox URL and no target actor ID", cancellationToken);
+                    if (item.AttemptCount >= item.MaxRetries)
+                        await ApplyDeliveryDeadLetterSideEffectsAsync(item, cancellationToken);
+                    return;
+                }
 
-            // Send the request
-            using var response = await httpClient.SendAsync(request, cancellationToken);
+                var targetActor = await _clientFactory.CreateForActor(item.SenderActorId, publicKeyId, privateKeyPem)
+                    .GetActorAsync(new Uri(item.TargetActorId), cancellationToken);
+                var resolved = targetActor?.Inbox?.Href?.ToString();
+                if (string.IsNullOrEmpty(resolved))
+                {
+                    var error = $"Could not resolve inbox for actor {item.TargetActorId}";
+                    await _deliveryQueue.MarkAsFailedAsync(item.Id, error, cancellationToken);
+                    if (item.AttemptCount >= item.MaxRetries)
+                        await ApplyDeliveryDeadLetterSideEffectsAsync(item, cancellationToken);
+                    return;
+                }
 
-            if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.Accepted)
+                item.InboxUrl = resolved;
+            }
+
+            _logger.LogDebug("Delivering activity to {InboxUrl} (attempt {AttemptCount})",
+                item.InboxUrl, item.AttemptCount);
+
+            var senderClient = _clientFactory.CreateForActor(item.SenderActorId, publicKeyId, privateKeyPem);
+            using var response = await senderClient.PostAsync(new Uri(item.InboxUrl), item.Activity, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
             {
                 await _deliveryQueue.MarkAsDeliveredAsync(item.Id, cancellationToken);
-                _logger.LogInformation("Successfully delivered activity to {InboxUrl}", item.InboxUrl);
+                _logger.LogInformation(
+                    "Delivered {ActivityType} from @{Sender} to {InboxUrl} (delivery {DeliveryId})",
+                    item.Activity.Type?.FirstOrDefault() ?? "Activity", item.SenderUsername, item.InboxUrl, item.Id);
+                await ApplyDeliverySuccessSideEffectsAsync(item, cancellationToken);
             }
             else
             {
@@ -555,12 +530,101 @@ public class ActivityDeliveryService
                 var errorMessage = $"HTTP {(int)response.StatusCode}: {errorBody}";
                 await _deliveryQueue.MarkAsFailedAsync(item.Id, errorMessage, cancellationToken);
                 _logger.LogWarning("Failed to deliver activity to {InboxUrl}: {Error}", item.InboxUrl, errorMessage);
+                if (item.AttemptCount >= item.MaxRetries)
+                    await ApplyDeliveryDeadLetterSideEffectsAsync(item, cancellationToken);
             }
         }
         catch (Exception ex)
         {
             await _deliveryQueue.MarkAsFailedAsync(item.Id, ex.Message, cancellationToken);
             _logger.LogError(ex, "Error delivering activity to {InboxUrl}", item.InboxUrl);
+            if (item.AttemptCount >= item.MaxRetries)
+                await ApplyDeliveryDeadLetterSideEffectsAsync(item, cancellationToken);
         }
+    }
+
+    private async Task ApplyDeliverySuccessSideEffectsAsync(DeliveryQueueItem item, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (item.Activity is Follow followActivity)
+            {
+                var followingActorId = ExtractObjectActorId(followActivity);
+                if (followingActorId != null)
+                {
+                    await _actorRepository.AddPendingFollowingAsync(item.SenderUsername, followingActorId, cancellationToken);
+                    _logger.LogInformation(
+                        "Follow activity for {Username} → {FollowingActorId} delivered; awaiting Accept from remote",
+                        item.SenderUsername, followingActorId);
+                }
+            }
+            else if (item.Activity is Undo undoActivity)
+            {
+                var undoTarget = undoActivity.Object?.FirstOrDefault();
+                if (undoTarget is Follow undoneFollow)
+                {
+                    var followingActorId = ExtractObjectActorId(undoneFollow);
+                    if (followingActorId != null)
+                    {
+                        // Remove from both lists: covers confirmed follows and follows that were still pending
+                        await _actorRepository.RemoveFollowingAsync(item.SenderUsername, followingActorId, cancellationToken);
+                        await _actorRepository.RemovePendingFollowingAsync(item.SenderUsername, followingActorId, cancellationToken);
+                        _logger.LogInformation("User {Username} unfollowed {FollowingActorId} after successful Undo delivery",
+                            item.SenderUsername, followingActorId);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error applying post-delivery side effects for activity delivered to {InboxUrl}", item.InboxUrl);
+        }
+    }
+
+    private async Task ApplyDeliveryDeadLetterSideEffectsAsync(DeliveryQueueItem item, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (item.Activity is Follow followActivity)
+            {
+                var followingActorId = ExtractObjectActorId(followActivity);
+                if (followingActorId != null)
+                {
+                    _logger.LogWarning(
+                        "Follow from {Username} to {TargetActorId} permanently failed after {Attempts} attempts. Removing from pending-following.",
+                        item.SenderUsername, followingActorId, item.AttemptCount);
+                    await _actorRepository.RemovePendingFollowingAsync(item.SenderUsername, followingActorId, cancellationToken);
+                }
+            }
+            else if (item.Activity is Undo undoActivity)
+            {
+                var undoTarget = undoActivity.Object?.FirstOrDefault();
+                if (undoTarget is Follow undoneFollow)
+                {
+                    var followingActorId = ExtractObjectActorId(undoneFollow);
+                    if (followingActorId != null)
+                    {
+                        _logger.LogWarning(
+                            "Undo Follow from {Username} to {TargetActorId} permanently failed after {Attempts} attempts. User remains following.",
+                            item.SenderUsername, followingActorId, item.AttemptCount);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error applying dead-letter side effects for activity to {InboxUrl}", item.InboxUrl);
+        }
+    }
+
+    private static string? ExtractObjectActorId(Activity activity)
+    {
+        var target = activity.Object?.FirstOrDefault();
+        return target switch
+        {
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
     }
 }

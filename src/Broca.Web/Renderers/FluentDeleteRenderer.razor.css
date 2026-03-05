@@ -1,0 +1,30 @@
+/* Fluent Delete Renderer Styles */
+.fluent-delete-card {
+    margin-bottom: 16px;
+    border-left: 3px solid var(--neutral-stroke-strong);
+}
+
+.delete-header {
+    align-items: center;
+}
+
+.delete-timestamp {
+    white-space: nowrap;
+}
+
+.delete-tombstone {
+    margin: 0;
+    padding: 16px;
+    background-color: var(--neutral-layer-3);
+    border-radius: var(--control-corner-radius);
+}
+
+.delete-object {
+    margin: 0;
+    padding-left: 8px;
+    opacity: 0.6;
+}
+
+.actor-info-clickable:hover {
+    opacity: 0.8;
+}
