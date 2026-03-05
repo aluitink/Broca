@@ -220,7 +220,11 @@
     [Parameter]
     public string? MediaUploadUrl { get; set; }
 
+    [Parameter]
+    public bool InitiallyEditing { get; set; }
+
     private bool isEditing = false;
+    private bool _firstParameterSet = true;
     private bool isLoading = false;
     private bool isSaving = false;
     private bool useAvatarUpload = false;
@@ -232,9 +236,14 @@
 
     protected override void OnParametersSet()
     {
-        if (Actor != null && !isEditing)
+        if (Actor != null && (!isEditing || _firstParameterSet))
         {
             LoadActorIntoModel();
+            if (_firstParameterSet)
+            {
+                isEditing = InitiallyEditing;
+                _firstParameterSet = false;
+            }
         }
     }
 

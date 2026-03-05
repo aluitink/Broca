@@ -40,9 +40,7 @@ else
                                       ShowFollowButton="true"
                                       Title="">
                             <ActorTemplate Context="follower">
-                                <FluentCard Class="actor-card">
-                                    <ActorProfile ActorUri="@(new Uri(follower.Id ?? string.Empty))" ShowFollowButton="true" />
-                                </FluentCard>
+                                <ObjectDisplay Object="@follower" />
                             </ActorTemplate>
                             <EmptyTemplate>
                                 <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
@@ -81,9 +79,7 @@ else
                                       ShowUnfollowButton="true"
                                       Title="">
                             <ActorTemplate Context="following">
-                                <FluentCard Class="actor-card">
-                                    <ActorProfile ActorUri="@(new Uri(following.Id ?? string.Empty))" ShowFollowButton="true" />
-                                </FluentCard>
+                                <ObjectDisplay Object="@following" />
                             </ActorTemplate>
                             <EmptyTemplate>
                                 <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
@@ -159,9 +155,5 @@ else
 
     .tab-content {
         padding: 1rem 0;
-    }
-
-    .actor-card {
-        margin-bottom: 1rem;
     }
 </style>

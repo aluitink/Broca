@@ -1,9 +1,9 @@
 @page "/profile"
 @using Broca.Web.Services
-@using Broca.ActivityPub.Components
 @using Broca.Web.Components
 @inject AuthenticationStateService AuthState
 @inject NavigationManager Navigation
+@inject HttpClient Http
 
 <PageTitle>Profile - Broca</PageTitle>
 
@@ -21,74 +21,44 @@
 }
 else if (AuthState.CurrentActorId != null)
 {
-    <div class="profile-container">
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Class="profile-header">
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
-                <FluentIcon Value="@(new Icons.Regular.Size24.Person())" Color="Color.Accent" />
-                <FluentLabel Typo="Typography.PageTitle">Your Profile</FluentLabel>
-            </FluentStack>
-        </FluentStack>
+    <ActorView @key="@_actorViewKey"
+               ActorUri="@(new Uri(AuthState.CurrentActorId))"
+               ShowFollowButton="false"
+               ShowOpenProfileButton="false"
+               ApiBaseUrl="@Http.BaseAddress?.ToString()">
+        <AdditionalActions Context="actor">
+            <button class="actor-action-button" @onclick="OpenEditDialog">Edit Profile</button>
+            <button class="actor-action-button logout-button" @onclick="HandleLogoutAsync">Logout</button>
+        </AdditionalActions>
+    </ActorView>
 
-        <ActorProfile ActorUri="@(new Uri(AuthState.CurrentActorId))" />
-
-        <ProfileEditor Actor="@AuthState.CurrentActor" OnProfileUpdated="@HandleProfileUpdatedAsync" />
-
-        <FluentCard Class="profile-info">
-            <FluentLabel Typo="Typography.Subject" Style="display: block; margin-bottom: 1rem;">Account Information</FluentLabel>
-            <FluentDataGrid Items="@GetProfileData()" GridTemplateColumns="200px 1fr">
-                <PropertyColumn Property="@(p => p.Label)" Title="Property" Class="property-label" />
-                <PropertyColumn Property="@(p => p.Value)" Title="Value" Class="property-value" />
-            </FluentDataGrid>
-        </FluentCard>
-
-        <FluentCard Class="danger-zone">
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
-                    <FluentIcon Value="@(new Icons.Regular.Size20.Warning())" Color="Color.Error" />
-                    <FluentLabel Typo="Typography.Subject" Style="color: var(--error-foreground-rest);">Danger Zone</FluentLabel>
-                </FluentStack>
-                <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Logging out will clear your session and require you to login again.</FluentLabel>
-                <FluentButton Appearance="Appearance.Outline" OnClick="@HandleLogoutAsync">
-                    Logout
-                </FluentButton>
-            </FluentStack>
-        </FluentCard>
-    </div>
+    <FluentDialog @bind-Hidden="@_hideEditDialog" Modal="true" TrapFocus="true" PreventScroll="true">
+        <FluentDialogHeader>
+            <FluentLabel Typo="Typography.Subject">Edit Profile</FluentLabel>
+        </FluentDialogHeader>
+        <FluentDialogBody>
+            <ProfileEditor Actor="@AuthState.CurrentActor"
+                           InitiallyEditing="true"
+                           OnProfileUpdated="@HandleProfileUpdatedAsync" />
+        </FluentDialogBody>
+    </FluentDialog>
 }
 
 @code {
+    private bool _hideEditDialog = true;
+    private int _actorViewKey = 0;
+
+    private void OpenEditDialog()
+    {
+        _hideEditDialog = false;
+    }
+
     private async Task HandleProfileUpdatedAsync(KristofferStrube.ActivityStreams.Actor updatedActor)
     {
-        // Refresh the authentication state with the updated actor
         await AuthState.RefreshActorAsync(updatedActor);
+        _hideEditDialog = true;
+        _actorViewKey++;
         StateHasChanged();
-    }
-
-    private IQueryable<ProfileDataItem> GetProfileData()
-    {
-        var items = new List<ProfileDataItem>();
-
-        if (AuthState.CurrentActor != null)
-        {
-            items.Add(new ProfileDataItem { Label = "Actor ID", Value = AuthState.CurrentActorId ?? "N/A" });
-            items.Add(new ProfileDataItem { Label = "Name", Value = AuthState.CurrentActor.Name?.FirstOrDefault() ?? "N/A" });
-            items.Add(new ProfileDataItem { Label = "Preferred Username", Value = AuthState.CurrentActor?.PreferredUsername ?? "N/A" });
-            items.Add(new ProfileDataItem { Label = "Type", Value = GetActorType() });
-            items.Add(new ProfileDataItem { Label = "Inbox", Value = AuthState.GetInboxUrl()?.ToString() ?? "N/A" });
-            items.Add(new ProfileDataItem { Label = "Outbox", Value = AuthState.GetOutboxUrl()?.ToString() ?? "N/A" });
-            items.Add(new ProfileDataItem { Label = "Followers", Value = AuthState.GetFollowersUrl()?.ToString() ?? "N/A" });
-            items.Add(new ProfileDataItem { Label = "Following", Value = AuthState.GetFollowingUrl()?.ToString() ?? "N/A" });
-        }
-
-        return items.AsQueryable();
-    }
-
-    private string GetActorType()
-    {
-        if (AuthState.CurrentActor?.Type == null) return "N/A";
-        
-        var types = AuthState.CurrentActor.Type.ToList();
-        return string.Join(", ", types);
     }
 
     private async Task HandleLogoutAsync()
@@ -96,40 +66,16 @@ else if (AuthState.CurrentActorId != null)
         await AuthState.LogoutAsync();
         Navigation.NavigateTo("/login");
     }
-
-    private class ProfileDataItem
-    {
-        public string Label { get; set; } = "";
-        public string Value { get; set; } = "";
-    }
 }
 
 <style>
-    .profile-container {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-        max-width: 900px;
-        margin: 0 auto;
+    .logout-button {
+        border-color: var(--error-foreground-rest);
+        color: var(--error-foreground-rest);
     }
 
-    .profile-header {
-        padding-bottom: 0.75rem;
-        border-bottom: 1px solid var(--neutral-stroke-divider-rest);
-    }
-
-    .property-label {
-        font-weight: 600;
-        color: var(--neutral-foreground-rest);
-    }
-
-    .property-value {
-        font-family: monospace;
-        font-size: 0.875rem;
-        word-break: break-all;
-    }
-
-    .danger-zone {
-        border: 1px solid var(--error-foreground-rest);
+    .logout-button:hover {
+        background-color: var(--error-foreground-rest);
+        color: var(--fill-color);
     }
 </style>

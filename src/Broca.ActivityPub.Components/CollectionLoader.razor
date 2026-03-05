@@ -285,7 +285,6 @@
 
         try
         {
-            var loadedItems = new List<TItem>();
             await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, PageSize))
             {
                 if (loadCancellation?.Token.IsCancellationRequested == true)
@@ -295,27 +294,22 @@
 
                 if (ShouldIncludeItem(item))
                 {
-                    loadedItems.Add(item);
-                    var id = GetItemId(item);
-                    if (!string.IsNullOrEmpty(id))
-                    {
-                        loadedItemIds.Add(id);
-                    }
+                    AddItemWithTracking(item);
+                    StateHasChanged();
                 }
 
-                if (loadedItems.Count >= PageSize)
+                if (items.Count >= PageSize)
                 {
                     break;
                 }
             }
 
-            items = loadedItems;
-            hasMore = loadedItems.Count >= PageSize;
+            hasMore = items.Count >= PageSize;
 
             // Cache the loaded items
             if (EnableCaching && CollectionUrl != null)
             {
-                cache[CollectionUrl.ToString()] = new List<TItem>(loadedItems);
+                cache[CollectionUrl.ToString()] = new List<TItem>(items);
             }
 
             if (OnItemsLoaded.HasDelegate)
