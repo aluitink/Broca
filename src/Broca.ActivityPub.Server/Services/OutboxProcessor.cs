@@ -14,6 +14,7 @@ public class OutboxProcessor
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
     private readonly ActivityDeliveryService _deliveryService;
+    private readonly SignedClientProvider _signedClientProvider;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<OutboxProcessor> _logger;
 
@@ -21,12 +22,14 @@ public class OutboxProcessor
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
         ActivityDeliveryService deliveryService,
+        SignedClientProvider signedClientProvider,
         IOptions<ActivityPubServerOptions> options,
         ILogger<OutboxProcessor> logger)
     {
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
         _deliveryService = deliveryService;
+        _signedClientProvider = signedClientProvider;
         _options = options.Value;
         _logger = logger;
     }
@@ -190,44 +193,29 @@ public class OutboxProcessor
 
             if (!string.IsNullOrEmpty(objectId))
             {
-                // First, try to get the object from the local repository
-                try
+                // Fetch the object to get its attributedTo field
+                var fetchedObject = await FetchObjectAsync(objectId, activity, cancellationToken);
+                if (fetchedObject != null)
                 {
-                    var obj = await _activityRepository.GetActivityByIdAsync(objectId, cancellationToken);
-                    if (obj is IObject objectWithAttribution)
+                    var attributedTo = fetchedObject.AttributedTo?.FirstOrDefault();
+                    var actorId = attributedTo switch
                     {
-                        var attributedTo = objectWithAttribution.AttributedTo?.FirstOrDefault();
-                        var actorId = attributedTo switch
-                        {
-                            ILink link => link.Href?.ToString(),
-                            IObject attrObj => attrObj.Id,
-                            _ => null
-                        };
+                        ILink link => link.Href?.ToString(),
+                        IObject attrObj => attrObj.Id,
+                        _ => null
+                    };
 
-                        if (!string.IsNullOrEmpty(actorId))
-                        {
-                            return actorId;
-                        }
+                    if (!string.IsNullOrEmpty(actorId))
+                    {
+                        return actorId;
                     }
+                    
+                    _logger.LogWarning("Object {ObjectId} has no attributedTo field", objectId);
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogDebug(ex, "Object {ObjectId} not found locally, attempting to extract owner from URL", objectId);
+                    _logger.LogWarning("Could not fetch object {ObjectId} to determine target actor", objectId);
                 }
-
-                // If object not found locally (remote object), try to extract the actor from the URL pattern
-                // Typical pattern: https://server.example/users/{username}/objects/{id}
-                var match = System.Text.RegularExpressions.Regex.Match(objectId, @"^(https?://[^/]+)(?:/[^/]+)?/users/([^/]+)/");
-                if (match.Success)
-                {
-                    var baseUrl = match.Groups[1].Value;
-                    var username = match.Groups[2].Value;
-                    var actorId = $"{baseUrl}/users/{username}";
-                    _logger.LogDebug("Extracted actor {ActorId} from object URL {ObjectId}", actorId, objectId);
-                    return actorId;
-                }
-                
-                _logger.LogWarning("Could not extract actor ID from remote object URL: {ObjectId}", objectId);
             }
         }
 
@@ -238,6 +226,63 @@ public class OutboxProcessor
             IObject obj => obj.Id,
             _ => null
         };
+    }
+
+    private async Task<IObject?> FetchObjectAsync(string objectId, Activity sourceActivity, CancellationToken cancellationToken)
+    {
+        // First, try to get the object from the local repository
+        try
+        {
+            var localObj = await _activityRepository.GetActivityByIdAsync(objectId, cancellationToken);
+            if (localObj is IObject obj)
+            {
+                _logger.LogDebug("Found object {ObjectId} in local repository", objectId);
+                return obj;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Object {ObjectId} not found locally", objectId);
+        }
+
+        // If not found locally, fetch it remotely using a signed client
+        try
+        {
+            // Get the actor performing the activity so we can sign the request
+            var actorRef = sourceActivity.Actor?.FirstOrDefault();
+            var actorId = actorRef switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject actorObj => actorObj.Id,
+                _ => null
+            };
+
+            if (string.IsNullOrEmpty(actorId))
+            {
+                _logger.LogWarning("Cannot fetch remote object {ObjectId}: source activity has no actor", objectId);
+                return null;
+            }
+
+            var client = await _signedClientProvider.CreateForActorIdAsync(actorId, cancellationToken);
+            if (client == null)
+            {
+                _logger.LogWarning("Cannot fetch remote object {ObjectId}: unable to create signed client for actor {ActorId}", objectId, actorId);
+                return null;
+            }
+            var remoteObj = await client.GetAsync<IObject>(new Uri(objectId), useCache: true, cancellationToken);
+            
+            if (remoteObj != null)
+            {
+                _logger.LogDebug("Fetched object {ObjectId} from remote server", objectId);
+            }
+            
+            return remoteObj;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch remote object {ObjectId}", objectId);
+            return null;
+        }
     }
 
     private void PreprocessActivity(string username, IObject? activityObj)

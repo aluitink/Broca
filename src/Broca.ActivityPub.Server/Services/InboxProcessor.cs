@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
@@ -15,7 +14,6 @@ public class InboxProcessor : IInboxHandler
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
     private readonly IActivityBuilderFactory _activityBuilderFactory;
-    private readonly HttpSignatureService _signatureService;
     private readonly AdminOperationsHandler _adminOperationsHandler;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ActivityDeliveryService _deliveryService;
@@ -27,7 +25,6 @@ public class InboxProcessor : IInboxHandler
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
         IActivityBuilderFactory activityBuilderFactory,
-        HttpSignatureService signatureService,
         AdminOperationsHandler adminOperationsHandler,
         AttachmentProcessingService attachmentProcessingService,
         ActivityDeliveryService deliveryService,
@@ -38,7 +35,6 @@ public class InboxProcessor : IInboxHandler
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
         _activityBuilderFactory = activityBuilderFactory;
-        _signatureService = signatureService;
         _adminOperationsHandler = adminOperationsHandler;
         _attachmentProcessingService = attachmentProcessingService;
         _deliveryService = deliveryService;

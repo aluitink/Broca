@@ -45,10 +45,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<NodeInfoService>();
         services.AddSingleton<ISystemIdentityService, SystemIdentityService>();
         services.AddSingleton<IActivityBuilderFactory, ActivityBuilderFactory>();
+        services.AddScoped<SignedClientProvider>();
         services.AddScoped<AdminOperationsHandler>();
         services.AddScoped<AttachmentProcessingService>();
         services.AddScoped<ICollectionService, CollectionService>();
         services.AddScoped<ObjectEnrichmentService>();
+        services.AddScoped<IHttpSignatureVerifier, HttpSignatureVerifier>();
 
         // Register background worker for activity delivery
         services.AddHostedService<ActivityDeliveryWorker>();

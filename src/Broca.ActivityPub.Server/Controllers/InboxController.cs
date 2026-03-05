@@ -1,7 +1,4 @@
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
-using Broca.ActivityPub.Client.Services;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Broca.ActivityPub.Server.Services;
@@ -21,10 +18,8 @@ public class InboxController : ActivityPubControllerBase
     private readonly IInboxHandler _inboxHandler;
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
-    private readonly HttpSignatureService _signatureService;
-    private readonly IActivityPubClient _activityPubClient;
-    private readonly ISystemIdentityService _systemIdentityService;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IHttpSignatureVerifier _signatureVerifier;
+    private readonly SignedClientProvider _signedClientProvider;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ObjectEnrichmentService _enrichmentService;
     private readonly IMemoryCache _cache;
@@ -37,10 +32,8 @@ public class InboxController : ActivityPubControllerBase
         IInboxHandler inboxHandler,
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
-        HttpSignatureService signatureService,
-        IActivityPubClient activityPubClient,
-        ISystemIdentityService systemIdentityService,
-        IHttpClientFactory httpClientFactory,
+        IHttpSignatureVerifier signatureVerifier,
+        SignedClientProvider signedClientProvider,
         AttachmentProcessingService attachmentProcessingService,
         ObjectEnrichmentService enrichmentService,
         IMemoryCache cache,
@@ -50,10 +43,8 @@ public class InboxController : ActivityPubControllerBase
         _inboxHandler = inboxHandler;
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
-        _signatureService = signatureService;
-        _activityPubClient = activityPubClient;
-        _systemIdentityService = systemIdentityService;
-        _httpClientFactory = httpClientFactory;
+        _signatureVerifier = signatureVerifier;
+        _signedClientProvider = signedClientProvider;
         _attachmentProcessingService = attachmentProcessingService;
         _enrichmentService = enrichmentService;
         _cache = cache;
@@ -233,7 +224,6 @@ public class InboxController : ActivityPubControllerBase
         _logger.LogDebug("Starting signature verification. Request headers: {Headers}", 
             string.Join(", ", Request.Headers.Keys));
         
-        // Get Signature header
         if (!Request.Headers.TryGetValue("Signature", out var signatureHeader) || string.IsNullOrEmpty(signatureHeader))
         {
             _logger.LogWarning("Signature header is missing from request");
@@ -242,20 +232,11 @@ public class InboxController : ActivityPubControllerBase
 
         _logger.LogDebug("Signature header found: {SignatureHeader}", signatureHeader!);
         
-        // Parse the signature to see what headers it expects
-        var signatureParts = _signatureService.ParseSignatureParts(signatureHeader!);
-        if (signatureParts.TryGetValue("headers", out var headersInSignature))
-        {
-            _logger.LogInformation("Signature expects these headers to be signed: {SignedHeaders}", headersInSignature);
-        }
-        
-        // Extract keyId from signature
-        var keyId = _signatureService.GetSignatureKeyId(signatureHeader!);
+        var keyId = _signatureVerifier.GetSignatureKeyId(signatureHeader!);
         _logger.LogInformation("Extracted keyId from signature: {KeyId}", keyId);
 
         ValidateRequestClockSkew(Request);
         
-        // Fetch the actor's public key
         var publicKeyPem = await FetchActorPublicKeyAsync(keyId, cancellationToken);
         
         if (string.IsNullOrWhiteSpace(publicKeyPem))
@@ -266,62 +247,39 @@ public class InboxController : ActivityPubControllerBase
 
         _logger.LogDebug("Successfully fetched public key for keyId: {KeyId}", keyId);
 
-        // Build headers dictionary for verification
         var headers = new Dictionary<string, string>();
-        
-        // Add the Signature header itself (required for verification)
         headers["signature"] = signatureHeader!;
-        
-        // Add (request-target) pseudo-header
-        var requestTarget = $"{Request.Method.ToLower()} {Request.Path}";
-        headers["(request-target)"] = requestTarget;
+        headers["(request-target)"] = $"{Request.Method.ToLower()} {Request.Path}";
 
-        // Add all headers from the request (lowercase keys)
-        // The verification service will use only the ones that are part of the signature
         foreach (var header in Request.Headers)
         {
             var headerName = header.Key.ToLower();
-            // Don't duplicate the signature header
             if (headerName != "signature")
-            {
                 headers[headerName] = header.Value.ToString();
-            }
         }
         
         _logger.LogDebug("Headers being verified: {Headers}", 
             string.Join(", ", headers.Select(h => $"\"{h.Key}\"")));
 
-        // Validate Digest header for POST requests (required per ActivityPub spec)
         if (Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
         {
             if (!Request.Headers.TryGetValue("Digest", out var digestHeader))
             {
                 _logger.LogWarning("POST request missing Digest header");
-                // Some implementations may not send Digest, log but don't fail
             }
             else
             {
-                // Verify the digest matches the body
                 var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
-                var expectedDigest = _signatureService.ComputeContentDigestHash(bodyBytes);
-                var digestValue = digestHeader.ToString();
-                
-                if (digestValue.StartsWith("SHA-256="))
+                if (!_signatureVerifier.VerifyDigest(bodyBytes, digestHeader.ToString()))
                 {
-                    var providedDigest = digestValue.Substring(8);
-                    if (providedDigest != expectedDigest)
-                    {
-                        _logger.LogWarning("Digest header mismatch. Expected: {Expected}, Got: {Got}", 
-                            expectedDigest, providedDigest);
-                        throw new InvalidOperationException("Digest header does not match request body");
-                    }
+                    _logger.LogWarning("Digest header mismatch for inbox request to keyId: {KeyId}", keyId);
+                    throw new InvalidOperationException("Digest header does not match request body");
                 }
             }
         }
 
-        // Verify the signature
-        _logger.LogDebug("Calling HttpSignatureService.VerifyHttpSignatureAsync with {HeaderCount} headers", headers.Count);
-        var result = await _signatureService.VerifyHttpSignatureAsync(headers, publicKeyPem, cancellationToken);
+        _logger.LogDebug("Calling IHttpSignatureVerifier.VerifyAsync with {HeaderCount} headers", headers.Count);
+        var result = await _signatureVerifier.VerifyAsync(headers, publicKeyPem, cancellationToken);
         _logger.LogDebug("Signature verification result: {Result}", result);
         return result;
     }
@@ -422,21 +380,8 @@ public class InboxController : ActivityPubControllerBase
     {
         try
         {
-            var systemActor = await _systemIdentityService.GetSystemActorAsync(cancellationToken);
-            var privateKey = await _systemIdentityService.GetSystemPrivateKeyAsync(cancellationToken);
-            var publicKeyId = $"{systemActor.Id}#main-key";
-
-            using var httpClient = _httpClientFactory.CreateClient("ActivityPub");
-            using var response = await _signatureService.SendSignedGetAsync(
-                httpClient, new Uri(actorUrl), publicKeyId, privateKey, cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Signed GET for actor {ActorUrl} failed with status {StatusCode}", actorUrl, response.StatusCode);
-                return null;
-            }
-
-            return await response.Content.ReadFromJsonAsync<Actor>(_jsonOptions, cancellationToken);
+            var client = await _signedClientProvider.CreateForSystemActorAsync(cancellationToken);
+            return await client.GetActorAsync(new Uri(actorUrl), cancellationToken);
         }
         catch (Exception ex)
         {
