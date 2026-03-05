@@ -51,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICollectionService, CollectionService>();
         services.AddScoped<ObjectEnrichmentService>();
         services.AddScoped<IHttpSignatureVerifier, HttpSignatureVerifier>();
+        services.AddScoped<IRemoteActorSyncService, RemoteActorSyncService>();
 
         // Register background worker for activity delivery
         services.AddHostedService<ActivityDeliveryWorker>();

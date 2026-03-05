@@ -18,6 +18,7 @@ public class InboxProcessor : IInboxHandler
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ActivityDeliveryService _deliveryService;
     private readonly IActivityPubClient _activityPubClient;
+    private readonly IRemoteActorSyncService _remoteActorSyncService;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<InboxProcessor> _logger;
 
@@ -29,6 +30,7 @@ public class InboxProcessor : IInboxHandler
         AttachmentProcessingService attachmentProcessingService,
         ActivityDeliveryService deliveryService,
         IActivityPubClient activityPubClient,
+        IRemoteActorSyncService remoteActorSyncService,
         IOptions<ActivityPubServerOptions> options,
         ILogger<InboxProcessor> logger)
     {
@@ -39,6 +41,7 @@ public class InboxProcessor : IInboxHandler
         _attachmentProcessingService = attachmentProcessingService;
         _deliveryService = deliveryService;
         _activityPubClient = activityPubClient;
+        _remoteActorSyncService = remoteActorSyncService;
         _options = options.Value;
         _logger = logger;
     }
@@ -87,6 +90,9 @@ public class InboxProcessor : IInboxHandler
             // Save to inbox
             await _activityRepository.SaveInboxActivityAsync(username, activityId, activity, cancellationToken);
 
+            // Synchronize the sender actor in the background if remote
+            await TrySyncSenderActorAsync(activity, cancellationToken);
+
             // Process based on activity type
             var handled = activityType switch
             {
@@ -121,6 +127,35 @@ public class InboxProcessor : IInboxHandler
         // but is no longer used in the signature verification flow.
         _logger.LogDebug("VerifySignatureAsync called - signature verification handled at controller level");
         return Task.FromResult(true);
+    }
+
+    private async Task TrySyncSenderActorAsync(IObjectOrLink activity, CancellationToken cancellationToken)
+    {
+        if (activity is not Activity act || act.Actor == null)
+            return;
+
+        var actorId = act.Actor.FirstOrDefault() switch
+        {
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
+        if (string.IsNullOrEmpty(actorId))
+            return;
+
+        var baseUrl = _options.BaseUrl?.TrimEnd('/') ?? string.Empty;
+        if (!string.IsNullOrEmpty(baseUrl) && actorId.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        try
+        {
+            await _remoteActorSyncService.SyncActorAsync(actorId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Background actor sync failed for {ActorId}", actorId);
+        }
     }
 
     private async Task<bool> HandleFollowAsync(string username, IObject? activity, CancellationToken cancellationToken)
