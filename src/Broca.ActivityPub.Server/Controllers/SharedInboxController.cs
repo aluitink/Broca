@@ -336,14 +336,8 @@ public class SharedInboxController : ActivityPubControllerBase
 
         if (hasPublicAddressing)
         {
-            _logger.LogDebug("Fetching all local usernames for public addressing");
-            var allLocalUsers = await _actorRepository.GetAllLocalUsernamesAsync();
-            _logger.LogInformation("GetAllLocalUsernamesAsync returned {Count} users: [{Users}]. Repository instance: {RepositoryId}", 
-                allLocalUsers.Count(), string.Join(", ", allLocalUsers), _actorRepository.GetHashCode());
-            foreach (var username in allLocalUsers)
-            {
-                recipients.Add(username);
-            }
+            _logger.LogDebug("Activity is publicly addressed - routing to system inbox only");
+            recipients.Add(_options.SystemActorUsername);
         }
 
         _logger.LogDebug("Total unique recipients resolved: {Count}", recipients.Count);
