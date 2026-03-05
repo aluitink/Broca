@@ -62,21 +62,45 @@ public class InMemoryActorRepository : IActorRepository, IActorStatistics
     public Task<IEnumerable<string>> GetFollowersAsync(string username, CancellationToken cancellationToken = default)
     {
         var key = username.ToLowerInvariant();
-        if (_followers.TryGetValue(key, out var followers))
-        {
-            return Task.FromResult<IEnumerable<string>>(followers.ToList());
-        }
-        return Task.FromResult<IEnumerable<string>>(Array.Empty<string>());
+        var list = _followers.TryGetValue(key, out var followers) ? followers.ToList() : new List<string>();
+        return Task.FromResult<IEnumerable<string>>(list);
+    }
+
+    public Task<IEnumerable<string>> GetFollowersAsync(string username, int limit, int offset, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        var list = _followers.TryGetValue(key, out var followers)
+            ? followers.Skip(offset).Take(limit).ToList()
+            : new List<string>();
+        return Task.FromResult<IEnumerable<string>>(list);
+    }
+
+    public Task<int> GetFollowersCountAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        return Task.FromResult(_followers.TryGetValue(key, out var followers) ? followers.Count : 0);
     }
 
     public Task<IEnumerable<string>> GetFollowingAsync(string username, CancellationToken cancellationToken = default)
     {
         var key = username.ToLowerInvariant();
-        if (_following.TryGetValue(key, out var following))
-        {
-            return Task.FromResult<IEnumerable<string>>(following.ToList());
-        }
-        return Task.FromResult<IEnumerable<string>>(Array.Empty<string>());
+        var list = _following.TryGetValue(key, out var following) ? following.ToList() : new List<string>();
+        return Task.FromResult<IEnumerable<string>>(list);
+    }
+
+    public Task<IEnumerable<string>> GetFollowingAsync(string username, int limit, int offset, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        var list = _following.TryGetValue(key, out var following)
+            ? following.Skip(offset).Take(limit).ToList()
+            : new List<string>();
+        return Task.FromResult<IEnumerable<string>>(list);
+    }
+
+    public Task<int> GetFollowingCountAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var key = username.ToLowerInvariant();
+        return Task.FromResult(_following.TryGetValue(key, out var following) ? following.Count : 0);
     }
 
     public Task AddFollowerAsync(string username, string followerActorId, CancellationToken cancellationToken = default)

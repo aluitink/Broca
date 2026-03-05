@@ -197,11 +197,26 @@ public class ObjectController : ActivityPubControllerBase
 
             var search = GetSearchParameters();
             var offset = page * limit;
-            var likes = await _activityRepository.GetLikesAsync(fullObjectId, search?.HasSearchCriteria == true ? int.MaxValue : limit, search?.HasSearchCriteria == true ? 0 : offset);
-            var totalCount = await _activityRepository.GetLikesCountAsync(fullObjectId);
+
+            IEnumerable<IObjectOrLink> likes;
+            int totalCount;
+            bool itemsAlreadyPaginated;
+
+            if (search?.HasSearchCriteria == true)
+            {
+                likes = await _activityRepository.GetLikesAsync(fullObjectId, int.MaxValue, 0);
+                totalCount = likes.Count();
+                itemsAlreadyPaginated = false;
+            }
+            else
+            {
+                likes = await _activityRepository.GetLikesAsync(fullObjectId, limit, offset);
+                totalCount = await _activityRepository.GetLikesCountAsync(fullObjectId);
+                itemsAlreadyPaginated = true;
+            }
 
             var collectionUrl = $"{baseUrl}/users/{username}/objects/{objectId}/likes";
-            return BuildCollectionResponse(collectionUrl, likes, totalCount, page, limit, search, search?.HasSearchCriteria != true);
+            return BuildCollectionResponse(collectionUrl, likes, totalCount, page, limit, search, itemsAlreadyPaginated);
         }
         catch (FormatException ex)
         {
@@ -244,11 +259,26 @@ public class ObjectController : ActivityPubControllerBase
 
             var search = GetSearchParameters();
             var offset = page * limit;
-            var shares = await _activityRepository.GetSharesAsync(fullObjectId, search?.HasSearchCriteria == true ? int.MaxValue : limit, search?.HasSearchCriteria == true ? 0 : offset);
-            var totalCount = await _activityRepository.GetSharesCountAsync(fullObjectId);
+
+            IEnumerable<IObjectOrLink> shares;
+            int totalCount;
+            bool itemsAlreadyPaginated;
+
+            if (search?.HasSearchCriteria == true)
+            {
+                shares = await _activityRepository.GetSharesAsync(fullObjectId, int.MaxValue, 0);
+                totalCount = shares.Count();
+                itemsAlreadyPaginated = false;
+            }
+            else
+            {
+                shares = await _activityRepository.GetSharesAsync(fullObjectId, limit, offset);
+                totalCount = await _activityRepository.GetSharesCountAsync(fullObjectId);
+                itemsAlreadyPaginated = true;
+            }
 
             var collectionUrl = $"{baseUrl}/users/{username}/objects/{objectId}/shares";
-            return BuildCollectionResponse(collectionUrl, shares, totalCount, page, limit, search, search?.HasSearchCriteria != true);
+            return BuildCollectionResponse(collectionUrl, shares, totalCount, page, limit, search, itemsAlreadyPaginated);
         }
         catch (FormatException ex)
         {

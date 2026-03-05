@@ -26,14 +26,10 @@ builder.Services.AddActivityPubClientWithWebCrypto(options =>
     // Options will be configured at runtime via AuthenticationStateService
 });
 
-// Override IActivityPubClient with the resilient wrapper that falls back to the
-// server-side proxy when direct browser requests are blocked by CORS or authorized-fetch.
+// Register ProxyService and override IActivityPubClient with the proxy-fallback subclass.
+// Falls back to the server-side proxy when direct browser requests are blocked by CORS or authorized-fetch.
 builder.Services.AddScoped<Broca.Web.Services.ProxyService>();
-builder.Services.AddScoped<IActivityPubClient>(sp =>
-    new Broca.Web.Services.ResilientActivityPubClient(
-        sp.GetRequiredService<Broca.ActivityPub.Client.Services.ActivityPubClient>(),
-        sp.GetRequiredService<Broca.Web.Services.ProxyService>(),
-        sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Broca.Web.Services.ResilientActivityPubClient>>()));
+builder.Services.AddScoped<IActivityPubClient, Broca.Web.Services.ProxyFallbackActivityPubClient>();
 
 // Add Broca ActivityPub Components
 builder.Services.AddActivityPubComponents(options =>

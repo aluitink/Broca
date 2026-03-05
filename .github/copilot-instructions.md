@@ -51,6 +51,15 @@ else if (ref is Actor actor)
 
 **To dereference:** use `IActivityPubClient.GetAsync<T>(link.Href)`. Never assume an `IObjectOrLink` is a full object without checking `is IObject` first.
 
+## JSON Serialization
+
+**The KristofferStrube.ActivityStreams library types already have JSON converters attributed on them.** Standard `JsonSerializerOptions` with camelCase naming is sufficient — no custom converters need to be registered. If deserialization issues arise, the problem is typically with:
+- Incorrect property types/structure in the JSON response
+- Missing or malformed data from the API endpoint
+- Network/authentication issues
+
+Do not investigate `JsonSerializerOptions` configuration or look for missing converters unless there is concrete evidence of a serialization-specific bug.
+
 ## 3rd Party Libraries
 - If we need details for Kristoffer Strube's ActivityStreams .NET library, refer to the official GitHub repository: https://github.com/KristofferStrube/ActivityStreams
 - Check the Blazor Fluent UI repository for component usage patterns.

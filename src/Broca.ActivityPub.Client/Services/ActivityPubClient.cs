@@ -2,12 +2,11 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Broca.ActivityPub.Core.Models;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Broca.ActivityPub.Client.Services;
 
@@ -181,7 +180,7 @@ public class ActivityPubClient : IActivityPubClient
     }
 
     /// <inheritdoc/>
-    public async Task<Actor> GetActorByAliasAsync(string alias, CancellationToken cancellationToken = default)
+    public virtual async Task<Actor> GetActorByAliasAsync(string alias, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(alias);
 
@@ -207,7 +206,7 @@ public class ActivityPubClient : IActivityPubClient
     }
 
     /// <inheritdoc/>
-    public async Task<T?> GetAsync<T>(Uri uri, bool useCache = true, CancellationToken cancellationToken = default)
+    public virtual async Task<T?> GetAsync<T>(Uri uri, bool useCache = true, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(uri);
 
@@ -323,7 +322,10 @@ public class ActivityPubClient : IActivityPubClient
                 yield break;
 
             // Top-level collection with no inline items: navigate to first page
-            if (collection is not CollectionPage && collection.Items == null && collection.OrderedItems == null)
+            var hasInlineItems = (collection.Items != null && collection.Items.Any()) || 
+                                 (collection.OrderedItems != null && collection.OrderedItems.Any());
+            
+            if (collection is not CollectionPage && !hasInlineItems)
             {
                 if (collection.First is CollectionPage inlineFirstPage)
                 {

@@ -1,10 +1,8 @@
 @page "/relationships"
 @using Broca.Web.Services
 @using Broca.ActivityPub.Components
-@using Broca.ActivityPub.Core.Interfaces
 @inject AuthenticationStateService AuthState
 @inject NavigationManager Navigation
-@inject IActivityPubClient Client
 
 <PageTitle>Relationships - Broca</PageTitle>
 
@@ -113,96 +111,6 @@ else
                     }
                 </div>
             </FluentTab>
-
-            <FluentTab Label="Blocks">
-                <div class="tab-content">
-                    @if (_blocksUrl != null)
-                    {
-                        <RelationshipsList CollectionUrl="@_blocksUrl"
-                                           Title="Blocked"
-                                           ActionLabel="Unblock"
-                                           PageSize="20"
-                                           OnActionClick="@HandleUnblockAsync">
-                            <ActorTemplate Context="actor">
-                                <FluentCard Class="actor-card">
-                                    <ActorRenderer Actor="@actor" />
-                                    <FluentButton Appearance="Appearance.Outline"
-                                                  OnClick="@(() => HandleUnblockAsync(actor.Id ?? string.Empty))">
-                                        Unblock
-                                    </FluentButton>
-                                </FluentCard>
-                            </ActorTemplate>
-                            <EmptyTemplate>
-                                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
-                                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
-                                    <FluentIcon Value="@(new Icons.Regular.Size48.Prohibited())" Color="Color.Neutral" />
-                                    <FluentLabel Typo="Typography.Subject">No blocked accounts</FluentLabel>
-                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Accounts you block will appear here.</FluentLabel>
-                                </FluentStack>
-                            </EmptyTemplate>
-                            <ErrorTemplate Context="error">
-                                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
-                                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
-                                    <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
-                                    <FluentLabel Typo="Typography.Subject">Failed to load blocks</FluentLabel>
-                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@error</FluentLabel>
-                                </FluentStack>
-                            </ErrorTemplate>
-                        </RelationshipsList>
-                    }
-                    else
-                    {
-                        <FluentCard>
-                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Unable to determine blocks URL.</FluentLabel>
-                        </FluentCard>
-                    }
-                </div>
-            </FluentTab>
-
-            <FluentTab Label="Mutes">
-                <div class="tab-content">
-                    @if (_mutesUrl != null)
-                    {
-                        <RelationshipsList CollectionUrl="@_mutesUrl"
-                                           Title="Muted"
-                                           ActionLabel="Unmute"
-                                           PageSize="20"
-                                           OnActionClick="@HandleUnmuteAsync">
-                            <ActorTemplate Context="actor">
-                                <FluentCard Class="actor-card">
-                                    <ActorRenderer Actor="@actor" />
-                                    <FluentButton Appearance="Appearance.Outline"
-                                                  OnClick="@(() => HandleUnmuteAsync(actor.Id ?? string.Empty))">
-                                        Unmute
-                                    </FluentButton>
-                                </FluentCard>
-                            </ActorTemplate>
-                            <EmptyTemplate>
-                                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
-                                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
-                                    <FluentIcon Value="@(new Icons.Regular.Size48.SpeakerMute())" Color="Color.Neutral" />
-                                    <FluentLabel Typo="Typography.Subject">No muted accounts</FluentLabel>
-                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Accounts you mute will appear here.</FluentLabel>
-                                </FluentStack>
-                            </EmptyTemplate>
-                            <ErrorTemplate Context="error">
-                                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
-                                             Style="padding: 3rem 2rem; text-align: center;" VerticalGap="16">
-                                    <FluentIcon Value="@(new Icons.Regular.Size48.Warning())" Color="Color.Error" />
-                                    <FluentLabel Typo="Typography.Subject">Failed to load mutes</FluentLabel>
-                                    <FluentLabel Typo="Typography.Body" Color="Color.Neutral">@error</FluentLabel>
-                                </FluentStack>
-                            </ErrorTemplate>
-                        </RelationshipsList>
-                    }
-                    else
-                    {
-                        <FluentCard>
-                            <FluentLabel Typo="Typography.Body" Color="Color.Neutral">Unable to determine mutes URL.</FluentLabel>
-                        </FluentCard>
-                    }
-                </div>
-            </FluentTab>
         </FluentTabs>
     </div>
 }
@@ -210,8 +118,6 @@ else
 @code {
     private Uri? _followersUrl;
     private Uri? _followingUrl;
-    private Uri? _blocksUrl;
-    private Uri? _mutesUrl;
 
     protected override void OnInitialized()
     {
@@ -229,43 +135,6 @@ else
     {
         _followersUrl = AuthState.GetFollowersUrl();
         _followingUrl = AuthState.GetFollowingUrl();
-
-        if (AuthState.CurrentActorId != null && Uri.TryCreate(AuthState.CurrentActorId, UriKind.Absolute, out var actorUri))
-        {
-            _blocksUrl = new Uri(actorUri, "blocked");
-            _mutesUrl = new Uri(actorUri, "muted");
-        }
-    }
-
-    private async Task HandleUnblockAsync(string actorId)
-    {
-        if (string.IsNullOrEmpty(actorId)) return;
-        try
-        {
-            var blockActivity = Client.CreateActivityBuilder().Block(actorId);
-            var undoActivity = Client.CreateActivityBuilder().Undo(blockActivity);
-            await Client.PostToOutboxAsync(undoActivity);
-        }
-        catch
-        {
-            // Silently fail - user can retry
-        }
-    }
-
-    private async Task HandleUnmuteAsync(string actorId)
-    {
-        if (string.IsNullOrEmpty(actorId)) return;
-        try
-        {
-            // Mutes are server-specific; send an Undo{Block} or equivalent
-            // For Broca, we post a server-defined undo-mute activity
-            var undoActivity = Client.CreateActivityBuilder().UndoByReference(actorId);
-            await Client.PostToOutboxAsync(undoActivity);
-        }
-        catch
-        {
-            // Silently fail - user can retry
-        }
     }
 
     public void Dispose()

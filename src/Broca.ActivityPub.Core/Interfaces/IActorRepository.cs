@@ -34,9 +34,29 @@ public interface IActorRepository
     Task<IEnumerable<string>> GetFollowersAsync(string username, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets a page of followers for an actor
+    /// </summary>
+    Task<IEnumerable<string>> GetFollowersAsync(string username, int limit, int offset, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the total number of followers for an actor
+    /// </summary>
+    Task<int> GetFollowersCountAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets all following for an actor
     /// </summary>
     Task<IEnumerable<string>> GetFollowingAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets a page of following for an actor
+    /// </summary>
+    Task<IEnumerable<string>> GetFollowingAsync(string username, int limit, int offset, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the total number of actors being followed
+    /// </summary>
+    Task<int> GetFollowingCountAsync(string username, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Adds a follower
