@@ -565,7 +565,7 @@ public class ActivityPubClient : IActivityPubClient
     /// <summary>
     /// Adds a value to the cache
     /// </summary>
-    private void AddToCache<T>(string key, T value)
+    protected void AddToCache<T>(string key, T value)
     {
         lock (_cache)
         {

@@ -411,7 +411,7 @@
     {
         try
         {
-            var collection = await Client.GetAsync<OrderedCollection>(uri, useCache: false);
+            var collection = await Client.GetAsync<OrderedCollection>(uri);
             if (collection?.TotalItems != null)
                 setter((int)collection.TotalItems.Value);
         }

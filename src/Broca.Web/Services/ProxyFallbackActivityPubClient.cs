@@ -35,12 +35,18 @@ public class ProxyFallbackActivityPubClient : ActivityPubClient
                 return result;
 
             _logger.LogInformation("Direct fetch returned null, retrying via proxy: {Uri}", uri);
-            return await _proxyService.GetViaProxyAsync<T>(uri, cancellationToken);
+            var proxyResult = await _proxyService.GetViaProxyAsync<T>(uri, cancellationToken);
+            if (proxyResult is not null && useCache)
+                AddToCache(uri.ToString(), proxyResult);
+            return proxyResult;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Direct fetch failed, retrying via proxy: {Uri}", uri);
-            return await _proxyService.GetViaProxyAsync<T>(uri, cancellationToken);
+            var proxyResult = await _proxyService.GetViaProxyAsync<T>(uri, cancellationToken);
+            if (proxyResult is not null && useCache)
+                AddToCache(uri.ToString(), proxyResult);
+            return proxyResult;
         }
     }
 
