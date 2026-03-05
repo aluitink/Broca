@@ -1,5 +1,6 @@
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
+using Broca.ActivityPub.Server.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -21,21 +22,18 @@ namespace Broca.ActivityPub.Server.Controllers;
 [Route("[controller]")]
 public class ProxyController : ControllerBase
 {
-    private readonly IActivityPubClientFactory _clientFactory;
-    private readonly ISystemIdentityService _systemIdentityService;
+    private readonly SignedClientProvider _signedClientProvider;
     private readonly ActivityPubServerOptions _options;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ILogger<ProxyController> _logger;
 
     public ProxyController(
-        IActivityPubClientFactory clientFactory,
-        ISystemIdentityService systemIdentityService,
+        SignedClientProvider signedClientProvider,
         IOptions<ActivityPubServerOptions> options,
         IOptions<JsonSerializerOptions> jsonOptions,
         ILogger<ProxyController> logger)
     {
-        _clientFactory = clientFactory;
-        _systemIdentityService = systemIdentityService;
+        _signedClientProvider = signedClientProvider;
         _options = options.Value;
         _jsonOptions = jsonOptions.Value;
         _logger = logger;
@@ -67,11 +65,7 @@ public class ProxyController : ControllerBase
 
         try
         {
-            var systemActor = await _systemIdentityService.GetSystemActorAsync();
-            var privateKey = await _systemIdentityService.GetSystemPrivateKeyAsync();
-            var publicKeyId = $"{systemActor.Id}#main-key";
-
-            var client = _clientFactory.CreateForActor(systemActor.Id!, publicKeyId, privateKey);
+            var client = await _signedClientProvider.CreateForSystemActorAsync(HttpContext.RequestAborted);
             var result = await client.GetAsync<JsonElement>(targetUri, useCache: false, HttpContext.RequestAborted);
 
             var json = JsonSerializer.Serialize(result, _jsonOptions);
@@ -116,11 +110,7 @@ public class ProxyController : ControllerBase
 
         try
         {
-            var systemActor = await _systemIdentityService.GetSystemActorAsync();
-            var privateKey = await _systemIdentityService.GetSystemPrivateKeyAsync();
-            var publicKeyId = $"{systemActor.Id}#main-key";
-
-            var client = _clientFactory.CreateForActor(systemActor.Id!, publicKeyId, privateKey);
+            var client = await _signedClientProvider.CreateForSystemActorAsync(HttpContext.RequestAborted);
             using var response = await client.PostAsync(targetUri, data, HttpContext.RequestAborted);
 
             if (!response.IsSuccessStatusCode)

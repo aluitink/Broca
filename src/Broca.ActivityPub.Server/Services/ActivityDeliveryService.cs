@@ -15,6 +15,7 @@ public class ActivityDeliveryService
     private readonly IActorRepository _actorRepository;
     private readonly IActivityRepository _activityRepository;
     private readonly IActivityPubClientFactory _clientFactory;
+    private readonly SignedClientProvider _signedClientProvider;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<ActivityDeliveryService> _logger;
 
@@ -23,6 +24,7 @@ public class ActivityDeliveryService
         IActorRepository actorRepository,
         IActivityRepository activityRepository,
         IActivityPubClientFactory clientFactory,
+        SignedClientProvider signedClientProvider,
         IOptions<ActivityPubServerOptions> options,
         ILogger<ActivityDeliveryService> logger)
     {
@@ -30,6 +32,7 @@ public class ActivityDeliveryService
         _actorRepository = actorRepository;
         _activityRepository = activityRepository;
         _clientFactory = clientFactory;
+        _signedClientProvider = signedClientProvider;
         _options = options.Value;
         _logger = logger;
     }
@@ -68,13 +71,18 @@ public class ActivityDeliveryService
         _logger.LogInformation("Queueing activity {ActivityId} for direct delivery to {TargetActorId}",
             activityId, targetActorId);
 
-        // Attempt to resolve the target actor's inbox now. If resolution fails the item is still
-        // enqueued — the inbox will be resolved again on each delivery attempt.
+        // Attempt to resolve the target actor's inbox now using a signed GET so that servers
+        // requiring authorized fetch (e.g. Threads) respond correctly. If resolution fails the
+        // item is still enqueued — the inbox will be resolved again on each delivery attempt.
         string inboxUrl = "";
         try
         {
-            var targetActor = await _clientFactory.CreateAnonymous().GetActorAsync(new Uri(targetActorId), cancellationToken);
-            inboxUrl = targetActor?.Inbox?.Href?.ToString() ?? "";
+            var client = _signedClientProvider.CreateForActor(senderActor, senderActorId);
+            if (client != null)
+            {
+                var targetActor = await client.GetActorAsync(new Uri(targetActorId), cancellationToken);
+                inboxUrl = targetActor?.Inbox?.Href?.ToString() ?? "";
+            }
         }
         catch (Exception ex)
         {
@@ -147,7 +155,14 @@ public class ActivityDeliveryService
             {
                 try
                 {
-                    var followerActor = await _clientFactory.CreateAnonymous().GetActorAsync(new Uri(followerActorId), cancellationToken);
+                    var client = _signedClientProvider.CreateForActor(senderActor, senderActorId);
+                    if (client == null)
+                    {
+                        _logger.LogWarning("Cannot create signed client for sender {SenderActorId}. Skipping follower {FollowerActorId}.", senderActorId, followerActorId);
+                        continue;
+                    }
+
+                    var followerActor = await client.GetActorAsync(new Uri(followerActorId), cancellationToken);
 
                     if (followerActor == null)
                     {
@@ -295,8 +310,15 @@ public class ActivityDeliveryService
             {
                 try
                 {
+                    var client = _signedClientProvider.CreateForActor(senderActor, senderActorId);
+                    if (client == null)
+                    {
+                        _logger.LogWarning("Cannot create signed client for sender {SenderActorId}. Skipping recipient {RecipientId}.", senderActorId, recipientId);
+                        continue;
+                    }
+
                     // Fetch the recipient's actor to get their inbox
-                    var recipientActor = await _clientFactory.CreateAnonymous().GetActorAsync(new Uri(recipientId), cancellationToken);
+                    var recipientActor = await client.GetActorAsync(new Uri(recipientId), cancellationToken);
 
                     if (recipientActor == null)
                     {

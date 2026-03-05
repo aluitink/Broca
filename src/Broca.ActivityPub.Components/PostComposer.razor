@@ -343,10 +343,10 @@
             switch (visibility)
             {
                 case "public":
-                    builder.ToPublic();
+                    builder.ToPublic().CcFollowers();
                     break;
                 case "unlisted":
-                    builder.ToPublic(); // Unlisted is still public but not in public timelines
+                    builder.CcFollowers();
                     break;
                 case "followers":
                     builder.ToFollowers();
@@ -370,6 +370,18 @@
             }
 
             var activity = builder.Build();
+            
+            // Debug: Log the activity before sending
+            var activityJson = System.Text.Json.JsonSerializer.Serialize(activity, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            });
+            Console.WriteLine($"[PostComposer] Activity being sent:\n{activityJson}");
+            Console.WriteLine($"[PostComposer] Visibility: {visibility}");
+            Console.WriteLine($"[PostComposer] Activity.To count: {(activity.To?.Count() ?? 0)}");
+            Console.WriteLine($"[PostComposer] Activity.Cc count: {(activity.Cc?.Count() ?? 0)}");
+            
             await Client.PostToOutboxAsync(activity);
 
             successMessage = "Posted successfully!";

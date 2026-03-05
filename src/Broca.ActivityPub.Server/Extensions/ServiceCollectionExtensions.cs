@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<NodeInfoService>();
         services.AddSingleton<ISystemIdentityService, SystemIdentityService>();
         services.AddSingleton<IActivityBuilderFactory, ActivityBuilderFactory>();
+        services.AddScoped<SignedClientProvider>();
         services.AddScoped<AdminOperationsHandler>();
         services.AddScoped<AttachmentProcessingService>();
         services.AddScoped<ICollectionService, CollectionService>();

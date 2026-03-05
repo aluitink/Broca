@@ -50,6 +50,7 @@
                     Value="@Context.Visibility"
                     ValueChanged="@((string value) => { Context.Visibility = value; StateHasChanged(); })"
                     Disabled="Context.IsPosting"
+                    OptionValue="@(v => v)"
                     OptionText="@(v => v switch {
                         "public" => "🌐 Public",
                         "unlisted" => "🔓 Unlisted",

@@ -25,8 +25,7 @@ public class SharedInboxController : ActivityPubControllerBase
     private readonly IInboxHandler _inboxHandler;
     private readonly IActorRepository _actorRepository;
     private readonly IHttpSignatureVerifier _signatureVerifier;
-    private readonly IActivityPubClientFactory _clientFactory;
-    private readonly ISystemIdentityService _systemIdentityService;
+    private readonly SignedClientProvider _signedClientProvider;
     private readonly IMemoryCache _cache;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<SharedInboxController> _logger;
@@ -36,8 +35,7 @@ public class SharedInboxController : ActivityPubControllerBase
         IInboxHandler inboxHandler,
         IActorRepository actorRepository,
         IHttpSignatureVerifier signatureVerifier,
-        IActivityPubClientFactory clientFactory,
-        ISystemIdentityService systemIdentityService,
+        SignedClientProvider signedClientProvider,
         IMemoryCache cache,
         IOptions<ActivityPubServerOptions> options,
         ILogger<SharedInboxController> logger)
@@ -45,8 +43,7 @@ public class SharedInboxController : ActivityPubControllerBase
         _inboxHandler = inboxHandler;
         _actorRepository = actorRepository;
         _signatureVerifier = signatureVerifier;
-        _clientFactory = clientFactory;
-        _systemIdentityService = systemIdentityService;
+        _signedClientProvider = signedClientProvider;
         _cache = cache;
         _options = options.Value;
         _logger = logger;
@@ -231,11 +228,8 @@ public class SharedInboxController : ActivityPubControllerBase
 
             if (actor == null)
             {
-                var systemActor = await _systemIdentityService.GetSystemActorAsync(cancellationToken);
-                var privateKey = await _systemIdentityService.GetSystemPrivateKeyAsync(cancellationToken);
-                var publicKeyId = $"{systemActor.Id}#main-key";
-                actor = await _clientFactory.CreateForActor(systemActor.Id!, publicKeyId, privateKey)
-                    .GetActorAsync(new Uri(actorUrl), cancellationToken);
+                var client = await _signedClientProvider.CreateForSystemActorAsync(cancellationToken);
+                actor = await client.GetActorAsync(new Uri(actorUrl), cancellationToken);
             }
 
             if (actor?.ExtensionData != null &&
