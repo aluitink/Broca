@@ -60,3 +60,25 @@
 .note-actions {
     justify-content: flex-start;
 }
+
+.note-in-reply-to {
+    border-left: 2px solid var(--neutral-stroke-rest);
+    padding: 4px 0 4px 10px;
+    opacity: 0.75;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.reply-to-actor {
+    font-size: 0.85em;
+}
+
+.reply-to-content {
+    font-size: 0.9em;
+    line-height: 1.4;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}

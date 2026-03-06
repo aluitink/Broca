@@ -56,6 +56,10 @@ footer {
     padding: 5px;
 }
 
+[class*="fluent-"][class*="-card"] {
+    min-height: 80px;
+}
+
 
 #blazor-error-ui {
     background: lightyellow;

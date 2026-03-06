@@ -53,11 +53,36 @@
             {
                 <FluentDivider Style="margin: 0;" />
                 <div class="like-object">
-                    @if (objectToRender != null)
+                    @if (objectToRender is Note likedNote)
                     {
-                        <ObjectDisplay Object="@objectToRender" />
+                        @if (likedNote.AttributedTo?.Any() == true)
+                        {
+                            <FluentPersona Name="@GetObjectActorDisplay(likedNote)"
+                                           Image="@GetObjectActorImageUrl(likedNote)"
+                                           ImageSize="28px"
+                                           TextPosition="TextPosition.End"
+                                           class="like-object-actor" />
+                        }
+                        @if (likedNote.Content?.Any() == true)
+                        {
+                            <div class="note-content like-object-content">
+                                @((MarkupString)(likedNote.Content.First() ?? string.Empty))
+                            </div>
+                        }
+                        else if (likedNote.Name?.Any() == true)
+                        {
+                            <div class="like-object-content">@likedNote.Name.First()</div>
+                        }
                     }
-                    else if (!isLoading && Like.Object.First() is Link link)
+                    else if (objectToRender is KristofferStrube.ActivityStreams.Object renderedObj)
+                    {
+                        var summary = renderedObj.Name?.FirstOrDefault() ?? renderedObj.Summary?.FirstOrDefault() ?? renderedObj.Id;
+                        @if (!string.IsNullOrEmpty(summary))
+                        {
+                            <div class="like-object-content">@summary</div>
+                        }
+                    }
+                    else if (!isLoading && Like.Object.First() is ILink link)
                     {
                         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
                             <FluentIcon Value="@(new Icons.Regular.Size16.Link())" Color="Color.Neutral" />
@@ -164,7 +189,7 @@
         var objRef = Like.Object.First();
         
         // If it's already an object (not a link), use it directly
-        if (objRef is IObject obj && obj is not Link)
+        if (objRef is IObject obj && objRef is not ILink && HasDisplayableContent(obj))
         {
             objectToRender = obj;
             return;
@@ -173,9 +198,13 @@
         // Get the URL to fetch
         Uri? urlToFetch = null;
         
-        if (objRef is Link link && link.Href != null)
+        if (objRef is ILink link && link.Href != null)
         {
             urlToFetch = link.Href;
+        }
+        else if (objRef is IObject refObj && !string.IsNullOrEmpty(refObj.Id))
+        {
+            Uri.TryCreate(refObj.Id, UriKind.Absolute, out urlToFetch);
         }
         else
         {
@@ -214,6 +243,44 @@
                 StateHasChanged();
             }
         }
+    }
+
+    private static bool HasDisplayableContent(IObject obj)
+    {
+        if (obj is KristofferStrube.ActivityStreams.Object o)
+            return o.Content?.Any() == true || o.Name?.Any() == true || o.Summary?.Any() == true;
+        return false;
+    }
+
+    private string GetObjectActorDisplay(Note note)
+    {
+        var actorRef = note.AttributedTo?.FirstOrDefault();
+        if (actorRef is Actor actor && actor.Name?.Any() == true)
+            return actor.Name.First();
+        if (actorRef is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true) return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id)) return obj.Id;
+        }
+        if (actorRef is ILink link && link.Href != null)
+            return link.Href.ToString();
+        return "Unknown";
+    }
+
+    private string GetObjectActorImageUrl(Note note)
+    {
+        var actorRef = note.AttributedTo?.FirstOrDefault();
+        if (actorRef is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                if (url is ILink link && link.Href != null)
+                    return link.Href.ToString();
+            }
+        }
+        return string.Empty;
     }
 
     private string GetActorDisplay()

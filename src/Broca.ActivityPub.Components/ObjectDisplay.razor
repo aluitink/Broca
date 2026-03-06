@@ -169,7 +169,7 @@ else if (ShowEmptyState)
         }
 
         // Check if it's a Link that needs resolution
-        if (AutoResolveLinks && Object is Link link && link.Href != null)
+        if (AutoResolveLinks && Object is ILink link && link.Href != null)
         {
             isLoading = true;
             StateHasChanged();

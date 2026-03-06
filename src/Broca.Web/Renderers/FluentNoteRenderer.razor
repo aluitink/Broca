@@ -3,8 +3,10 @@
 @using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
 @using Broca.ActivityPub.Components
 @using Broca.ActivityPub.Components.Services
+@using Broca.ActivityPub.Core.Interfaces
 @inject ActorResolutionService ActorResolver
 @inject NavigationManager Navigation
+@inject IActivityPubClient? ActivityPubClient
 @inherits ComponentBase
 
 <FluentCard Class="@($"fluent-note-card {CssClass}")">
@@ -55,6 +57,58 @@
                 <FluentLabel Typo="Typography.Subject" Weight="FontWeight.Bold" class="note-title">
                     @Note.Name.First()
                 </FluentLabel>
+            }
+
+            @* In Reply To *@
+            @if (Note.InReplyTo?.Any() == true)
+            {
+                <div class="note-in-reply-to">
+                    @if (isLoadingReplyTo)
+                    {
+                        <FluentProgressRing Style="width: 20px; height: 20px;" />
+                    }
+                    else if (inReplyToObject is Note replyNote)
+                    {
+                        @if (replyNote.AttributedTo?.Any() == true)
+                        {
+                            <FluentPersona Name="@GetReplyActorDisplay(replyNote)"
+                                           Image="@GetReplyActorImageUrl(replyNote)"
+                                           ImageSize="24px"
+                                           TextPosition="TextPosition.End"
+                                           class="reply-to-actor" />
+                        }
+                        @if (replyNote.Content?.Any() == true)
+                        {
+                            <div class="note-content reply-to-content">
+                                @((MarkupString)(replyNote.Content.First() ?? string.Empty))
+                            </div>
+                        }
+                        else if (replyNote.Name?.Any() == true)
+                        {
+                            <div class="reply-to-content">@replyNote.Name.First()</div>
+                        }
+                    }
+                    else if (inReplyToObject is KristofferStrube.ActivityStreams.Object replyObj)
+                    {
+                        var summary = replyObj.Name?.FirstOrDefault() ?? replyObj.Summary?.FirstOrDefault() ?? replyObj.Id;
+                        @if (!string.IsNullOrEmpty(summary))
+                        {
+                            <div class="reply-to-content">@summary</div>
+                        }
+                    }
+                    else
+                    {
+                        var replyToRef = Note.InReplyTo.First();
+                        var replyToUrl = replyToRef is ILink l ? l.Href?.ToString() : (replyToRef as IObject)?.Id;
+                        if (!string.IsNullOrEmpty(replyToUrl))
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" VerticalAlignment="VerticalAlignment.Center">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowReply())" Color="Color.Neutral" />
+                                <FluentAnchor Href="@replyToUrl" Target="_blank" Appearance="Appearance.Hypertext">@replyToUrl</FluentAnchor>
+                            </FluentStack>
+                        }
+                    }
+                </div>
             }
 
             @* Content *@
@@ -113,6 +167,8 @@
 @code {
     private ActorInfo? actorInfo;
     private bool showReplies;
+    private object? inReplyToObject;
+    private bool isLoadingReplyTo;
 
     /// <summary>
     /// Gets or sets the Note object to render.
@@ -174,6 +230,90 @@
         {
             actorInfo = await ActorResolver.ResolveActorAsync(Note.AttributedTo.First());
         }
+        await LoadInReplyTo();
+    }
+
+    private async Task LoadInReplyTo()
+    {
+        inReplyToObject = null;
+        if (ActivityPubClient == null || Note?.InReplyTo?.Any() != true)
+            return;
+
+        var replyToRef = Note.InReplyTo.First();
+
+        if (replyToRef is IObject inlineObj && replyToRef is not ILink && HasDisplayableContent(inlineObj))
+        {
+            inReplyToObject = inlineObj;
+            return;
+        }
+
+        Uri? urlToFetch = null;
+        if (replyToRef is ILink link && link.Href != null)
+            urlToFetch = link.Href;
+        else if (replyToRef is IObject refObj && !string.IsNullOrEmpty(refObj.Id))
+            Uri.TryCreate(refObj.Id, UriKind.Absolute, out urlToFetch);
+        else
+        {
+            var urlString = replyToRef?.ToString();
+            if (!string.IsNullOrEmpty(urlString))
+                Uri.TryCreate(urlString, UriKind.Absolute, out urlToFetch);
+        }
+
+        if (urlToFetch != null)
+        {
+            try
+            {
+                isLoadingReplyTo = true;
+                StateHasChanged();
+                var fetched = await ActivityPubClient.GetAsync<KristofferStrube.ActivityStreams.Object>(urlToFetch, useCache: true);
+                if (fetched != null)
+                    inReplyToObject = fetched;
+            }
+            catch { }
+            finally
+            {
+                isLoadingReplyTo = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private static bool HasDisplayableContent(IObject obj)
+    {
+        if (obj is KristofferStrube.ActivityStreams.Object o)
+            return o.Content?.Any() == true || o.Name?.Any() == true || o.Summary?.Any() == true;
+        return false;
+    }
+
+    private string GetReplyActorDisplay(Note note)
+    {
+        var actorRef = note.AttributedTo?.FirstOrDefault();
+        if (actorRef is Actor actor && actor.Name?.Any() == true)
+            return actor.Name.First();
+        if (actorRef is KristofferStrube.ActivityStreams.Object obj)
+        {
+            if (obj.Name?.Any() == true) return obj.Name.First();
+            if (!string.IsNullOrEmpty(obj.Id)) return obj.Id;
+        }
+        if (actorRef is ILink link && link.Href != null)
+            return link.Href.ToString();
+        return "Unknown";
+    }
+
+    private string GetReplyActorImageUrl(Note note)
+    {
+        var actorRef = note.AttributedTo?.FirstOrDefault();
+        if (actorRef is Person person && person.Icon?.Any() == true)
+        {
+            var icon = person.Icon.First();
+            if (icon is Image img && img.Url?.Any() == true)
+            {
+                var url = img.Url.First();
+                if (url is ILink link && link.Href != null)
+                    return link.Href.ToString();
+            }
+        }
+        return string.Empty;
     }
 
     private int GetReplyCount()
