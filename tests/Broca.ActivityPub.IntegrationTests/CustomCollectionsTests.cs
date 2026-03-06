@@ -233,8 +233,8 @@ public class CustomCollectionsTests : IAsyncLifetime
         
         var content = await response.Content.ReadAsStringAsync();
         
-        // Should contain collections catalog endpoint (like inbox, outbox)
-        Assert.Contains("\"collections\"", content);
+        // Should contain broca:collections catalog pointer
+        Assert.Contains("\"broca:collections\"", content);
         Assert.Contains("/collections\"", content);
         
         // Should contain individual collection with broca: prefix

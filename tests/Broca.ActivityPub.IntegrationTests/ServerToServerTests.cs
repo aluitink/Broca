@@ -46,36 +46,25 @@ public class ServerToServerTests : TwoServerFixture
 
         // Act - Alice follows Bob
         var followActivity = TestDataSeeder.CreateFollow(aliceId, bobId);
-        var response = await c2sHelper.PostToOutboxAsync(followActivity);
+        await c2sHelper.PostToOutboxAsync(followActivity);
 
         // Assert - Poll for the Follow to be delivered to Bob's inbox on Server B
-        // Note: This requires S2S delivery to be implemented and working
-        // Pass ServerA as the sending server to get diagnostics from both sides if it times out
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
-        
-        try
-        {
-            var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>(
-                "bob", 
-                TimeSpan.FromSeconds(10));
 
-            Assert.NotNull(deliveredFollow);
-        }
-        catch (TimeoutException)
-        {
-            // If delivery hasn't been implemented yet, this test will timeout
-            // We can skip the assertion for now
-            Assert.True(response.IsSuccessStatusCode, "At least the C2S post succeeded");
-        }
+        var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>(
+            "bob",
+            TimeSpan.FromSeconds(10));
+
+        Assert.NotNull(deliveredFollow);
     }
 
     [Fact]
-    public async Task S2S_UserOnServerA_LikesNoteOnServerB_LikeDelivered()
+    public async Task S2S_FolloweeCreatesNote_DeliveredToFollower()
     {
         // Arrange - Seed Alice on Server A and Bob on Server B
         string alicePrivateKey;
         string bobPrivateKey;
-        
+
         using (var scopeA = ServerA.Services.CreateScope())
         {
             var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
@@ -93,7 +82,6 @@ public class ServerToServerTests : TwoServerFixture
         var aliceId = $"{ServerA.BaseUrl}/users/alice";
         var bobId = $"{ServerB.BaseUrl}/users/bob";
 
-        // Set up authenticated clients
         var bobClient = TestClientFactory.CreateAuthenticatedClient(
             () => ServerB.CreateClient(),
             bobId,
@@ -107,87 +95,31 @@ public class ServerToServerTests : TwoServerFixture
         var c2sHelperBob = new ClientToServerHelper(bobClient, bobId, ClientB);
         var c2sHelperAlice = new ClientToServerHelper(aliceClient, aliceId, ClientA);
 
+        var s2sHelperA = new ServerToServerHelper(ServerA, TimeSpan.FromSeconds(5));
+        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
+
         // Step 1: Alice follows Bob so she'll receive his posts
         var followActivity = TestDataSeeder.CreateFollow(aliceId, bobId);
         await c2sHelperAlice.PostToOutboxAsync(followActivity);
 
-        // Check what got queued
-        var s2sHelperA = new ServerToServerHelper(ServerA, TimeSpan.FromSeconds(5));
-        var statsBeforeA = await s2sHelperA.GetDeliveryQueueStatsAsync();
-        
-        // Manually trigger delivery processing on Server A
         await s2sHelperA.ProcessPendingDeliveriesAsync();
-        
-        var statsAfterA = await s2sHelperA.GetDeliveryQueueStatsAsync();
 
-        // Wait for the Follow to be delivered to Bob's inbox
-        // Pass ServerA as the sending server to get diagnostics from both sides if it times out
-        var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
         var deliveredFollow = await s2sHelperB.WaitForInboxActivityByTypeAsync<Follow>(
-            "bob", 
+            "bob",
             TimeSpan.FromSeconds(10));
         Assert.NotNull(deliveredFollow);
 
-        // Step 2: Bob creates and posts a note via C2S (which will deliver to his followers, including Alice)
+        // Step 2: Bob creates a note — delivered to Alice because she follows him
         var createActivity = TestDataSeeder.CreateCreateActivity(bobId, "Bob's interesting note");
-        var postedCreate = await c2sHelperBob.PostToOutboxAsync(createActivity);
+        await c2sHelperBob.PostToOutboxAsync(createActivity);
 
-        // Manually trigger delivery processing on Server B
         await s2sHelperB.ProcessPendingDeliveriesAsync();
 
-        // Wait for the note to be delivered to Alice's inbox on Server A
         var deliveredCreate = await s2sHelperA.WaitForInboxActivityByTypeAsync<Create>(
-            "alice", 
+            "alice",
             TimeSpan.FromSeconds(10));
 
         Assert.NotNull(deliveredCreate);
-    }
-
-    [Fact]
-    public async Task S2S_UserCreatesNote_DeliveredToFollower()
-    {
-        // Arrange - Seed Alice on Server A and Bob on Server B
-        string alicePrivateKey;
-        using (var scopeA = ServerA.Services.CreateScope())
-        {
-            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
-            var (alice, privateKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice", ServerA.BaseUrl);
-            alicePrivateKey = privateKey;
-        }
-
-        using (var scopeB = ServerB.Services.CreateScope())
-        {
-            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
-            await TestDataSeeder.SeedActorAsync(actorRepo, "bob", ServerB.BaseUrl);
-        }
-
-        var aliceId = $"{ServerA.BaseUrl}/users/alice";
-        var bobId = $"{ServerB.BaseUrl}/users/bob";
-
-        // Note: Setting up the follower relationship would require implementing
-        // the Follow/Accept flow or manually adding to the followers collection
-        // For now, this test demonstrates the pattern
-
-        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
-            () => ServerA.CreateClient(),
-            aliceId,
-            alicePrivateKey);
-
-        var c2sHelper = new ClientToServerHelper(aliceClient, aliceId, ClientA);
-
-        // Act - Alice creates a note (which should be delivered to Bob if he follows her)
-        var createActivity = TestDataSeeder.CreateCreateActivity(aliceId, "Alice's public note");
-        var response = await c2sHelper.PostToOutboxAsync(createActivity);
-
-        // Assert - For now, just verify the C2S post succeeded
-        // Full S2S delivery to followers requires the followers collection to be set up
-        Assert.True(response.IsSuccessStatusCode);
-        
-        // The S2S delivery part would look like this once followers are set up:
-        // var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5));
-        // var deliveredCreate = await s2sHelperB.WaitForInboxActivityByTypeAsync(
-        //     "bob", "Create", TimeSpan.FromSeconds(10));
-        // Assert.NotNull(deliveredCreate);
     }
 
     [Fact]

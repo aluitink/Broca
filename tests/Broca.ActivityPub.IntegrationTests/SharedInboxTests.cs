@@ -369,7 +369,7 @@ public class SharedInboxTests : TwoServerFixture
     }
 
     [Fact]
-    public async Task SharedInbox_ActivityWithPublicAddressing_DeliveredToAllLocalUsers()
+    public async Task SharedInbox_ActivityWithPublicAddressing_DeliveredToSysInboxOnly()
     {
         // Arrange - Create multiple users on Server B
         using (var scopeB = ServerB.Services.CreateScope())
@@ -431,36 +431,37 @@ public class SharedInboxTests : TwoServerFixture
         // Wait a bit for async inbox processing
         await Task.Delay(1000);
 
-        // Verify all local users received it
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
-        var user1Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("user1", TimeSpan.FromSeconds(10));
-        var user2Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("user2", TimeSpan.FromSeconds(10));
-        var user3Activity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("user3", TimeSpan.FromSeconds(10));
+        // Verify the activity was stored in the sys inbox
+        var sysActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("sys", TimeSpan.FromSeconds(10));
+        Assert.NotNull(sysActivity);
 
-        Assert.NotNull(user1Activity);
-        Assert.NotNull(user2Activity);
-        Assert.NotNull(user3Activity);
+        // Verify individual user inboxes did not receive the publicly-addressed activity
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var activityRepo = scopeB.ServiceProvider.GetRequiredService<IActivityRepository>();
+            Assert.Empty(await activityRepo.GetInboxActivitiesAsync("user1", 10));
+            Assert.Empty(await activityRepo.GetInboxActivitiesAsync("user2", 10));
+            Assert.Empty(await activityRepo.GetInboxActivitiesAsync("user3", 10));
+        }
     }
 
     [Fact]
     public async Task SharedInbox_ActivityToFollowersCollection_DeliveredToLocalFollowers()
     {
-        // Arrange - Create sender on Server A and followers on Server B
+        // Arrange - Create sender on Server A
         string senderPrivateKey;
         using (var scopeA = ServerA.Services.CreateScope())
         {
             var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
             var (sender, privateKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "sender_followers", ServerA.BaseUrl);
             senderPrivateKey = privateKey;
-
-            // Add followers (mix of local on A and remote on B)
-            await actorRepo.AddFollowerAsync("sender_followers", $"{ServerB.BaseUrl}/users/remote_follower1");
-            await actorRepo.AddFollowerAsync("sender_followers", $"{ServerB.BaseUrl}/users/remote_follower2");
-            await actorRepo.AddFollowerAsync("sender_followers", $"{ServerA.BaseUrl}/users/local_follower");
         }
 
-        // Create the actual follower users on Server B and set up following relationships
+        // Create follower users on Server B and set up their following relationships.
+        // Server B's shared inbox resolves the sender's followers collection by scanning local
+        // users' following lists — this is the only data that matters for routing on Server B.
         using (var scopeB = ServerB.Services.CreateScope())
         {
             var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
@@ -534,7 +535,7 @@ public class SharedInboxTests : TwoServerFixture
     }
 
     [Fact]
-    public async Task SharedInbox_PublicActivityWithFollowersCc_DeliveredToAll()
+    public async Task SharedInbox_PublicActivityWithFollowersCc_DeliveredToFollowerAndSys()
     {
         // Arrange - Create sender on Server A
         string senderPrivateKey;
@@ -543,9 +544,6 @@ public class SharedInboxTests : TwoServerFixture
             var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
             var (sender, privateKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "sender_mixed", ServerA.BaseUrl);
             senderPrivateKey = privateKey;
-
-            // Add one follower on Server B
-            await actorRepo.AddFollowerAsync("sender_mixed", $"{ServerB.BaseUrl}/users/follower_user");
         }
 
         // Create users on Server B - follower and non-follower
@@ -602,14 +600,22 @@ public class SharedInboxTests : TwoServerFixture
         // Wait a bit for async inbox processing
         await Task.Delay(1000);
 
-        // Wait for delivery - both users should receive it (public + follower expansion)
         var s2sHelperB = new ServerToServerHelper(ServerB, TimeSpan.FromSeconds(5), sendingServer: ServerA);
 
+        // follower_user follows sender_mixed — the followers collection Cc expands to deliver to them
         var followerActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("follower_user", TimeSpan.FromSeconds(10));
-        var nonFollowerActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("nonfollower_user", TimeSpan.FromSeconds(10));
-
         Assert.NotNull(followerActivity);
-        Assert.NotNull(nonFollowerActivity);
+
+        // as:Public addressing goes to sys inbox only
+        var sysActivity = await s2sHelperB.WaitForInboxActivityByTypeAsync<Create>("sys", TimeSpan.FromSeconds(10));
+        Assert.NotNull(sysActivity);
+
+        // nonfollower_user does not follow sender_mixed and is not directly addressed
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var activityRepo = scopeB.ServiceProvider.GetRequiredService<IActivityRepository>();
+            Assert.Empty(await activityRepo.GetInboxActivitiesAsync("nonfollower_user", 10));
+        }
     }
 
     [Fact]

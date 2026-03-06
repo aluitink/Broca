@@ -52,9 +52,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ObjectEnrichmentService>();
         services.AddScoped<IHttpSignatureVerifier, HttpSignatureVerifier>();
         services.AddScoped<IRemoteActorSyncService, RemoteActorSyncService>();
+        services.AddSingleton<IActorSyncQueue, ActorSyncQueue>();
 
         // Register background worker for activity delivery
         services.AddHostedService<ActivityDeliveryWorker>();
+
+        // Register background worker for actor sync crawling
+        services.AddHostedService<ActorSyncWorker>();
 
         // Identity provider is not registered by default
         // Users should call AddSimpleIdentityProvider or AddIdentityProvider

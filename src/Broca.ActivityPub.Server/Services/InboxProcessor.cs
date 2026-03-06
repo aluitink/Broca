@@ -18,7 +18,7 @@ public class InboxProcessor : IInboxHandler
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ActivityDeliveryService _deliveryService;
     private readonly IActivityPubClient _activityPubClient;
-    private readonly IRemoteActorSyncService _remoteActorSyncService;
+    private readonly IActorSyncQueue _actorSyncQueue;
     private readonly ActivityPubServerOptions _options;
     private readonly ILogger<InboxProcessor> _logger;
 
@@ -30,7 +30,7 @@ public class InboxProcessor : IInboxHandler
         AttachmentProcessingService attachmentProcessingService,
         ActivityDeliveryService deliveryService,
         IActivityPubClient activityPubClient,
-        IRemoteActorSyncService remoteActorSyncService,
+        IActorSyncQueue actorSyncQueue,
         IOptions<ActivityPubServerOptions> options,
         ILogger<InboxProcessor> logger)
     {
@@ -41,7 +41,7 @@ public class InboxProcessor : IInboxHandler
         _attachmentProcessingService = attachmentProcessingService;
         _deliveryService = deliveryService;
         _activityPubClient = activityPubClient;
-        _remoteActorSyncService = remoteActorSyncService;
+        _actorSyncQueue = actorSyncQueue;
         _options = options.Value;
         _logger = logger;
     }
@@ -87,9 +87,6 @@ public class InboxProcessor : IInboxHandler
                 await ProcessActivityAttachmentsAsync(username, activityObject, cancellationToken);
             }
 
-            // Save to inbox
-            await _activityRepository.SaveInboxActivityAsync(username, activityId, activity, cancellationToken);
-
             // Synchronize the sender actor in the background if remote
             await TrySyncSenderActorAsync(activity, cancellationToken);
 
@@ -111,6 +108,11 @@ public class InboxProcessor : IInboxHandler
                 _ => true // Unknown types are accepted but not processed
             };
 
+            // Save to inbox after all side effects are applied so that consumers
+            // polling the inbox can trust that processing is complete when the
+            // activity becomes visible.
+            await _activityRepository.SaveInboxActivityAsync(username, activityId, activity, cancellationToken);
+
             return handled;
         }
         catch (Exception ex)
@@ -129,10 +131,10 @@ public class InboxProcessor : IInboxHandler
         return Task.FromResult(true);
     }
 
-    private async Task TrySyncSenderActorAsync(IObjectOrLink activity, CancellationToken cancellationToken)
+    private Task TrySyncSenderActorAsync(IObjectOrLink activity, CancellationToken cancellationToken)
     {
         if (activity is not Activity act || act.Actor == null)
-            return;
+            return Task.CompletedTask;
 
         var actorId = act.Actor.FirstOrDefault() switch
         {
@@ -142,20 +144,14 @@ public class InboxProcessor : IInboxHandler
         };
 
         if (string.IsNullOrEmpty(actorId))
-            return;
+            return Task.CompletedTask;
 
         var baseUrl = _options.BaseUrl?.TrimEnd('/') ?? string.Empty;
         if (!string.IsNullOrEmpty(baseUrl) && actorId.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase))
-            return;
+            return Task.CompletedTask;
 
-        try
-        {
-            await _remoteActorSyncService.SyncActorAsync(actorId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Background actor sync failed for {ActorId}", actorId);
-        }
+        _actorSyncQueue.Enqueue(actorId);
+        return Task.CompletedTask;
     }
 
     private async Task<bool> HandleFollowAsync(string username, IObject? activity, CancellationToken cancellationToken)

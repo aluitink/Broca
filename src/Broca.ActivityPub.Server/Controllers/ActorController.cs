@@ -88,14 +88,12 @@ public class ActorController : ActivityPubControllerBase
                 
                 if (publicCollections.Any())
                 {
-                    // Add collections catalog as a standard endpoint (like inbox, outbox)
-                    actor.ExtensionData["collections"] = JsonSerializer.SerializeToElement(
+                    // Collections catalog pointer — broca: prefixed so it's scoped to our namespace
+                    actor.ExtensionData["broca:collections"] = JsonSerializer.SerializeToElement(
                         $"{baseUrl}/users/{username}/collections",
                         _jsonOptions);
                     
-                    // Special case: "featured" is a de facto standard across the fediverse (Mastodon, Pleroma, etc.)
-                    // for pinned posts. Expose it at root level for interoperability.
-                    // This is a one-off exception - all other collections use broca: prefix.
+                    // Plain "featured" kept for Mastodon/Pleroma interoperability (de facto AP standard for pinned posts)
                     var featuredCollection = publicCollections.FirstOrDefault(c => c.Id == "featured");
                     if (featuredCollection != null)
                     {
@@ -104,12 +102,22 @@ public class ActorController : ActivityPubControllerBase
                             _jsonOptions);
                     }
                     
-                    // Add individual collection links with broca: prefix (for Broca-specific extensions)
+                    // All individual collections with broca: prefix
                     foreach (var collection in publicCollections)
                     {
                         actor.ExtensionData[$"broca:{collection.Id}"] = JsonSerializer.SerializeToElement(
                             $"{baseUrl}/users/{username}/collections/{collection.Id}",
                             _jsonOptions);
+                    }
+
+                    // Declare the broca: namespace in @context so JSON-LD processors can resolve it
+                    actor.JsonLDContext ??= new List<ITermDefinition>();
+                    var contextList = actor.JsonLDContext.ToList();
+                    var brocaNsUri = new Uri($"{baseUrl}/ns/broca");
+                    if (!contextList.OfType<ReferenceTermDefinition>().Any(r => r.Href == brocaNsUri))
+                    {
+                        contextList.Add(new ReferenceTermDefinition(brocaNsUri));
+                        actor.JsonLDContext = contextList;
                     }
                 }
             }

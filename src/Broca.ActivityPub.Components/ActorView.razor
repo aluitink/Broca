@@ -1,8 +1,7 @@
 @using Broca.ActivityPub.Core.Interfaces
-@using Broca.ActivityPub.Core.Models
 @using KristofferStrube.ActivityStreams
+@using System.Text.Json
 @inject IActivityPubClient Client
-@inject ICollectionService CollectionService
 @inject NavigationManager Navigation
 
 <div class="activitypub-actor-view @CssClass">
@@ -157,11 +156,18 @@
                             @onclick="() => SetActiveTab(ActorViewTab.Followers)">
                         Followers
                     </button>
-                    @if (customCollections.Any())
+                    @if (featuredUrl != null)
+                    {
+                        <button class="@GetTabClass(ActorViewTab.Featured)" 
+                                @onclick="() => SetActiveTab(ActorViewTab.Featured)">
+                            Featured
+                        </button>
+                    }
+                    @if (brocaCollections.Any())
                     {
                         <button class="@GetTabClass(ActorViewTab.Collections)" 
                                 @onclick="() => SetActiveTab(ActorViewTab.Collections)">
-                            Collections (@customCollections.Count)
+                            Collections (@brocaCollections.Count)
                         </button>
                     }
                 </div>
@@ -212,21 +218,26 @@
                             }
                         </div>
                     }
+                    else if (activeTab == ActorViewTab.Featured)
+                    {
+                        <div class="tab-panel">
+                            <CollectionLoader TItem="KristofferStrube.ActivityStreams.Object"
+                                            CollectionUrl="@featuredUrl"
+                                            PageSize="20">
+                                <ItemTemplate Context="item">
+                                    <ObjectDisplay Object="@item" />
+                                </ItemTemplate>
+                            </CollectionLoader>
+                        </div>
+                    }
                     else if (activeTab == ActorViewTab.Collections)
                     {
                         <div class="tab-panel">
                             <div class="collections-list">
-                                @foreach (var collection in customCollections)
+                                @foreach (var collection in brocaCollections)
                                 {
-                                    <div class="collection-item" @onclick="() => ViewCollection(collection)">
+                                    <div class="collection-item @(selectedCollection?.Id == collection.Id ? "active" : "")" @onclick="() => ViewCollection(collection)">
                                         <h4>@collection.Name</h4>
-                                        @if (!string.IsNullOrEmpty(collection.Description))
-                                        {
-                                            <p>@collection.Description</p>
-                                        }
-                                        <span class="collection-meta">
-                                            @collection.Type.ToString() • @collection.Visibility.ToString()
-                                        </span>
                                     </div>
                                 }
                             </div>
@@ -236,7 +247,7 @@
                                 <div class="collection-viewer">
                                     <h3>@selectedCollection.Name</h3>
                                     <CollectionLoader TItem="KristofferStrube.ActivityStreams.Object"
-                                                    CollectionUrl="@GetCollectionUrl(selectedCollection)"
+                                                    CollectionUrl="@selectedCollection.Url"
                                                     PageSize="20">
                                         <ItemTemplate Context="item">
                                             <ObjectDisplay Object="@item" />
@@ -265,8 +276,9 @@
     private bool isFollowing;
     private bool isProcessingAction;
     private ActorViewTab activeTab = ActorViewTab.Outbox;
-    private List<CustomCollectionDefinition> customCollections = new();
-    private CustomCollectionDefinition? selectedCollection;
+    private Uri? featuredUrl;
+    private List<ActorCollectionLink> brocaCollections = new();
+    private ActorCollectionLink? selectedCollection;
 
     /// <summary>
     /// The actor URI to display
@@ -390,7 +402,8 @@
         isLoading = true;
         error = null;
         currentActor = null;
-        customCollections.Clear();
+        featuredUrl = null;
+        brocaCollections.Clear();
         StateHasChanged();
 
         try
@@ -441,26 +454,54 @@
         }
     }
 
-    private async Task LoadCustomCollectionsAsync()
+    private Task LoadCustomCollectionsAsync()
     {
-        if (currentActor is not Actor actor) return;
-        
-        try
-        {
-            // Extract username from actor ID
-            var username = actor.PreferredUsername;
-            if (string.IsNullOrEmpty(username)) return;
+        featuredUrl = null;
+        var broca = new List<ActorCollectionLink>();
 
-            var definitions = await CollectionService.GetCollectionDefinitionsAsync(username);
-            customCollections = definitions
-                .Where(d => d.Visibility == CollectionVisibility.Public)
-                .ToList();
-        }
-        catch (Exception ex)
+        var extensionData = currentActor?.ExtensionData;
+        if (extensionData == null)
         {
-            // Collections not available, that's ok
-            Console.WriteLine($"Could not load collections: {ex.Message}");
+            brocaCollections = broca;
+            return Task.CompletedTask;
         }
+
+        // Prefer broca:featured (Broca actor) but fall back to plain featured (any AP actor, e.g. Mastodon)
+        if (extensionData.TryGetValue("broca:featured", out var brocaFeaturedEl) &&
+            brocaFeaturedEl.ValueKind == JsonValueKind.String &&
+            Uri.TryCreate(brocaFeaturedEl.GetString(), UriKind.Absolute, out var parsedBrocaFeatured))
+        {
+            featuredUrl = parsedBrocaFeatured;
+        }
+        else if (extensionData.TryGetValue("featured", out var featuredEl) &&
+            featuredEl.ValueKind == JsonValueKind.String &&
+            Uri.TryCreate(featuredEl.GetString(), UriKind.Absolute, out var parsedFeatured))
+        {
+            featuredUrl = parsedFeatured;
+        }
+
+        // Collect individual Broca custom collections.
+        // Skip broca:featured (shown in Featured tab) and broca:collections (catalog pointer, not a browsable collection).
+        var skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "featured", "collections" };
+        foreach (var (key, value) in extensionData)
+        {
+            if (!key.StartsWith("broca:", StringComparison.OrdinalIgnoreCase)) continue;
+            var id = key["broca:".Length..];
+            if (string.IsNullOrEmpty(id) || skip.Contains(id)) continue;
+            if (value.ValueKind != JsonValueKind.String) continue;
+            if (!Uri.TryCreate(value.GetString(), UriKind.Absolute, out var uri)) continue;
+
+            broca.Add(new ActorCollectionLink(id, FormatCollectionName(id), uri));
+        }
+
+        brocaCollections = broca;
+        return Task.CompletedTask;
+    }
+
+    private static string FormatCollectionName(string id)
+    {
+        var words = id.Split(['-', '_'], StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(" ", words.Select(w => w.Length > 0 ? char.ToUpper(w[0]) + w[1..] : w));
     }
 
     private async Task CheckFollowStatusAsync()
@@ -581,27 +622,12 @@
             : "actor-action-button follow";
     }
 
-    private void ViewCollection(CustomCollectionDefinition collection)
+    private void ViewCollection(ActorCollectionLink collection)
     {
         selectedCollection = selectedCollection?.Id == collection.Id ? null : collection;
         StateHasChanged();
     }
 
-    private Uri? GetCollectionUrl(CustomCollectionDefinition collection)
-    {
-        if (currentActor is not Actor actor || string.IsNullOrEmpty(actor.Id))
-            return null;
-
-        try
-        {
-            var actorUri = new Uri(actor.Id);
-            return new Uri(actorUri, $"/collections/{collection.Id}");
-        }
-        catch
-        {
-            return null;
-        }
-    }
 
     private string GetActorDisplayName()
     {
@@ -662,12 +688,15 @@
     private static string TruncateActorId(string id)
         => id.Length <= 40 ? id : id[..37] + "...";
 
+    private record ActorCollectionLink(string Id, string Name, Uri Url);
+
     /// <summary>
     /// Tabs available in the actor view
     /// </summary>
     public enum ActorViewTab
     {
         Outbox,
+        Featured,
         Following,
         Followers,
         Collections
