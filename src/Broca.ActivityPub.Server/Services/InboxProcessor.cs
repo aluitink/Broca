@@ -53,19 +53,30 @@ public class InboxProcessor : IInboxHandler
             // Check if this is the system actor's inbox and admin operations are enabled
             if (username == _options.SystemActorUsername && _options.EnableAdminOperations)
             {
-                _logger.LogInformation("Activity received at system inbox - checking for admin operations");
-                
-                // Try to handle as an administrative operation
-                var adminHandled = await _adminOperationsHandler.HandleAdminActivityAsync(activity, isBearerTokenAuthenticated, cancellationToken);
-                
-                if (adminHandled)
+                // Only route to admin handler if actor is locally authorized or request is bearer-token authenticated;
+                // remote actors sending standard activities (e.g. Delete) must not trigger the admin path
+                var actorRef = (activity as Activity)?.Actor?.FirstOrDefault();
+                var actorId = actorRef switch
                 {
-                    _logger.LogInformation("Activity successfully handled as admin operation");
-                    return true;
+                    ILink link => link.Href?.ToString(),
+                    IObject obj => obj.Id,
+                    _ => null
+                };
+
+                if (isBearerTokenAuthenticated || _adminOperationsHandler.IsAuthorizedAdminActor(actorId ?? ""))
+                {
+                    _logger.LogInformation("Activity received at system inbox from authorized actor - checking for admin operations");
+
+                    var adminHandled = await _adminOperationsHandler.HandleAdminActivityAsync(activity, isBearerTokenAuthenticated, cancellationToken);
+
+                    if (adminHandled)
+                    {
+                        _logger.LogInformation("Activity successfully handled as admin operation");
+                        return true;
+                    }
+
+                    _logger.LogDebug("Activity not handled as admin operation, processing normally");
                 }
-                
-                // If not handled as admin operation, continue with normal processing
-                _logger.LogDebug("Activity not handled as admin operation, processing normally");
             }
 
             // Extract activity type and ID

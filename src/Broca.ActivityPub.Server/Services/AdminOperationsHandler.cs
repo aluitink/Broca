@@ -99,7 +99,7 @@ public class AdminOperationsHandler
             // Verify authorization via actor ID
             if (!IsAuthorizedAdminActor(actorId))
             {
-                _logger.LogWarning("Unauthorized administrative operation from {ActorId}", actorId);
+                _logger.LogDebug("Activity from {ActorId} is not an authorized admin actor, skipping admin handling", actorId);
                 return false;
             }
 

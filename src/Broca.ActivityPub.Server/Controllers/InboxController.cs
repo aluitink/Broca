@@ -28,6 +28,7 @@ public class InboxController : ActivityPubControllerBase
     private readonly ILogger<InboxController> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
     private static readonly TimeSpan PublicKeyCacheDuration = TimeSpan.FromHours(1);
+    private static readonly HashSet<string> _nonContentActivityTypes = new(StringComparer.OrdinalIgnoreCase) { "Delete", "Undo" };
 
     public InboxController(
         IInboxHandler inboxHandler,
@@ -98,6 +99,13 @@ public class InboxController : ActivityPubControllerBase
                 activities = await _activityRepository.GetInboxActivitiesAsync(username, limit, offset);
                 totalCount = await _activityRepository.GetInboxCountAsync(username);
                 itemsAlreadyPaginated = true;
+            }
+
+            if (username == _options.SystemActorUsername)
+            {
+                activities = activities.Where(a => a is not IObject obj ||
+                    obj.Type == null ||
+                    !obj.Type.Any(t => _nonContentActivityTypes.Contains(t)));
             }
 
             // Rewrite attachment URLs and enrich with collection metadata
