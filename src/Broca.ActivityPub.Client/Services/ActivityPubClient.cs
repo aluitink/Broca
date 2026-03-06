@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Broca.ActivityPub.Client.Exceptions;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
@@ -246,6 +247,12 @@ public class ActivityPubClient : IActivityPubClient
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
                     return default;
+                }
+
+                if (response.StatusCode == System.Net.HttpStatusCode.Gone)
+                {
+                    _logger.LogWarning("Resource is gone: {Uri}", uri);
+                    throw new ResourceGoneException(uri);
                 }
                 
                 response.EnsureSuccessStatusCode();

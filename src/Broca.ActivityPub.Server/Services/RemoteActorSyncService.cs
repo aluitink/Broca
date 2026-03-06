@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Broca.ActivityPub.Client.Exceptions;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
@@ -66,7 +67,7 @@ public class RemoteActorSyncService : IRemoteActorSyncService
             var client = await _signedClientProvider.CreateForSystemActorAsync(cancellationToken);
             actor = await client.GetActorAsync(new Uri(actorId), cancellationToken);
         }
-        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone)
+        catch (ResourceGoneException)
         {
             _logger.LogInformation("Actor {ActorId} is gone (410), skipping sync", actorId);
             return;

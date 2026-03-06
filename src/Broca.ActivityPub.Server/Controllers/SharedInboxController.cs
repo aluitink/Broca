@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Broca.ActivityPub.Client.Exceptions;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using Broca.ActivityPub.Server.Services;
@@ -314,6 +315,10 @@ public class SharedInboxController : ActivityPubControllerBase
                 _cache.Set(cacheKey, pem, TimeSpan.FromHours(1));
                 return pem;
             }
+        }
+        catch (ResourceGoneException ex)
+        {
+            _logger.LogInformation("Actor is gone, ignoring public key fetch for {KeyId}: {Message}", keyId, ex.Message);
         }
         catch (Exception ex)
         {
