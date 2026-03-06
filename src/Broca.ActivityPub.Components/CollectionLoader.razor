@@ -1,20 +1,32 @@
 @using Broca.ActivityPub.Core.Interfaces
 @using KristofferStrube.ActivityStreams
 @using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.JSInterop
 @typeparam TItem
 @inject IActivityPubClient Client
-@implements IDisposable
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <div class="activitypub-collection-loader @CssClass">
     @if (CollectionUrl != null)
     {
-        @if (UseVirtualization)
+        @if (isLoading && !items.Any())
         {
-            <Virtualize @ref="virtualizeComponent" 
-                        ItemsProvider="LoadItemsAsync" 
-                        ItemSize="ItemSize"
-                        OverscanCount="OverscanCount">
-                <ItemContent Context="item">
+            @if (LoadingTemplate != null)
+            {
+                @LoadingTemplate
+            }
+            else
+            {
+                <div class="loading-placeholder">Loading...</div>
+            }
+        }
+
+        @if (items.Any())
+        {
+            @if (UseVirtualization)
+            {
+                <Virtualize Items="@items" ItemSize="@ItemSize" OverscanCount="@OverscanCount" Context="item">
                     @if (ItemTemplate != null)
                     {
                         @ItemTemplate(item)
@@ -23,8 +35,40 @@
                     {
                         <div class="collection-item">@item?.ToString()</div>
                     }
-                </ItemContent>
-                <Placeholder>
+                </Virtualize>
+            }
+            else
+            {
+                @foreach (var item in items)
+                {
+                    @if (ItemTemplate != null)
+                    {
+                        @ItemTemplate(item)
+                    }
+                    else
+                    {
+                        <div class="collection-item">@item?.ToString()</div>
+                    }
+                }
+            }
+        }
+        else if (!isLoading)
+        {
+            @if (EmptyTemplate != null)
+            {
+                @EmptyTemplate
+            }
+            else
+            {
+                <div class="empty-content">No items found</div>
+            }
+        }
+
+        @if (hasMore)
+        {
+            <div @ref="sentinelRef" class="load-sentinel">
+                @if (isLoading && items.Any())
+                {
                     @if (LoadingTemplate != null)
                     {
                         @LoadingTemplate
@@ -33,78 +77,8 @@
                     {
                         <div class="loading-placeholder">Loading...</div>
                     }
-                </Placeholder>
-                <EmptyContent>
-                    @if (EmptyTemplate != null)
-                    {
-                        @EmptyTemplate
-                    }
-                    else
-                    {
-                        <div class="empty-content">No items found</div>
-                    }
-                </EmptyContent>
-            </Virtualize>
-        }
-        else
-        {
-            @if (isLoading && !items.Any())
-            {
-                @if (LoadingTemplate != null)
-                {
-                    @LoadingTemplate
                 }
-                else
-                {
-                    <div class="loading">Loading items...</div>
-                }
-            }
-
-            @if (items.Any())
-            {
-                <div class="collection-items">
-                    @foreach (var item in items)
-                    {
-                        <div class="collection-item-wrapper">
-                            @if (ItemTemplate != null)
-                            {
-                                @ItemTemplate(item)
-                            }
-                            else
-                            {
-                                <div class="collection-item">@item?.ToString()</div>
-                            }
-                        </div>
-                    }
-                </div>
-
-                @if (hasMore)
-                {
-                    <div class="load-more">
-                        <button @onclick="LoadMoreAsync" disabled="@isLoading" class="load-more-button">
-                            @if (isLoading)
-                            {
-                                <span>Loading...</span>
-                            }
-                            else
-                            {
-                                <span>Load More</span>
-                            }
-                        </button>
-                    </div>
-                }
-            }
-            else if (!isLoading)
-            {
-                @if (EmptyTemplate != null)
-                {
-                    @EmptyTemplate
-                }
-                else
-                {
-                    <div class="empty-content">No items found</div>
-                }
-            }
+            </div>
         }
 
         @if (error != null && ErrorTemplate != null)
@@ -116,355 +90,191 @@
 
 @code {
     private List<TItem> items = new();
-    private HashSet<string> loadedItemIds = new();
     private bool isLoading;
     private bool hasMore = true;
     private string? error;
-    private Virtualize<TItem>? virtualizeComponent;
-    private Dictionary<string, List<TItem>> cache = new();
-    private string? lastLoadedCollectionUrl;
-    private CancellationTokenSource? loadCancellation;
+    private string? activeCollectionUrl;
+    private IAsyncEnumerator<TItem>? enumerator;
 
-    /// <summary>
-    /// Gets or sets the collection URL to load items from.
-    /// </summary>
+    private ElementReference sentinelRef;
+    private IJSObjectReference? jsModule;
+    private IJSObjectReference? jsObserver;
+    private DotNetObjectReference<CollectionLoader<TItem>>? dotNetRef;
+    private bool setupObserverAfterRender;
+
     [Parameter]
     public Uri? CollectionUrl { get; set; }
 
-    /// <summary>
-    /// Gets or sets the page size for loading items.
-    /// </summary>
     [Parameter]
     public int PageSize { get; set; } = 20;
 
     /// <summary>
-    /// Gets or sets whether to use virtualization for rendering.
+    /// When true (default) renders loaded items via the Virtualize component for efficient DOM rendering.
     /// </summary>
     [Parameter]
     public bool UseVirtualization { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets whether to enable caching of loaded items.
-    /// </summary>
     [Parameter]
-    public bool EnableCaching { get; set; } = true;
+    public float ItemSize { get; set; } = 150f;
 
-    /// <summary>
-    /// Gets or sets the item size for virtualization (in pixels).
-    /// </summary>
-    [Parameter]
-    public float ItemSize { get; set; } = 100f;
-
-    /// <summary>
-    /// Gets or sets the overscan count for virtualization.
-    /// </summary>
     [Parameter]
     public int OverscanCount { get; set; } = 3;
 
-    /// <summary>
-    /// Gets or sets the CSS class for the container.
-    /// </summary>
+    [Parameter]
+    public bool EnableCaching { get; set; } = true;
+
     [Parameter]
     public string? CssClass { get; set; }
 
-    /// <summary>
-    /// Gets or sets the template for rendering items.
-    /// </summary>
     [Parameter]
     public RenderFragment<TItem>? ItemTemplate { get; set; }
 
-    /// <summary>
-    /// Gets or sets the loading template.
-    /// </summary>
     [Parameter]
     public RenderFragment? LoadingTemplate { get; set; }
 
-    /// <summary>
-    /// Gets or sets the empty state template.
-    /// </summary>
     [Parameter]
     public RenderFragment? EmptyTemplate { get; set; }
 
-    /// <summary>
-    /// Gets or sets the error template.
-    /// </summary>
     [Parameter]
     public RenderFragment<string>? ErrorTemplate { get; set; }
 
-    /// <summary>
-    /// Gets or sets a callback for when items are loaded.
-    /// </summary>
     [Parameter]
     public EventCallback<IEnumerable<TItem>> OnItemsLoaded { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
-        // Check if collection URL changed
-        if (CollectionUrl?.ToString() != lastLoadedCollectionUrl)
+        if (CollectionUrl?.ToString() == activeCollectionUrl)
+            return;
+
+        await ResetAsync();
+
+        if (CollectionUrl != null)
+            await LoadNextPageAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (jsModule == null)
         {
-            lastLoadedCollectionUrl = CollectionUrl?.ToString();
-            
-            // Cancel any ongoing loads
-            loadCancellation?.Cancel();
-            loadCancellation = new CancellationTokenSource();
-            
-            // Try to load from cache first
-            if (EnableCaching && CollectionUrl != null && cache.TryGetValue(CollectionUrl.ToString(), out var cachedItems))
-            {
-                items = new List<TItem>(cachedItems);
-                RebuildIdSet();
-                hasMore = cachedItems.Count >= PageSize;
-                StateHasChanged();
-            }
-            else if (CollectionUrl != null && !UseVirtualization)
-            {
-                await LoadInitialItemsAsync();
-            }
+            jsModule = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/Broca.ActivityPub.Components/collection-loader.js");
+            dotNetRef = DotNetObjectReference.Create(this);
+        }
+
+        if (setupObserverAfterRender && hasMore)
+        {
+            setupObserverAfterRender = false;
+            await AttachObserverAsync();
         }
     }
 
-    private void RebuildIdSet()
+    private async Task AttachObserverAsync()
     {
-        loadedItemIds.Clear();
-        foreach (var item in items)
-        {
-            var id = GetItemId(item);
-            if (!string.IsNullOrEmpty(id))
-            {
-                loadedItemIds.Add(id);
-            }
-        }
-    }
+        if (jsModule == null || dotNetRef == null) return;
 
-    private string? GetItemId(TItem item)
-    {
-        if (item == null) return null;
-
-        // Try to get ID from common ActivityStreams properties
-        var type = item.GetType();
-        var idProperty = type.GetProperty("Id");
-        if (idProperty != null && idProperty.PropertyType == typeof(string))
+        if (jsObserver != null)
         {
-            return idProperty.GetValue(item) as string;
+            await jsModule.InvokeVoidAsync("disconnectObserver", jsObserver);
+            await jsObserver.DisposeAsync();
+            jsObserver = null;
         }
 
-        return null;
+        jsObserver = await jsModule.InvokeAsync<IJSObjectReference>(
+            "observeSentinel", sentinelRef, dotNetRef);
     }
 
-    private bool ShouldIncludeItem(TItem item)
+    [JSInvokable]
+    public async Task OnSentinelVisible()
     {
-        var id = GetItemId(item);
-        if (string.IsNullOrEmpty(id))
-        {
-            // If no ID, include the item (can't deduplicate)
-            return true;
-        }
-
-        return !loadedItemIds.Contains(id);
+        if (!isLoading && hasMore)
+            await LoadNextPageAsync();
     }
 
-    private void AddItemWithTracking(TItem item)
+    private async Task LoadNextPageAsync()
     {
-        items.Add(item);
-        var id = GetItemId(item);
-        if (!string.IsNullOrEmpty(id))
-        {
-            loadedItemIds.Add(id);
-        }
-    }
-
-    private async Task LoadInitialItemsAsync()
-    {
-        if (isLoading || CollectionUrl == null) return;
+        if (isLoading || !hasMore || CollectionUrl == null) return;
 
         isLoading = true;
         error = null;
-        items.Clear();
-        loadedItemIds.Clear();
         StateHasChanged();
 
         try
         {
-            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, PageSize))
+            enumerator ??= Client.GetCollectionAsync<TItem>(CollectionUrl).GetAsyncEnumerator();
+
+            var newItems = new List<TItem>();
+            for (var i = 0; i < PageSize; i++)
             {
-                if (loadCancellation?.Token.IsCancellationRequested == true)
+                if (!await enumerator.MoveNextAsync())
                 {
-                    return;
-                }
-
-                if (ShouldIncludeItem(item))
-                {
-                    AddItemWithTracking(item);
-                    StateHasChanged();
-                }
-
-                if (items.Count >= PageSize)
-                {
+                    hasMore = false;
                     break;
                 }
+                newItems.Add(enumerator.Current);
             }
 
-            hasMore = items.Count >= PageSize;
+            items.AddRange(newItems);
 
-            // Cache the loaded items
-            if (EnableCaching && CollectionUrl != null)
-            {
-                cache[CollectionUrl.ToString()] = new List<TItem>(items);
-            }
-
-            if (OnItemsLoaded.HasDelegate)
-            {
-                await OnItemsLoaded.InvokeAsync(items);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Load was cancelled, this is expected
+            if (OnItemsLoaded.HasDelegate && newItems.Count > 0)
+                await OnItemsLoaded.InvokeAsync(newItems);
         }
         catch (Exception ex)
         {
             error = $"Failed to load items: {ex.Message}";
+            hasMore = false;
         }
         finally
         {
             isLoading = false;
+            setupObserverAfterRender = hasMore;
             StateHasChanged();
         }
     }
 
-    private async Task LoadMoreAsync()
+    private async Task ResetAsync()
     {
-        if (isLoading || !hasMore) return;
-
-        isLoading = true;
-        StateHasChanged();
-
-        try
-        {
-            var skip = items.Count;
-            var loadedItems = new List<TItem>();
-            
-            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, (int?)null))
-            {
-                if (skip > 0)
-                {
-                    skip--;
-                    continue;
-                }
-
-                if (ShouldIncludeItem(item))
-                {
-                    loadedItems.Add(item);
-                    var id = GetItemId(item);
-                    if (!string.IsNullOrEmpty(id))
-                    {
-                        loadedItemIds.Add(id);
-                    }
-                }
-
-                if (loadedItems.Count >= PageSize)
-                {
-                    break;
-                }
-            }
-
-            items.AddRange(loadedItems);
-            hasMore = loadedItems.Count >= PageSize;
-
-            if (OnItemsLoaded.HasDelegate)
-            {
-                await OnItemsLoaded.InvokeAsync(loadedItems);
-            }
-        }
-        catch (Exception ex)
-        {
-            error = $"Failed to load more items: {ex.Message}";
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async ValueTask<ItemsProviderResult<TItem>> LoadItemsAsync(ItemsProviderRequest request)
-    {
-        try
-        {
-            var loadedItems = new List<TItem>();
-            var skip = request.StartIndex;
-
-            await foreach (var item in Client.GetCollectionAsync<TItem>(CollectionUrl!, (int?)null))
-            {
-                if (skip > 0)
-                {
-                    skip--;
-                    continue;
-                }
-
-                loadedItems.Add(item);
-                if (loadedItems.Count >= request.Count)
-                {
-                    break;
-                }
-            }
-
-            return new ItemsProviderResult<TItem>(loadedItems, loadedItems.Count);
-        }
-        catch (Exception ex)
-        {
-            error = $"Failed to load items: {ex.Message}";
-            return new ItemsProviderResult<TItem>(Array.Empty<TItem>(), 0);
-        }
-    }
-
-    /// <summary>
-    /// Refreshes the collection from the beginning.
-    /// </summary>
-    public async Task RefreshAsync()
-    {
-        // Clear cache for this collection
-        if (EnableCaching && CollectionUrl != null)
-        {
-            cache.Remove(CollectionUrl.ToString());
-        }
-
+        activeCollectionUrl = CollectionUrl?.ToString();
         items.Clear();
-        loadedItemIds.Clear();
         hasMore = true;
         error = null;
+        setupObserverAfterRender = true;
 
-        if (UseVirtualization && virtualizeComponent != null)
+        if (enumerator != null)
         {
-            await virtualizeComponent.RefreshDataAsync();
-        }
-        else
-        {
-            await LoadInitialItemsAsync();
+            await enumerator.DisposeAsync();
+            enumerator = null;
         }
     }
 
-    /// <summary>
-    /// Clears all cached collections.
-    /// </summary>
-    public void ClearCache()
+    public async Task RefreshAsync()
     {
-        cache.Clear();
+        await ResetAsync();
+        if (CollectionUrl != null)
+            await LoadNextPageAsync();
     }
 
-    /// <summary>
-    /// Gets the current loaded items.
-    /// </summary>
+    public void ClearCache() { }
+
     public IReadOnlyList<TItem> GetItems() => items.AsReadOnly();
 
-    /// <summary>
-    /// Gets whether the component is currently loading.
-    /// </summary>
     public bool IsLoading => isLoading;
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        loadCancellation?.Cancel();
-        loadCancellation?.Dispose();
+        if (enumerator != null)
+            await enumerator.DisposeAsync();
+
+        if (jsModule != null && jsObserver != null)
+        {
+            try { await jsModule.InvokeVoidAsync("disconnectObserver", jsObserver); } catch { }
+            await jsObserver.DisposeAsync();
+        }
+
+        if (jsModule != null)
+        {
+            try { await jsModule.DisposeAsync(); } catch { }
+        }
+
+        dotNetRef?.Dispose();
     }
 }

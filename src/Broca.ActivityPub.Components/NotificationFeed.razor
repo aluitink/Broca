@@ -1,7 +1,9 @@
 @using KristofferStrube.ActivityStreams
 @using Broca.ActivityPub.Core.Interfaces
+@using Microsoft.JSInterop
 @inject IActivityPubClient Client
-@implements IDisposable
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <div class="activitypub-notification-feed @CssClass">
     @if (!string.IsNullOrEmpty(Title))
@@ -116,19 +118,20 @@
         }
     }
 
-    @if (ShowLoadMore && hasMore)
+    @if (hasMore)
     {
-        <div class="notification-load-more">
-            <button @onclick="LoadMoreAsync" disabled="@isLoading" class="load-more-button">
-                @if (isLoading)
+        <div @ref="sentinelRef" class="notification-sentinel">
+            @if (isLoading && notifications.Any())
+            {
+                @if (LoadingTemplate != null)
                 {
-                    <span>Loading...</span>
+                    @LoadingTemplate
                 }
                 else
                 {
-                    <span>Load more</span>
+                    <div class="notification-loading">Loading notifications...</div>
                 }
-            </button>
+            }
         </div>
     }
 
@@ -150,10 +153,16 @@
     private string? error;
     private NotificationFilter activeFilter = NotificationFilter.All;
     private int unreadCount = 0;
-    private int currentPage = 0;
+    private IAsyncEnumerator<Activity>? enumerator;
     private System.Threading.Timer? refreshTimer;
     private bool isRefreshActive = false;
     private HashSet<string> readNotificationIds = new();
+
+    private ElementReference sentinelRef;
+    private IJSObjectReference? jsModule;
+    private IJSObjectReference? jsObserver;
+    private DotNetObjectReference<NotificationFeed>? dotNetRef;
+    private bool setupObserverAfterRender;
 
     /// <summary>
     /// Gets or sets the title of the feed.
@@ -176,8 +185,6 @@
     /// <summary>
     /// Gets or sets whether to show load more button.
     /// </summary>
-    [Parameter]
-    public bool ShowLoadMore { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether to show mark all as read button.
@@ -247,12 +254,51 @@
 
     protected override async Task OnInitializedAsync()
     {
+        setupObserverAfterRender = true;
         await LoadNotificationsAsync();
 
         if (AutoRefresh)
         {
             StartAutoRefresh();
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (jsModule == null)
+        {
+            jsModule = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/Broca.ActivityPub.Components/collection-loader.js");
+            dotNetRef = DotNetObjectReference.Create(this);
+        }
+
+        if (setupObserverAfterRender && hasMore)
+        {
+            setupObserverAfterRender = false;
+            await AttachObserverAsync();
+        }
+    }
+
+    private async Task AttachObserverAsync()
+    {
+        if (jsModule == null || dotNetRef == null) return;
+
+        if (jsObserver != null)
+        {
+            await jsModule.InvokeVoidAsync("disconnectObserver", jsObserver);
+            await jsObserver.DisposeAsync();
+            jsObserver = null;
+        }
+
+        jsObserver = await jsModule.InvokeAsync<IJSObjectReference>(
+            "observeSentinel", sentinelRef, dotNetRef);
+    }
+
+    [JSInvokable]
+    public async Task OnSentinelVisible()
+    {
+        if (!isLoading && hasMore)
+            await LoadNotificationsAsync();
     }
 
     private void StartAutoRefresh()
@@ -279,18 +325,13 @@
     {
         try
         {
-            // Reload first page to check for new notifications
-            var tempPage = currentPage;
-            currentPage = 0;
-            
-            var previousCount = notifications.Count;
             notifications.Clear();
             unreadCount = 0;
-            
+            hasMore = true;
+            if (enumerator != null) { await enumerator.DisposeAsync(); enumerator = null; }
+
             await LoadNotificationsAsync();
-            
-            currentPage = tempPage;
-            
+
             await InvokeAsync(StateHasChanged);
         }
         catch
@@ -301,7 +342,7 @@
 
     private async Task LoadNotificationsAsync()
     {
-        if (isLoading) return;
+        if (isLoading || !hasMore) return;
 
         isLoading = true;
         error = null;
@@ -315,41 +356,34 @@
                 return;
             }
 
-            var fetchedCount = 0;
-            var skip = currentPage * PageSize;
+            enumerator ??= Client.GetCollectionAsync<Activity>(InboxUrl).GetAsyncEnumerator();
 
-            await foreach (var activity in Client.GetCollectionAsync<Activity>(InboxUrl, PageSize + skip))
+            for (var i = 0; i < PageSize; i++)
             {
-                if (fetchedCount < skip)
+                if (!await enumerator.MoveNextAsync())
                 {
-                    fetchedCount++;
-                    continue;
+                    hasMore = false;
+                    break;
                 }
 
-                if (fetchedCount >= skip + PageSize)
-                    break;
-
-                var notification = ParseActivityToNotification(activity);
+                var notification = ParseActivityToNotification(enumerator.Current);
                 if (notification != null)
                 {
                     notifications.Add(notification);
                     if (!notification.IsRead)
                         unreadCount++;
                 }
-
-                fetchedCount++;
             }
-
-            // If we got fewer than requested, there are no more
-            hasMore = fetchedCount >= skip + PageSize;
         }
         catch (Exception ex)
         {
             error = $"Failed to load notifications: {ex.Message}";
+            hasMore = false;
         }
         finally
         {
             isLoading = false;
+            setupObserverAfterRender = hasMore;
             StateHasChanged();
         }
     }
@@ -401,11 +435,7 @@
         return null; // Don't show generic Create activities
     }
 
-    private async Task LoadMoreAsync()
-    {
-        currentPage++;
-        await LoadNotificationsAsync();
-    }
+
 
     private void SetFilter(NotificationFilter filter)
     {
@@ -536,7 +566,9 @@
     {
         notifications.Clear();
         unreadCount = 0;
-        currentPage = 0;
+        hasMore = true;
+        setupObserverAfterRender = true;
+        if (enumerator != null) { await enumerator.DisposeAsync(); enumerator = null; }
         await LoadNotificationsAsync();
     }
 
@@ -560,9 +592,25 @@
     /// </summary>
     public int GetUnreadCount() => unreadCount;
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         StopAutoRefresh();
+
+        if (enumerator != null)
+            await enumerator.DisposeAsync();
+
+        if (jsModule != null && jsObserver != null)
+        {
+            try { await jsModule.InvokeVoidAsync("disconnectObserver", jsObserver); } catch { }
+            await jsObserver.DisposeAsync();
+        }
+
+        if (jsModule != null)
+        {
+            try { await jsModule.DisposeAsync(); } catch { }
+        }
+
+        dotNetRef?.Dispose();
     }
 
     public enum NotificationFilter
