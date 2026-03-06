@@ -197,8 +197,7 @@ public class InboxController : ActivityPubControllerBase
                 }
                 catch (Exception ex)
                 {
-                    if (!isDelete) throw;
-                    _logger.LogWarning("HTTP signature verification failed for Delete activity: {Error}", ex.Message);
+                    _logger.LogWarning("HTTP signature verification failed: {Error}", ex.Message);
                 }
 
                 if (!signatureValid && isDelete)
