@@ -66,6 +66,11 @@ public class RemoteActorSyncService : IRemoteActorSyncService
             var client = await _signedClientProvider.CreateForSystemActorAsync(cancellationToken);
             actor = await client.GetActorAsync(new Uri(actorId), cancellationToken);
         }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone)
+        {
+            _logger.LogInformation("Actor {ActorId} is gone (410), skipping sync", actorId);
+            return;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to fetch actor {ActorId} for sync", actorId);

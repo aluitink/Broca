@@ -354,6 +354,14 @@ public class InboxProcessor : IInboxHandler
             return false;
         }
 
+        var actorRef = deleteActivity.Actor?.FirstOrDefault();
+        var actorId = actorRef switch
+        {
+            ILink link => link.Href?.ToString(),
+            IObject obj => obj.Id,
+            _ => null
+        };
+
         var objectToDelete = deleteActivity.Object?.FirstOrDefault();
         if (objectToDelete == null)
         {
@@ -375,11 +383,52 @@ public class InboxProcessor : IInboxHandler
             return false;
         }
 
+        // Actor self-delete: the remote actor is deleting themselves
+        if (!string.IsNullOrEmpty(actorId) && objectId == actorId)
+        {
+            _logger.LogInformation("Processing actor self-delete for {ActorId}", actorId);
+            await HandleActorSelfDeleteAsync(actorId, cancellationToken);
+            return true;
+        }
+
         await _activityRepository.MarkObjectAsDeletedAsync(objectId, cancellationToken);
         _logger.LogInformation("Marked object {ObjectId} as deleted for user {Username}", objectId, username);
 
         return true;
     }
+
+    private async Task HandleActorSelfDeleteAsync(string actorId, CancellationToken cancellationToken)
+    {
+        var localUsernames = await _actorRepository.GetAllLocalUsernamesAsync(cancellationToken);
+
+        foreach (var localUsername in localUsernames)
+        {
+            var followers = await _actorRepository.GetFollowersAsync(localUsername, cancellationToken);
+            if (followers.Contains(actorId))
+            {
+                await _actorRepository.RemoveFollowerAsync(localUsername, actorId, cancellationToken);
+                _logger.LogInformation("Removed deleted actor {ActorId} from {Username}'s followers", actorId, localUsername);
+            }
+
+            var following = await _actorRepository.GetFollowingAsync(localUsername, cancellationToken);
+            if (following.Contains(actorId))
+            {
+                await _actorRepository.RemoveFollowingAsync(localUsername, actorId, cancellationToken);
+                _logger.LogInformation("Removed deleted actor {ActorId} from {Username}'s following", actorId, localUsername);
+            }
+        }
+
+        // Delete the cached remote actor profile
+        var actor = await _actorRepository.GetActorByIdAsync(actorId, cancellationToken);
+        var baseUrl = _options.BaseUrl?.TrimEnd('/') ?? string.Empty;
+        var isRemote = !string.IsNullOrEmpty(baseUrl) && !actorId.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase);
+        if (actor?.PreferredUsername != null && isRemote)
+        {
+            await _actorRepository.DeleteActorAsync(actor.PreferredUsername, cancellationToken);
+            _logger.LogInformation("Deleted cached remote actor profile for {ActorId}", actorId);
+        }
+    }
+
 
     private Task<bool> HandleLikeAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {

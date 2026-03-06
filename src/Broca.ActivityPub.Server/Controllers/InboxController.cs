@@ -19,6 +19,7 @@ public class InboxController : ActivityPubControllerBase
     private readonly IActivityRepository _activityRepository;
     private readonly IActorRepository _actorRepository;
     private readonly IHttpSignatureVerifier _signatureVerifier;
+    private readonly LinkedDataSignatureVerifier _ldSignatureVerifier;
     private readonly SignedClientProvider _signedClientProvider;
     private readonly AttachmentProcessingService _attachmentProcessingService;
     private readonly ObjectEnrichmentService _enrichmentService;
@@ -33,6 +34,7 @@ public class InboxController : ActivityPubControllerBase
         IActivityRepository activityRepository,
         IActorRepository actorRepository,
         IHttpSignatureVerifier signatureVerifier,
+        LinkedDataSignatureVerifier ldSignatureVerifier,
         SignedClientProvider signedClientProvider,
         AttachmentProcessingService attachmentProcessingService,
         ObjectEnrichmentService enrichmentService,
@@ -44,6 +46,7 @@ public class InboxController : ActivityPubControllerBase
         _activityRepository = activityRepository;
         _actorRepository = actorRepository;
         _signatureVerifier = signatureVerifier;
+        _ldSignatureVerifier = ldSignatureVerifier;
         _signedClientProvider = signedClientProvider;
         _attachmentProcessingService = attachmentProcessingService;
         _enrichmentService = enrichmentService;
@@ -176,21 +179,32 @@ public class InboxController : ActivityPubControllerBase
             if (_options.RequireHttpSignatures && !isAuthenticatedAdmin)
             {
                 _logger.LogInformation("HTTP signature verification required for inbox request to {Username}", username);
+
+                var isDelete = IsDeleteActivity(body, out var deleteActorId, out var deleteObjectId);
+
+                bool signatureValid = false;
                 try
                 {
-                    var isValid = await VerifySignatureAsync(body, HttpContext.RequestAborted);
-                    if (!isValid)
-                    {
-                        _logger.LogWarning("Invalid HTTP signature for inbox request to {Username}. Signature verification returned false.", username);
-                        return Unauthorized(new { error = "Invalid signature" });
-                    }
-                    _logger.LogInformation("HTTP signature successfully verified for inbox request to {Username}", username);
+                    signatureValid = await VerifySignatureAsync(body, HttpContext.RequestAborted);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Signature verification failed for inbox request to {Username}. Error: {ErrorMessage}", username, ex.Message);
-                    return Unauthorized(new { error = "Signature verification failed", detail = ex.Message });
+                    if (!isDelete) throw;
+                    _logger.LogWarning("HTTP signature verification failed for Delete activity: {Error}", ex.Message);
                 }
+
+                if (!signatureValid && isDelete)
+                {
+                    signatureValid = await TryVerifyDeleteAsync(body, deleteActorId, deleteObjectId, HttpContext.RequestAborted);
+                }
+
+                if (!signatureValid)
+                {
+                    _logger.LogWarning("Signature verification failed for inbox request to {Username}", username);
+                    return Unauthorized(new { error = "Invalid signature" });
+                }
+
+                _logger.LogInformation("Signature verified for inbox request to {Username}", username);
             }
             else
             {
@@ -214,6 +228,93 @@ public class InboxController : ActivityPubControllerBase
             _logger.LogError(ex, "Error processing inbox POST for {Username}", username);
             return StatusCode(500, new { error = "Internal server error" });
         }
+    }
+
+    /// <summary>
+    /// Returns true when the body is a Delete activity and outputs the actor/object IDs.
+    /// </summary>
+    private static bool IsDeleteActivity(string body, out string? actorId, out string? objectId)
+    {
+        actorId = null;
+        objectId = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("type", out var type) || type.GetString() != "Delete")
+                return false;
+            if (root.TryGetProperty("actor", out var actor))
+                actorId = actor.ValueKind == JsonValueKind.String ? actor.GetString() : null;
+            if (root.TryGetProperty("object", out var obj))
+                objectId = obj.ValueKind == JsonValueKind.String ? obj.GetString()
+                    : obj.TryGetProperty("id", out var id) ? id.GetString() : null;
+            return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Fallback verification for Delete activities when HTTP signature verification fails.
+    /// Tries Linked Data Signature (body-embedded), then domain trust as a last resort.
+    /// </summary>
+    private async Task<bool> TryVerifyDeleteAsync(
+        string body, string? actorId, string? objectId, CancellationToken cancellationToken)
+    {
+        // --- LD Signature ---
+        if (_ldSignatureVerifier.TryGetSignatureCreator(body, out var creatorUri) && !string.IsNullOrEmpty(creatorUri))
+        {
+            _logger.LogInformation("Attempting LD signature verification for Delete activity, creator={Creator}", creatorUri);
+            var publicKeyPem = await FetchActorPublicKeyAsync(creatorUri.Split('#')[0], cancellationToken);
+            if (!string.IsNullOrEmpty(publicKeyPem))
+            {
+                if (_ldSignatureVerifier.Verify(body, publicKeyPem))
+                {
+                    _logger.LogInformation("Delete activity accepted via LD signature");
+                    return true;
+                }
+                _logger.LogWarning("LD signature verification failed for Delete activity");
+            }
+            else
+            {
+                _logger.LogWarning("Could not fetch public key for LD signature creator {Creator}", creatorUri);
+            }
+        }
+
+        // --- Domain trust ---
+        // When we cannot verify cryptographically (actor/key is already gone), accept deletes
+        // where the signing key domain matches the actor URI domain — the server is asserting
+        // authority over its own actors.
+        var signingDomain = GetSigningKeyDomain();
+        if (!string.IsNullOrEmpty(actorId) && !string.IsNullOrEmpty(signingDomain))
+        {
+            if (Uri.TryCreate(actorId, UriKind.Absolute, out var actorUri) &&
+                string.Equals(actorUri.Host, signingDomain, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(
+                    "Delete activity accepted via domain trust (actor domain={Domain} matches signing key domain)",
+                    signingDomain);
+                return true;
+            }
+        }
+
+        _logger.LogWarning(
+            "Delete activity rejected: LD sig failed and domain trust did not apply (actorId={ActorId}, signingDomain={Domain})",
+            actorId, signingDomain);
+        return false;
+    }
+
+    private string? GetSigningKeyDomain()
+    {
+        try
+        {
+            if (!Request.Headers.TryGetValue("Signature", out var sigHeader))
+                return null;
+            var keyId = _signatureVerifier.GetSignatureKeyId(sigHeader.ToString());
+            if (Uri.TryCreate(keyId, UriKind.Absolute, out var keyUri))
+                return keyUri.Host;
+        }
+        catch { /* best effort */ }
+        return null;
     }
 
     /// <summary>

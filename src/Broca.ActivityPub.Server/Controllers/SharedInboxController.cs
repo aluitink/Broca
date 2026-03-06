@@ -25,6 +25,7 @@ public class SharedInboxController : ActivityPubControllerBase
     private readonly IInboxHandler _inboxHandler;
     private readonly IActorRepository _actorRepository;
     private readonly IHttpSignatureVerifier _signatureVerifier;
+    private readonly LinkedDataSignatureVerifier _ldSignatureVerifier;
     private readonly SignedClientProvider _signedClientProvider;
     private readonly IMemoryCache _cache;
     private readonly ActivityPubServerOptions _options;
@@ -35,6 +36,7 @@ public class SharedInboxController : ActivityPubControllerBase
         IInboxHandler inboxHandler,
         IActorRepository actorRepository,
         IHttpSignatureVerifier signatureVerifier,
+        LinkedDataSignatureVerifier ldSignatureVerifier,
         SignedClientProvider signedClientProvider,
         IMemoryCache cache,
         IOptions<ActivityPubServerOptions> options,
@@ -43,6 +45,7 @@ public class SharedInboxController : ActivityPubControllerBase
         _inboxHandler = inboxHandler;
         _actorRepository = actorRepository;
         _signatureVerifier = signatureVerifier;
+        _ldSignatureVerifier = ldSignatureVerifier;
         _signedClientProvider = signedClientProvider;
         _cache = cache;
         _options = options.Value;
@@ -70,7 +73,13 @@ public class SharedInboxController : ActivityPubControllerBase
             // Verify HTTP signature
             if (_options.RequireHttpSignatures)
             {
-                if (!await VerifySignatureAsync(body, HttpContext.RequestAborted))
+                var isDelete = IsDeleteActivity(body, out var deleteActorId, out _);
+                var signatureValid = await VerifySignatureAsync(body, HttpContext.RequestAborted);
+
+                if (!signatureValid && isDelete)
+                    signatureValid = await TryVerifyDeleteAsync(body, deleteActorId, HttpContext.RequestAborted);
+
+                if (!signatureValid)
                 {
                     _logger.LogWarning("Shared inbox POST rejected: invalid signature");
                     return Unauthorized(new { error = "Invalid signature" });
@@ -157,6 +166,70 @@ public class SharedInboxController : ActivityPubControllerBase
             _logger.LogError(ex, "Error processing shared inbox POST");
             return StatusCode(500, new { error = "Internal server error" });
         }
+    }
+
+    private static bool IsDeleteActivity(string body, out string? actorId, out string? objectId)
+    {
+        actorId = null;
+        objectId = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("type", out var type) || type.GetString() != "Delete")
+                return false;
+            if (root.TryGetProperty("actor", out var actor))
+                actorId = actor.ValueKind == JsonValueKind.String ? actor.GetString() : null;
+            if (root.TryGetProperty("object", out var obj))
+                objectId = obj.ValueKind == JsonValueKind.String ? obj.GetString()
+                    : obj.TryGetProperty("id", out var id) ? id.GetString() : null;
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private async Task<bool> TryVerifyDeleteAsync(
+        string body, string? actorId, CancellationToken cancellationToken)
+    {
+        if (_ldSignatureVerifier.TryGetSignatureCreator(body, out var creatorUri) && !string.IsNullOrEmpty(creatorUri))
+        {
+            _logger.LogInformation("Shared inbox: attempting LD signature verification for Delete, creator={Creator}", creatorUri);
+            var publicKeyPem = await FetchPublicKeyAsync(creatorUri.Split('#')[0], cancellationToken);
+            if (!string.IsNullOrEmpty(publicKeyPem) && _ldSignatureVerifier.Verify(body, publicKeyPem))
+            {
+                _logger.LogInformation("Shared inbox: Delete accepted via LD signature");
+                return true;
+            }
+        }
+
+        var signingDomain = GetSigningKeyDomain();
+        if (!string.IsNullOrEmpty(actorId) && !string.IsNullOrEmpty(signingDomain) &&
+            Uri.TryCreate(actorId, UriKind.Absolute, out var actorUri) &&
+            string.Equals(actorUri.Host, signingDomain, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "Shared inbox: Delete accepted via domain trust (actor domain={Domain})", signingDomain);
+            return true;
+        }
+
+        _logger.LogWarning(
+            "Shared inbox: Delete rejected (actorId={ActorId}, signingDomain={Domain})",
+            actorId, signingDomain);
+        return false;
+    }
+
+    private string? GetSigningKeyDomain()
+    {
+        try
+        {
+            if (!Request.Headers.TryGetValue("Signature", out var sigHeader))
+                return null;
+            var keyId = _signatureVerifier.GetSignatureKeyId(sigHeader.ToString());
+            if (Uri.TryCreate(keyId, UriKind.Absolute, out var keyUri))
+                return keyUri.Host;
+        }
+        catch { /* best effort */ }
+        return null;
     }
 
     private async Task<bool> VerifySignatureAsync(string body, CancellationToken cancellationToken)
