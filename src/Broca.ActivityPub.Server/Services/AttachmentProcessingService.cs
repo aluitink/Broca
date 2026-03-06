@@ -174,7 +174,8 @@ public class AttachmentProcessingService
         }
 
         // Check if URL is already local
-        var localPrefix = _blobStorage.BuildBlobUrl(username, "").TrimEnd('/');
+        const string dummyBlobId = "dummy";
+        var localPrefix = _blobStorage.BuildBlobUrl(username, dummyBlobId)[..^dummyBlobId.Length];
         if (url.Href.ToString().StartsWith(localPrefix, StringComparison.OrdinalIgnoreCase))
         {
             return attachment;
@@ -227,7 +228,8 @@ public class AttachmentProcessingService
         }
 
         // Check if URL is already local
-        var localPrefix = _blobStorage.BuildBlobUrl(username, "").TrimEnd('/');
+        const string dummyBlobId = "dummy";
+        var localPrefix = _blobStorage.BuildBlobUrl(username, dummyBlobId)[..^dummyBlobId.Length];
         if (url.Href.ToString().StartsWith(localPrefix, StringComparison.OrdinalIgnoreCase))
         {
             return image;
