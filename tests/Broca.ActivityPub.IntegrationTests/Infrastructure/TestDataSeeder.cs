@@ -197,6 +197,15 @@ public static class TestDataSeeder
     }
 
     /// <summary>
+    /// Creates a Create activity for a reply Note with inReplyTo set
+    /// </summary>
+    public static Activity CreateReplyActivity(string actorId, string content, string inReplyToId)
+    {
+        var builder = CreateBuilderForActor(actorId);
+        return builder.CreateNote(content).InReplyTo(inReplyToId).Build();
+    }
+
+    /// <summary>
     /// Creates a Like activity
     /// </summary>
     public static Like CreateLike(string actorId, string objectId, string? activityId = null)

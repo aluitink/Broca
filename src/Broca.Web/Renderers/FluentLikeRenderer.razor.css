@@ -14,7 +14,10 @@
 
 .like-object {
     margin: 0;
-    padding-left: 8px;
+}
+
+.like-object ::deep .fluent-note-card {
+    margin-bottom: 0;
 }
 
 .actor-info-clickable:hover {

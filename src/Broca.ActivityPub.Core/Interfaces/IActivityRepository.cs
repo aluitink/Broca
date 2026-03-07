@@ -1,3 +1,4 @@
+using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 
 namespace Broca.ActivityPub.Core.Interfaces;
@@ -101,4 +102,8 @@ public interface IActivityRepository
     /// Marks an object as deleted by replacing it with a Tombstone
     /// </summary>
     Task MarkObjectAsDeletedAsync(string objectId, CancellationToken cancellationToken = default);
+
+    Task RecordInteractionAsync(string objectId, ActivityInteractionType type, string activityId, CancellationToken cancellationToken = default);
+
+    Task RemoveInteractionAsync(string objectId, ActivityInteractionType type, string activityId, CancellationToken cancellationToken = default);
 }

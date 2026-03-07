@@ -385,6 +385,62 @@ public class InMemoryActivityRepository : IActivityRepository, IActivityStatisti
         return Task.CompletedTask;
     }
 
+    public Task RecordInteractionAsync(string objectId, ActivityInteractionType type, string activityId, CancellationToken cancellationToken = default)
+    {
+        var timestamp = DateTime.UtcNow;
+        switch (type)
+        {
+            case ActivityInteractionType.Like:
+                var likeList = _likes.GetOrAdd(objectId, _ => new List<(string, string, DateTime)>());
+                lock (likeList)
+                {
+                    if (!likeList.Any(x => x.ActivityId == activityId))
+                        likeList.Add((activityId, activityId, timestamp));
+                }
+                break;
+            case ActivityInteractionType.Announce:
+                var shareList = _shares.GetOrAdd(objectId, _ => new List<(string, string, DateTime)>());
+                lock (shareList)
+                {
+                    if (!shareList.Any(x => x.ActivityId == activityId))
+                        shareList.Add((activityId, activityId, timestamp));
+                }
+                break;
+            case ActivityInteractionType.Reply:
+                var replyList = _replies.GetOrAdd(objectId, _ => new List<(string, DateTime)>());
+                lock (replyList)
+                {
+                    if (!replyList.Any(x => x.ActivityId == activityId))
+                        replyList.Add((activityId, timestamp));
+                }
+                break;
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveInteractionAsync(string objectId, ActivityInteractionType type, string activityId, CancellationToken cancellationToken = default)
+    {
+        switch (type)
+        {
+            case ActivityInteractionType.Like:
+                if (_likes.TryGetValue(objectId, out var likeList))
+                    lock (likeList)
+                        likeList.RemoveAll(x => x.ActivityId == activityId);
+                break;
+            case ActivityInteractionType.Announce:
+                if (_shares.TryGetValue(objectId, out var shareList))
+                    lock (shareList)
+                        shareList.RemoveAll(x => x.ActivityId == activityId);
+                break;
+            case ActivityInteractionType.Reply:
+                if (_replies.TryGetValue(objectId, out var replyList))
+                    lock (replyList)
+                        replyList.RemoveAll(x => x.ActivityId == activityId);
+                break;
+        }
+        return Task.CompletedTask;
+    }
+
     /// <summary>
     /// Indexes an activity for efficient querying
     /// </summary>
@@ -418,8 +474,7 @@ public class InMemoryActivityRepository : IActivityRepository, IActivityStatisti
                 var likeList = _likes.GetOrAdd(objectId, _ => new List<(string, string, DateTime)>());
                 lock (likeList)
                 {
-                    // Check if this actor already liked this object to avoid duplicates
-                    if (!likeList.Any(x => x.ActorUsername == actorUsername.ToLowerInvariant() && x.ActivityId != activityId))
+                    if (!likeList.Any(x => x.ActivityId == activityId))
                     {
                         likeList.Add((activityId, actorUsername.ToLowerInvariant(), timestamp));
                     }
@@ -435,8 +490,7 @@ public class InMemoryActivityRepository : IActivityRepository, IActivityStatisti
                 var shareList = _shares.GetOrAdd(objectId, _ => new List<(string, string, DateTime)>());
                 lock (shareList)
                 {
-                    // Check if this actor already announced this object to avoid duplicates
-                    if (!shareList.Any(x => x.ActorUsername == actorUsername.ToLowerInvariant() && x.ActivityId != activityId))
+                    if (!shareList.Any(x => x.ActivityId == activityId))
                     {
                         shareList.Add((activityId, actorUsername.ToLowerInvariant(), timestamp));
                     }
@@ -449,7 +503,8 @@ public class InMemoryActivityRepository : IActivityRepository, IActivityStatisti
             var replyList = _replies.GetOrAdd(inReplyTo, _ => new List<(string, DateTime)>());
             lock (replyList)
             {
-                replyList.Add((activityId, timestamp));
+                if (!replyList.Any(x => x.ActivityId == activityId))
+                    replyList.Add((activityId, timestamp));
             }
         }
     }
@@ -501,113 +556,66 @@ public class InMemoryActivityRepository : IActivityRepository, IActivityStatisti
     /// <summary>
     /// Extracts the object ID from an activity
     /// </summary>
-    private string? ExtractObjectId(IObject obj)
+    private static string? ExtractObjectId(IObject obj)
     {
-        // Try to get the Object property using reflection
-        var objectProperty = obj.GetType().GetProperty("Object");
-        if (objectProperty?.GetValue(obj) is IEnumerable<IObjectOrLink?> objects)
+        var first = (obj as Activity)?.Object?.FirstOrDefault();
+        return first switch
         {
-            var firstObject = objects.FirstOrDefault();
-            if (firstObject != null)
-            {
-                // If it's an IObject with an Id
-                if (firstObject is IObject objWithId && !string.IsNullOrEmpty(objWithId.Id))
-                    return objWithId.Id;
-                
-                // If it's a Link with Href
-                if (firstObject is ILink link && link.Href != null)
-                    return link.Href.ToString();
-            }
-        }
-        
-        return null;
+            IObject o when !string.IsNullOrEmpty(o.Id) => o.Id,
+            ILink l when l.Href != null => l.Href.ToString(),
+            _ => null
+        };
     }
 
     /// <summary>
     /// Extracts the actor username from an activity
     /// </summary>
-    private string? ExtractActorUsername(IObject obj)
+    private static string? ExtractActorUsername(IObject obj)
     {
-        // Try to get the Actor property using reflection
-        var actorProperty = obj.GetType().GetProperty("Actor");
-        if (actorProperty?.GetValue(obj) is IEnumerable<IObjectOrLink?> actors)
+        var firstActor = (obj as Activity)?.Actor?.FirstOrDefault();
+        var actorId = firstActor switch
         {
-            var firstActor = actors.FirstOrDefault();
-            if (firstActor != null)
-            {
-                string? actorId = null;
-                
-                // If it's an IObject with an Id
-                if (firstActor is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
-                {
-                    actorId = actorObj.Id;
-                }
-                // If it's a Link with Href
-                else if (firstActor is ILink link && link.Href != null)
-                {
-                    actorId = link.Href.ToString();
-                }
-                
-                // Extract username from actor ID (e.g., "https://example.com/users/bob" -> "bob")
-                if (!string.IsNullOrEmpty(actorId))
-                {
-                    var lastSlashIndex = actorId.LastIndexOf('/');
-                    if (lastSlashIndex >= 0 && lastSlashIndex < actorId.Length - 1)
-                    {
-                        return actorId.Substring(lastSlashIndex + 1);
-                    }
-                }
-            }
-        }
-        
-        return null;
+            IObject actorObj when !string.IsNullOrEmpty(actorObj.Id) => actorObj.Id,
+            ILink link when link.Href != null => link.Href.ToString(),
+            _ => null
+        };
+
+        if (string.IsNullOrEmpty(actorId))
+            return null;
+
+        var lastSlash = actorId.LastIndexOf('/');
+        return lastSlash >= 0 && lastSlash < actorId.Length - 1
+            ? actorId[(lastSlash + 1)..]
+            : null;
     }
 
     /// <summary>
     /// Tries to get the inReplyTo property from an object
     /// </summary>
-    private bool TryGetInReplyTo(IObject obj, out string inReplyTo)
+    private static bool TryGetInReplyTo(IObject obj, out string inReplyTo)
     {
         inReplyTo = string.Empty;
-        
-        // Try to get the InReplyTo property using reflection
-        var inReplyToProperty = obj.GetType().GetProperty("InReplyTo");
-        if (inReplyToProperty?.GetValue(obj) is IEnumerable<IObjectOrLink?> replyToObjects)
+        var first = obj.InReplyTo?.FirstOrDefault();
+        switch (first)
         {
-            var firstReplyTo = replyToObjects.FirstOrDefault();
-            if (firstReplyTo != null)
-            {
-                // If it's an IObject with an Id
-                if (firstReplyTo is IObject objWithId && !string.IsNullOrEmpty(objWithId.Id))
-                {
-                    inReplyTo = objWithId.Id;
-                    return true;
-                }
-                
-                // If it's a Link with Href
-                if (firstReplyTo is ILink link && link.Href != null)
-                {
-                    inReplyTo = link.Href.ToString();
-                    return true;
-                }
-            }
+            case IObject o when !string.IsNullOrEmpty(o.Id):
+                inReplyTo = o.Id;
+                return true;
+            case ILink l when l.Href != null:
+                inReplyTo = l.Href.ToString()!;
+                return true;
+            default:
+                return false;
         }
-        
-        return false;
     }
 
     /// <summary>
     /// Gets timestamp from an activity if available
     /// </summary>
-    private DateTime GetTimestamp(IObjectOrLink obj)
+    private static DateTime GetTimestamp(IObjectOrLink obj)
     {
-        if (obj is IObject objWithProps)
-        {
-            var publishedProperty = objWithProps.GetType().GetProperty("Published");
-            if (publishedProperty?.GetValue(objWithProps) is DateTime published)
-                return published;
-        }
-        
+        if (obj is IObject o && o.Published.HasValue)
+            return o.Published.Value;
         return DateTime.MinValue;
     }
 

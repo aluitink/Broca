@@ -68,13 +68,18 @@ public class ProxyController : ControllerBase
             var client = await _signedClientProvider.CreateForSystemActorAsync(HttpContext.RequestAborted);
             var result = await client.GetAsync<JsonElement>(targetUri, useCache: false, HttpContext.RequestAborted);
 
+            if (result.ValueKind == JsonValueKind.Undefined)
+            {
+                return NotFound(new { error = "Remote resource not found" });
+            }
+
             var json = JsonSerializer.Serialize(result, _jsonOptions);
             return Content(json, "application/activity+json");
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to proxy GET request to: {Url}", url);
-            return StatusCode(502, new { error = "Failed to fetch remote resource", details = ex.Message });
+            _logger.LogWarning(ex, "Failed to proxy GET request to: {Url}", url);
+            return NotFound(new { error = "Remote resource could not be fetched" });
         }
         catch (Exception ex)
         {

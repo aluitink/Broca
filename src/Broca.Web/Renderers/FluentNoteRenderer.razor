@@ -60,7 +60,7 @@
             }
 
             @* In Reply To *@
-            @if (Note.InReplyTo?.Any() == true)
+            @if (ShowInReplyTo && Note.InReplyTo?.Any() == true)
             {
                 <div class="note-in-reply-to">
                     @if (isLoadingReplyTo)
@@ -69,37 +69,11 @@
                     }
                     else if (inReplyToObject is Note replyNote)
                     {
-                        @if (replyNote.AttributedTo?.Any() == true)
-                        {
-                            <FluentPersona Name="@GetReplyActorDisplay(replyNote)"
-                                           Image="@GetReplyActorImageUrl(replyNote)"
-                                           ImageSize="24px"
-                                           TextPosition="TextPosition.End"
-                                           class="reply-to-actor" />
-                        }
-                        @if (replyNote.Content?.Any() == true)
-                        {
-                            <div class="note-content reply-to-content">
-                                @((MarkupString)(replyNote.Content.First() ?? string.Empty))
-                            </div>
-                        }
-                        else if (replyNote.Name?.Any() == true)
-                        {
-                            <div class="reply-to-content">@replyNote.Name.First()</div>
-                        }
+                        <FluentNoteRenderer Note="@replyNote" ShowActions="false" ShowMenu="false" ShowInReplyTo="false" />
                     }
                     else if (inReplyToObject is KristofferStrube.ActivityStreams.Object replyObj)
                     {
-                        @if (replyObj.Content?.Any() == true)
-                        {
-                            <div class="note-content reply-to-content">
-                                @((MarkupString)(replyObj.Content.First() ?? string.Empty))
-                            </div>
-                        }
-                        else if (replyObj.Name?.Any() == true)
-                        {
-                            <div class="reply-to-content">@replyObj.Name.First()</div>
-                        }
+                        <ObjectDisplay Object="@replyObj" AutoResolveLinks="false" />
                     }
                     else
                     {
@@ -174,6 +148,7 @@
     private bool showReplies;
     private object? inReplyToObject;
     private bool isLoadingReplyTo;
+    private string? _loadedReplyToUrl;
 
     /// <summary>
     /// Gets or sets the Note object to render.
@@ -198,6 +173,12 @@
     /// </summary>
     [Parameter]
     public bool ShowMenu { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to show the in-reply-to context.
+    /// </summary>
+    [Parameter]
+    public bool ShowInReplyTo { get; set; } = true;
 
     /// <summary>
     /// Gets or sets additional CSS classes.
@@ -240,8 +221,7 @@
 
     private async Task LoadInReplyTo()
     {
-        inReplyToObject = null;
-        if (ActivityPubClient == null || Note?.InReplyTo?.Any() != true)
+        if (ActivityPubClient == null || !ShowInReplyTo || Note?.InReplyTo?.Any() != true)
             return;
 
         var replyToRef = Note.InReplyTo.First();
@@ -264,22 +244,29 @@
                 Uri.TryCreate(urlString, UriKind.Absolute, out urlToFetch);
         }
 
-        if (urlToFetch != null)
+        if (urlToFetch == null)
+            return;
+
+        // Guard: skip if already loaded for this URL or a fetch is already in-flight
+        if (isLoadingReplyTo || (inReplyToObject != null && _loadedReplyToUrl == urlToFetch.ToString()))
+            return;
+
+        try
         {
-            try
+            isLoadingReplyTo = true;
+            StateHasChanged();
+            var fetched = await ActivityPubClient.GetAsync<KristofferStrube.ActivityStreams.Object>(urlToFetch, useCache: true);
+            if (fetched != null)
             {
-                isLoadingReplyTo = true;
-                StateHasChanged();
-                var fetched = await ActivityPubClient.GetAsync<KristofferStrube.ActivityStreams.Object>(urlToFetch, useCache: true);
-                if (fetched != null)
-                    inReplyToObject = fetched;
+                inReplyToObject = fetched;
+                _loadedReplyToUrl = urlToFetch.ToString();
             }
-            catch { }
-            finally
-            {
-                isLoadingReplyTo = false;
-                StateHasChanged();
-            }
+        }
+        catch { }
+        finally
+        {
+            isLoadingReplyTo = false;
+            StateHasChanged();
         }
     }
 
@@ -288,37 +275,6 @@
         if (obj is KristofferStrube.ActivityStreams.Object o)
             return o.Content?.Any() == true || o.Name?.Any() == true || o.Summary?.Any() == true;
         return false;
-    }
-
-    private string GetReplyActorDisplay(Note note)
-    {
-        var actorRef = note.AttributedTo?.FirstOrDefault();
-        if (actorRef is Actor actor && actor.Name?.Any() == true)
-            return actor.Name.First();
-        if (actorRef is KristofferStrube.ActivityStreams.Object obj)
-        {
-            if (obj.Name?.Any() == true) return obj.Name.First();
-            if (!string.IsNullOrEmpty(obj.Id)) return obj.Id;
-        }
-        if (actorRef is ILink link && link.Href != null)
-            return link.Href.ToString();
-        return "Unknown";
-    }
-
-    private string GetReplyActorImageUrl(Note note)
-    {
-        var actorRef = note.AttributedTo?.FirstOrDefault();
-        if (actorRef is Person person && person.Icon?.Any() == true)
-        {
-            var icon = person.Icon.First();
-            if (icon is Image img && img.Url?.Any() == true)
-            {
-                var url = img.Url.First();
-                if (url is ILink link && link.Href != null)
-                    return link.Href.ToString();
-            }
-        }
-        return string.Empty;
     }
 
     private int GetReplyCount()

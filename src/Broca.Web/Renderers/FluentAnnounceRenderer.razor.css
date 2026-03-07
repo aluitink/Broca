@@ -14,7 +14,10 @@
 
 .announce-object {
     margin: 0;
-    padding-left: 8px;
+}
+
+.announce-object ::deep .fluent-note-card {
+    margin-bottom: 0;
 }
 
 .actor-info-clickable:hover {

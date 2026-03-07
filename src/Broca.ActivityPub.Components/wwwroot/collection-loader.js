@@ -7,7 +7,7 @@ export function observeSentinel(sentinelElement, dotnetRef) {
                 dotnetRef.invokeMethodAsync('OnSentinelVisible');
             }
         },
-        { rootMargin: '800px' }
+        { rootMargin: '200px' }
     );
 
     observer.observe(sentinelElement);

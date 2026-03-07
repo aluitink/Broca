@@ -1507,5 +1507,314 @@ public class ServerToServerTests : TwoServerFixture
             Assert.DoesNotContain(aliceNewId, following);
         }
     }
+
+    [Fact]
+    public async Task S2S_RemoteUserReplies_RepliesCountUpdatedOnOriginalObject()
+    {
+        // Arrange - Bob on Server A creates a note; Alice on Server B replies to it
+        string bobPrivateKey;
+        string alicePrivateKey;
+
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (_, key) = await TestDataSeeder.SeedActorAsync(actorRepo, "bob", ServerA.BaseUrl);
+            bobPrivateKey = key;
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (_, key) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice", ServerB.BaseUrl);
+            alicePrivateKey = key;
+        }
+
+        var bobId = $"{ServerA.BaseUrl}/users/bob";
+        var aliceId = $"{ServerB.BaseUrl}/users/alice";
+
+        var bobClient = TestClientFactory.CreateAuthenticatedClient(
+            () => ServerA.CreateClient(),
+            bobId,
+            bobPrivateKey);
+
+        var c2sHelperBob = new ClientToServerHelper(bobClient, bobId, ClientA);
+
+        // Step 1: Bob creates a note
+        var createActivity = TestDataSeeder.CreateCreateActivity(bobId, "Note that will receive a reply");
+        await c2sHelperBob.PostToOutboxAsync(createActivity);
+
+        // Extract the note ID from Bob's outbox
+        string? noteId;
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
+            var outboxActivities = await activityRepo.GetOutboxActivitiesAsync("bob", limit: 1);
+            var latestActivity = outboxActivities.FirstOrDefault() as Activity;
+            var createdObject = latestActivity?.Object?.FirstOrDefault();
+            noteId = createdObject switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+        }
+        Assert.NotNull(noteId);
+
+        // Verify no replies yet
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
+            var repliesCount = await activityRepo.GetRepliesCountAsync(noteId);
+            Assert.Equal(0, repliesCount);
+        }
+
+        // Step 2: Alice delivers a reply directly to Bob's inbox on Server A
+        var replyActivity = TestDataSeeder.CreateReplyActivity(aliceId, "This is Alice's reply", noteId);
+
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            aliceId,
+            alicePrivateKey);
+
+        var response = await aliceClient.PostAsync(
+            new Uri($"{ServerA.BaseUrl}/users/bob/inbox"),
+            replyActivity);
+
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Wait for processing
+        await Task.Delay(500);
+
+        // Assert - Bob's note has the reply recorded
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
+            var repliesCount = await activityRepo.GetRepliesCountAsync(noteId);
+            Assert.Equal(1, repliesCount);
+        }
+    }
+
+    [Fact]
+    public async Task S2S_MultipleInteractions_CountsAccumulateCorrectly()
+    {
+        // Arrange - Bob on Server A creates a note; Alice and Carol on Server B both like and reply
+        string bobPrivateKey;
+        string alicePrivateKey;
+        string carolPrivateKey;
+
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (_, key) = await TestDataSeeder.SeedActorAsync(actorRepo, "bob", ServerA.BaseUrl);
+            bobPrivateKey = key;
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (_, aliceKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice", ServerB.BaseUrl);
+            var (_, carolKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "carol", ServerB.BaseUrl);
+            alicePrivateKey = aliceKey;
+            carolPrivateKey = carolKey;
+        }
+
+        var bobId = $"{ServerA.BaseUrl}/users/bob";
+        var aliceId = $"{ServerB.BaseUrl}/users/alice";
+        var carolId = $"{ServerB.BaseUrl}/users/carol";
+
+        var bobClient = TestClientFactory.CreateAuthenticatedClient(
+            () => ServerA.CreateClient(),
+            bobId,
+            bobPrivateKey);
+
+        var c2sHelperBob = new ClientToServerHelper(bobClient, bobId, ClientA);
+
+        // Bob creates a note
+        var createActivity = TestDataSeeder.CreateCreateActivity(bobId, "Note to gather multiple interactions");
+        await c2sHelperBob.PostToOutboxAsync(createActivity);
+
+        string? noteId;
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
+            var outboxActivities = await activityRepo.GetOutboxActivitiesAsync("bob", limit: 1);
+            var latestActivity = outboxActivities.FirstOrDefault() as Activity;
+            var createdObject = latestActivity?.Object?.FirstOrDefault();
+            noteId = createdObject switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+        }
+        Assert.NotNull(noteId);
+
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            aliceId,
+            alicePrivateKey);
+
+        var carolClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            carolId,
+            carolPrivateKey);
+
+        var bobInboxUrl = new Uri($"{ServerA.BaseUrl}/users/bob/inbox");
+
+        // Alice likes the note — use a unique ID to avoid collisions with carol's like when
+        // both activities are built within the same second (counter resets per builder instance)
+        var aliceLike = new Like
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Id = $"{aliceId}/activities/{Guid.NewGuid()}",
+            Type = new[] { "Like" },
+            Actor = new IObjectOrLink[] { new Link { Href = new Uri(aliceId) } },
+            Object = new IObjectOrLink[] { new Link { Href = new Uri(noteId) } },
+            Published = DateTime.UtcNow
+        };
+        await aliceClient.PostAsync(bobInboxUrl, aliceLike);
+
+        // Carol likes the note
+        var carolLike = new Like
+        {
+            JsonLDContext = new List<ITermDefinition>
+            {
+                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+            },
+            Id = $"{carolId}/activities/{Guid.NewGuid()}",
+            Type = new[] { "Like" },
+            Actor = new IObjectOrLink[] { new Link { Href = new Uri(carolId) } },
+            Object = new IObjectOrLink[] { new Link { Href = new Uri(noteId) } },
+            Published = DateTime.UtcNow
+        };
+        await carolClient.PostAsync(bobInboxUrl, carolLike);
+
+        // Alice also replies to the note
+        var aliceReply = TestDataSeeder.CreateReplyActivity(aliceId, "Alice's reply", noteId);
+        await aliceClient.PostAsync(bobInboxUrl, aliceReply);
+
+        // Carol also replies to the note
+        var carolReply = TestDataSeeder.CreateReplyActivity(carolId, "Carol's reply", noteId);
+        await carolClient.PostAsync(bobInboxUrl, carolReply);
+
+        // Wait for processing
+        await Task.Delay(500);
+
+        // Assert - counts should reflect all interactions
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
+
+            var likesCount = await activityRepo.GetLikesCountAsync(noteId);
+            Assert.Equal(2, likesCount);
+
+            var repliesCount = await activityRepo.GetRepliesCountAsync(noteId);
+            Assert.Equal(2, repliesCount);
+        }
+    }
+
+    [Fact]
+    public async Task S2S_ObjectCollectionEndpoints_ReflectInteractionCounts()
+    {
+        // Arrange - Bob on Server A creates a note, remote actors interact,
+        //           then verify the /replies, /likes, /shares HTTP endpoints report correct totals
+        string bobPrivateKey;
+        string alicePrivateKey;
+
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (_, key) = await TestDataSeeder.SeedActorAsync(actorRepo, "bob", ServerA.BaseUrl);
+            bobPrivateKey = key;
+        }
+
+        using (var scopeB = ServerB.Services.CreateScope())
+        {
+            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+            var (_, key) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice", ServerB.BaseUrl);
+            alicePrivateKey = key;
+        }
+
+        var bobId = $"{ServerA.BaseUrl}/users/bob";
+        var aliceId = $"{ServerB.BaseUrl}/users/alice";
+
+        var bobClient = TestClientFactory.CreateAuthenticatedClient(
+            () => ServerA.CreateClient(),
+            bobId,
+            bobPrivateKey);
+
+        var c2sHelperBob = new ClientToServerHelper(bobClient, bobId, ClientA);
+
+        // Bob creates a note
+        var createActivity = TestDataSeeder.CreateCreateActivity(bobId, "Note for collection endpoint tests");
+        await c2sHelperBob.PostToOutboxAsync(createActivity);
+
+        string? noteId;
+        string? objectId;
+        using (var scopeA = ServerA.Services.CreateScope())
+        {
+            var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
+            var outboxActivities = await activityRepo.GetOutboxActivitiesAsync("bob", limit: 1);
+            var latestActivity = outboxActivities.FirstOrDefault() as Activity;
+            var createdObject = latestActivity?.Object?.FirstOrDefault();
+            noteId = createdObject switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+        }
+        Assert.NotNull(noteId);
+
+        // Extract the objectId segment from the note URL
+        // e.g. https://server/users/bob/objects/{objectId}
+        objectId = noteId.Split('/').Last();
+
+        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+            () => CreateRoutingClient(),
+            aliceId,
+            alicePrivateKey);
+
+        var bobInboxUrl = new Uri($"{ServerA.BaseUrl}/users/bob/inbox");
+
+        // Alice likes the note
+        var aliceLike = TestDataSeeder.CreateLike(aliceId, noteId);
+        await aliceClient.PostAsync(bobInboxUrl, aliceLike);
+
+        // Alice announces the note
+        var aliceAnnounce = TestDataSeeder.CreateAnnounce(aliceId, noteId);
+        await aliceClient.PostAsync(bobInboxUrl, aliceAnnounce);
+
+        // Alice replies to the note
+        var aliceReply = TestDataSeeder.CreateReplyActivity(aliceId, "Alice's reply for endpoint test", noteId);
+        await aliceClient.PostAsync(bobInboxUrl, aliceReply);
+
+        // Wait for processing
+        await Task.Delay(500);
+
+        // Verify /likes endpoint
+        var likesResp = await ClientA.GetAsync($"{ServerA.BaseUrl}/users/bob/objects/{objectId}/likes");
+        Assert.True(likesResp.IsSuccessStatusCode);
+        var likesJson = await likesResp.Content.ReadAsStringAsync();
+        using var likesDoc = System.Text.Json.JsonDocument.Parse(likesJson);
+        Assert.Equal(1, likesDoc.RootElement.GetProperty("totalItems").GetInt32());
+
+        // Verify /shares endpoint
+        var sharesResp = await ClientA.GetAsync($"{ServerA.BaseUrl}/users/bob/objects/{objectId}/shares");
+        Assert.True(sharesResp.IsSuccessStatusCode);
+        var sharesJson = await sharesResp.Content.ReadAsStringAsync();
+        using var sharesDoc = System.Text.Json.JsonDocument.Parse(sharesJson);
+        Assert.Equal(1, sharesDoc.RootElement.GetProperty("totalItems").GetInt32());
+
+        // Verify /replies endpoint
+        var repliesResp = await ClientA.GetAsync($"{ServerA.BaseUrl}/users/bob/objects/{objectId}/replies");
+        Assert.True(repliesResp.IsSuccessStatusCode);
+        var repliesJson = await repliesResp.Content.ReadAsStringAsync();
+        using var repliesDoc = System.Text.Json.JsonDocument.Parse(repliesJson);
+        Assert.Equal(1, repliesDoc.RootElement.GetProperty("totalItems").GetInt32());
+    }
 }
 

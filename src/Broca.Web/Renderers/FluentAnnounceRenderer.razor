@@ -55,37 +55,11 @@
                 <div class="announce-object">
                     @if (objectToRender is Note announcedNote)
                     {
-                        @if (announcedNote.AttributedTo?.Any() == true)
-                        {
-                            <FluentPersona Name="@GetObjectActorDisplay(announcedNote)"
-                                           Image="@GetObjectActorImageUrl(announcedNote)"
-                                           ImageSize="28px"
-                                           TextPosition="TextPosition.End"
-                                           class="announce-object-actor" />
-                        }
-                        @if (announcedNote.Content?.Any() == true)
-                        {
-                            <div class="note-content announce-object-content">
-                                @((MarkupString)(announcedNote.Content.First() ?? string.Empty))
-                            </div>
-                        }
-                        else if (announcedNote.Name?.Any() == true)
-                        {
-                            <div class="announce-object-content">@announcedNote.Name.First()</div>
-                        }
+                        <FluentNoteRenderer Note="@announcedNote" ShowActions="false" ShowMenu="false" />
                     }
                     else if (objectToRender is KristofferStrube.ActivityStreams.Object renderedObj)
                     {
-                        @if (renderedObj.Content?.Any() == true)
-                        {
-                            <div class="note-content announce-object-content">
-                                @((MarkupString)(renderedObj.Content.First() ?? string.Empty))
-                            </div>
-                        }
-                        else if (renderedObj.Name?.Any() == true)
-                        {
-                            <div class="announce-object-content">@renderedObj.Name.First()</div>
-                        }
+                        <ObjectDisplay Object="@renderedObj" AutoResolveLinks="false" />
                     }
                     else if (!isLoading && Announce.Object.First() is ILink link)
                     {
@@ -128,6 +102,7 @@
     private ActorInfo? actorInfo;
     private object? objectToRender;
     private bool isLoading = false;
+    private string? _loadedObjectUrl;
 
     /// <summary>
     /// Gets or sets the Announce activity to render.
@@ -213,7 +188,6 @@
         }
         else
         {
-            // Try to get the string representation and parse as URL
             var urlString = objRef?.ToString();
             if (!string.IsNullOrEmpty(urlString) && Uri.TryCreate(urlString, UriKind.Absolute, out var uri))
             {
@@ -221,32 +195,36 @@
             }
         }
 
-        // If we have a URL, try to fetch the object
-        if (urlToFetch != null)
-        {
-            try
-            {
-                isLoading = true;
-                StateHasChanged();
+        if (urlToFetch == null)
+            return;
 
-                var fetchedObject = await ActivityPubClient.GetAsync<KristofferStrube.ActivityStreams.Object>(
-                    urlToFetch, 
-                    useCache: true);
-                
-                if (fetchedObject != null)
-                {
-                    objectToRender = fetchedObject;
-                }
-            }
-            catch
+        // Guard: skip if already loaded for this URL or a fetch is already in-flight
+        if (isLoading || (objectToRender != null && _loadedObjectUrl == urlToFetch.ToString()))
+            return;
+
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            var fetchedObject = await ActivityPubClient.GetAsync<KristofferStrube.ActivityStreams.Object>(
+                urlToFetch, 
+                useCache: true);
+            
+            if (fetchedObject != null)
             {
-                // If fetch fails, we'll just show the link
+                objectToRender = fetchedObject;
+                _loadedObjectUrl = urlToFetch.ToString();
             }
-            finally
-            {
-                isLoading = false;
-                StateHasChanged();
-            }
+        }
+        catch
+        {
+            // If fetch fails, we'll just show the link
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
         }
     }
 
@@ -255,37 +233,6 @@
         if (obj is KristofferStrube.ActivityStreams.Object o)
             return o.Content?.Any() == true || o.Name?.Any() == true || o.Summary?.Any() == true;
         return false;
-    }
-
-    private string GetObjectActorDisplay(Note note)
-    {
-        var actorRef = note.AttributedTo?.FirstOrDefault();
-        if (actorRef is Actor actor && actor.Name?.Any() == true)
-            return actor.Name.First();
-        if (actorRef is KristofferStrube.ActivityStreams.Object obj)
-        {
-            if (obj.Name?.Any() == true) return obj.Name.First();
-            if (!string.IsNullOrEmpty(obj.Id)) return obj.Id;
-        }
-        if (actorRef is ILink link && link.Href != null)
-            return link.Href.ToString();
-        return "Unknown";
-    }
-
-    private string GetObjectActorImageUrl(Note note)
-    {
-        var actorRef = note.AttributedTo?.FirstOrDefault();
-        if (actorRef is Person person && person.Icon?.Any() == true)
-        {
-            var icon = person.Icon.First();
-            if (icon is Image img && img.Url?.Any() == true)
-            {
-                var url = img.Url.First();
-                if (url is ILink link && link.Href != null)
-                    return link.Href.ToString();
-            }
-        }
-        return string.Empty;
     }
 
     private string GetActorDisplay()

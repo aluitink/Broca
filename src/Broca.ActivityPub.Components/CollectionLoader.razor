@@ -183,6 +183,14 @@
             "observeSentinel", sentinelRef, dotNetRef);
     }
 
+    private async Task DetachObserverAsync()
+    {
+        if (jsModule == null || jsObserver == null) return;
+        await jsModule.InvokeVoidAsync("disconnectObserver", jsObserver);
+        await jsObserver.DisposeAsync();
+        jsObserver = null;
+    }
+
     [JSInvokable]
     public async Task OnSentinelVisible()
     {
@@ -196,13 +204,14 @@
 
         isLoading = true;
         error = null;
+        await DetachObserverAsync();
         StateHasChanged();
 
+        var newItems = new List<TItem>();
         try
         {
             enumerator ??= Client.GetCollectionAsync<TItem>(CollectionUrl).GetAsyncEnumerator();
 
-            var newItems = new List<TItem>();
             for (var i = 0; i < PageSize; i++)
             {
                 if (!await enumerator.MoveNextAsync())
@@ -211,9 +220,9 @@
                     break;
                 }
                 newItems.Add(enumerator.Current);
+                items.Add(enumerator.Current);
+                StateHasChanged();
             }
-
-            items.AddRange(newItems);
 
             if (OnItemsLoaded.HasDelegate && newItems.Count > 0)
                 await OnItemsLoaded.InvokeAsync(newItems);
@@ -237,7 +246,7 @@
         items.Clear();
         hasMore = true;
         error = null;
-        setupObserverAfterRender = true;
+        setupObserverAfterRender = false;
 
         if (enumerator != null)
         {

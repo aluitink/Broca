@@ -273,6 +273,48 @@ public class FileSystemActivityRepository : IActivityRepository, IActivityStatis
         }
     }
 
+    public async Task RecordInteractionAsync(string objectId, ActivityInteractionType type, string activityId, CancellationToken cancellationToken = default)
+    {
+        var metadataKey = type switch
+        {
+            ActivityInteractionType.Like => "likes",
+            ActivityInteractionType.Announce => "shares",
+            ActivityInteractionType.Reply => "replies",
+            _ => throw new ArgumentOutOfRangeException(nameof(type))
+        };
+
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            await AppendToFileListUnsafeAsync(GetObjectMetadataPath(objectId, metadataKey), activityId);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public async Task RemoveInteractionAsync(string objectId, ActivityInteractionType type, string activityId, CancellationToken cancellationToken = default)
+    {
+        var metadataKey = type switch
+        {
+            ActivityInteractionType.Like => "likes",
+            ActivityInteractionType.Announce => "shares",
+            ActivityInteractionType.Reply => "replies",
+            _ => throw new ArgumentOutOfRangeException(nameof(type))
+        };
+
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            await RemoveFromFileListUnsafeAsync(GetObjectMetadataPath(objectId, metadataKey), activityId);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
     // Helper methods
 
     private string GetUserActivityDirectory(string username)
@@ -304,82 +346,39 @@ public class FileSystemActivityRepository : IActivityRepository, IActivityStatis
         return Path.Combine(userDir, $"{metadataType}.json");
     }
 
-    private async Task<IEnumerable<IObjectOrLink>> GetActivitiesFromDirectoryAsync(string directory, int limit, int offset, CancellationToken cancellationToken)
+    private async Task<IEnumerable<IObjectOrLink>> GetActivitiesFromDirectoryAsync(
+        string directory, int limit, int offset, CancellationToken cancellationToken,
+        bool filterToActivitiesOnly = false)
     {
         if (!Directory.Exists(directory))
-        {
             return Array.Empty<IObjectOrLink>();
-        }
 
         var files = Directory.GetFiles(directory, "*.json")
-            .OrderByDescending(f => File.GetCreationTimeUtc(f))
-            .Skip(offset)
-            .Take(limit);
-
-        var activities = new List<IObjectOrLink>();
-        foreach (var file in files)
-        {
-            try
-            {
-                var json = await File.ReadAllTextAsync(file, cancellationToken);
-                var activity = JsonSerializer.Deserialize<IObjectOrLink>(json, _jsonOptions);
-                if (activity != null)
-                {
-                    activities.Add(activity);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error reading activity file {Path}", file);
-            }
-        }
-
-        return activities;
-    }
-
-    private async Task<IEnumerable<IObjectOrLink>> GetActivitiesFromDirectoryAsync(string directory, int limit, int offset, CancellationToken cancellationToken, bool filterToActivitiesOnly)
-    {
-        if (!Directory.Exists(directory))
-        {
-            return Array.Empty<IObjectOrLink>();
-        }
-
-        var files = Directory.GetFiles(directory, "*.json")
-            .OrderByDescending(f => File.GetCreationTimeUtc(f));
+            .OrderByDescending(f => f);
 
         var activities = new List<IObjectOrLink>();
         var skipped = 0;
-        var taken = 0;
 
         foreach (var file in files)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 var json = await File.ReadAllTextAsync(file, cancellationToken);
                 var activity = JsonSerializer.Deserialize<IObjectOrLink>(json, _jsonOptions);
-                
-                if (activity != null)
+
+                if (activity == null) continue;
+                if (filterToActivitiesOnly && activity is not Activity) continue;
+
+                if (skipped < offset)
                 {
-                    // Filter to only Activities if requested
-                    bool isActivity = activity is Activity;
-                    
-                    if (!filterToActivitiesOnly || isActivity)
-                    {
-                        if (skipped < offset)
-                        {
-                            skipped++;
-                        }
-                        else if (taken < limit)
-                        {
-                            activities.Add(activity);
-                            taken++;
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
+                    skipped++;
+                    continue;
                 }
+
+                activities.Add(activity);
+                if (activities.Count >= limit)
+                    break;
             }
             catch (Exception ex)
             {
@@ -590,38 +589,30 @@ public class FileSystemActivityRepository : IActivityRepository, IActivityStatis
 
     private static string? ExtractObjectId(IObject obj)
     {
-        var objectProperty = obj.GetType().GetProperty("Object");
-        if (objectProperty?.GetValue(obj) is IEnumerable<IObjectOrLink?> objects)
+        var first = (obj as Activity)?.Object?.FirstOrDefault();
+        return first switch
         {
-            var first = objects.FirstOrDefault();
-            return first switch
-            {
-                IObject o when !string.IsNullOrEmpty(o.Id) => o.Id,
-                ILink l when l.Href != null => l.Href.ToString(),
-                _ => null
-            };
-        }
-        return null;
+            IObject o when !string.IsNullOrEmpty(o.Id) => o.Id,
+            ILink l when l.Href != null => l.Href.ToString(),
+            _ => null
+        };
     }
 
     private static bool TryGetInReplyTo(IObject obj, out string inReplyTo)
     {
         inReplyTo = string.Empty;
-        var inReplyToProperty = obj.GetType().GetProperty("InReplyTo");
-        if (inReplyToProperty?.GetValue(obj) is IEnumerable<IObjectOrLink?> replyToObjects)
+        var first = obj.InReplyTo?.FirstOrDefault();
+        switch (first)
         {
-            var first = replyToObjects.FirstOrDefault();
-            switch (first)
-            {
-                case IObject o when !string.IsNullOrEmpty(o.Id):
-                    inReplyTo = o.Id;
-                    return true;
-                case ILink l when l.Href != null:
-                    inReplyTo = l.Href.ToString()!;
-                    return true;
-            }
+            case IObject o when !string.IsNullOrEmpty(o.Id):
+                inReplyTo = o.Id;
+                return true;
+            case ILink l when l.Href != null:
+                inReplyTo = l.Href.ToString()!;
+                return true;
+            default:
+                return false;
         }
-        return false;
     }
 
     private void EnsureDirectoryExists(string path)

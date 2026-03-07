@@ -266,7 +266,14 @@ public class InboxProcessor : IInboxHandler
             var originalLike = obj as Activity;
             if (originalLike?.Id != null)
             {
-                // Delete the Like activity - the repository will automatically update indexes
+                var likedObjectId = originalLike.Object?.FirstOrDefault() switch
+                {
+                    ILink likeObjLink => likeObjLink.Href?.ToString(),
+                    IObject likedObj => likedObj.Id,
+                    _ => null
+                };
+                if (!string.IsNullOrEmpty(likedObjectId))
+                    await _activityRepository.RemoveInteractionAsync(likedObjectId, ActivityInteractionType.Like, originalLike.Id, cancellationToken);
                 await _activityRepository.DeleteActivityAsync(originalLike.Id, cancellationToken);
                 _logger.LogInformation("Removed Like {LikeId} from {Username}'s inbox", originalLike.Id, username);
                 return true;
@@ -278,7 +285,14 @@ public class InboxProcessor : IInboxHandler
             var originalAnnounce = obj as Activity;
             if (originalAnnounce?.Id != null)
             {
-                // Delete the Announce activity - the repository will automatically update indexes
+                var announcedObjectId = originalAnnounce.Object?.FirstOrDefault() switch
+                {
+                    ILink announceObjLink => announceObjLink.Href?.ToString(),
+                    IObject announcedObj => announcedObj.Id,
+                    _ => null
+                };
+                if (!string.IsNullOrEmpty(announcedObjectId))
+                    await _activityRepository.RemoveInteractionAsync(announcedObjectId, ActivityInteractionType.Announce, originalAnnounce.Id, cancellationToken);
                 await _activityRepository.DeleteActivityAsync(originalAnnounce.Id, cancellationToken);
                 _logger.LogInformation("Removed Announce {AnnounceId} from {Username}'s inbox", originalAnnounce.Id, username);
                 return true;
@@ -351,11 +365,29 @@ public class InboxProcessor : IInboxHandler
         return true;
     }
 
-    private Task<bool> HandleCreateAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task<bool> HandleCreateAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {
-        // Create activities are already stored in the inbox
-        // Additional processing (e.g., notification) could be done here
-        return Task.FromResult(true);
+        if (activity is Activity createActivity)
+        {
+            var createdObject = createActivity.Object?.FirstOrDefault();
+            if (createdObject is IObject innerObj && !string.IsNullOrEmpty(innerObj.Id))
+            {
+                var replyToRef = innerObj.InReplyTo?.FirstOrDefault();
+                var replyToId = replyToRef switch
+                {
+                    ILink link => link.Href?.ToString(),
+                    IObject obj => obj.Id,
+                    _ => null
+                };
+
+                if (!string.IsNullOrEmpty(replyToId))
+                {
+                    await _activityRepository.RecordInteractionAsync(replyToId, ActivityInteractionType.Reply, innerObj.Id, cancellationToken);
+                    _logger.LogInformation("Recorded reply {ReplyId} to {ObjectId} for {Username}", innerObj.Id, replyToId, username);
+                }
+            }
+        }
+        return true;
     }
 
     private async Task<bool> HandleDeleteAsync(string username, IObject? activity, CancellationToken cancellationToken)
@@ -441,16 +473,46 @@ public class InboxProcessor : IInboxHandler
     }
 
 
-    private Task<bool> HandleLikeAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task<bool> HandleLikeAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Processed Like activity for {Username}", username);
-        return Task.FromResult(true);
+        if (activity is Activity likeActivity)
+        {
+            var objectRef = likeActivity.Object?.FirstOrDefault();
+            var objectId = objectRef switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+
+            if (!string.IsNullOrEmpty(objectId) && !string.IsNullOrEmpty(likeActivity.Id))
+            {
+                await _activityRepository.RecordInteractionAsync(objectId, ActivityInteractionType.Like, likeActivity.Id, cancellationToken);
+                _logger.LogInformation("Recorded Like {ActivityId} on {ObjectId} for {Username}", likeActivity.Id, objectId, username);
+            }
+        }
+        return true;
     }
 
-    private Task<bool> HandleAnnounceAsync(string username, IObject? activity, CancellationToken cancellationToken)
+    private async Task<bool> HandleAnnounceAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Processed Announce activity for {Username}", username);
-        return Task.FromResult(true);
+        if (activity is Activity announceActivity)
+        {
+            var objectRef = announceActivity.Object?.FirstOrDefault();
+            var objectId = objectRef switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+
+            if (!string.IsNullOrEmpty(objectId) && !string.IsNullOrEmpty(announceActivity.Id))
+            {
+                await _activityRepository.RecordInteractionAsync(objectId, ActivityInteractionType.Announce, announceActivity.Id, cancellationToken);
+                _logger.LogInformation("Recorded Announce {ActivityId} on {ObjectId} for {Username}", announceActivity.Id, objectId, username);
+            }
+        }
+        return true;
     }
 
     private async Task<bool> HandleMoveAsync(string username, IObject? activity, CancellationToken cancellationToken)
