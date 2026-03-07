@@ -76,10 +76,15 @@
                     }
                     else if (objectToRender is KristofferStrube.ActivityStreams.Object renderedObj)
                     {
-                        var summary = renderedObj.Name?.FirstOrDefault() ?? renderedObj.Summary?.FirstOrDefault() ?? renderedObj.Id;
-                        @if (!string.IsNullOrEmpty(summary))
+                        @if (renderedObj.Content?.Any() == true)
                         {
-                            <div class="announce-object-content">@summary</div>
+                            <div class="note-content announce-object-content">
+                                @((MarkupString)(renderedObj.Content.First() ?? string.Empty))
+                            </div>
+                        }
+                        else if (renderedObj.Name?.Any() == true)
+                        {
+                            <div class="announce-object-content">@renderedObj.Name.First()</div>
                         }
                     }
                     else if (!isLoading && Announce.Object.First() is ILink link)

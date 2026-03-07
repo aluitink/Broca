@@ -90,10 +90,15 @@
                     }
                     else if (inReplyToObject is KristofferStrube.ActivityStreams.Object replyObj)
                     {
-                        var summary = replyObj.Name?.FirstOrDefault() ?? replyObj.Summary?.FirstOrDefault() ?? replyObj.Id;
-                        @if (!string.IsNullOrEmpty(summary))
+                        @if (replyObj.Content?.Any() == true)
                         {
-                            <div class="reply-to-content">@summary</div>
+                            <div class="note-content reply-to-content">
+                                @((MarkupString)(replyObj.Content.First() ?? string.Empty))
+                            </div>
+                        }
+                        else if (replyObj.Name?.Any() == true)
+                        {
+                            <div class="reply-to-content">@replyObj.Name.First()</div>
                         }
                     }
                     else
