@@ -42,7 +42,7 @@ public class MySqlActivityRepository : IActivityRepository, IActivityStatistics,
     public async Task<IObjectOrLink?> GetActivityByIdAsync(string activityId, CancellationToken cancellationToken = default)
     {
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await db.Activities.FindAsync([activityId], cancellationToken);
+        var entity = await db.Activities.FirstOrDefaultAsync(a => a.ActivityId == activityId, cancellationToken);
         return entity is null ? null : DeserializeActivity(entity.ActivityJson);
     }
 
@@ -164,7 +164,7 @@ public class MySqlActivityRepository : IActivityRepository, IActivityStatistics,
     public async Task MarkObjectAsDeletedAsync(string objectId, CancellationToken cancellationToken = default)
     {
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await db.Activities.FindAsync([objectId], cancellationToken);
+        var entity = await db.Activities.FirstOrDefaultAsync(a => a.ActivityId == objectId, cancellationToken);
         if (entity is not null)
         {
             var tombstone = new Tombstone { Id = objectId, FormerType = new List<string> { "Note" } };
@@ -286,7 +286,7 @@ public class MySqlActivityRepository : IActivityRepository, IActivityStatistics,
         var json = JsonSerializer.Serialize(activity, typeof(IObjectOrLink), _jsonOptions);
         var (activityType, objectId, inReplyTo) = ExtractMetadata(activity);
 
-        var existing = await db.Activities.FindAsync([activityId], cancellationToken);
+        var existing = await db.Activities.FirstOrDefaultAsync(a => a.ActivityId == activityId, cancellationToken);
         if (existing is null)
         {
             db.Activities.Add(new ActivityEntity

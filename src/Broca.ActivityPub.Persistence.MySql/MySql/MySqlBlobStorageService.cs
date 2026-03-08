@@ -7,6 +7,8 @@ namespace Broca.ActivityPub.Persistence.MySql.MySql;
 
 public class MySqlBlobStorageService : IBlobStorageService
 {
+    private const string ProviderName = "mysql";
+
     private readonly IDbContextFactory<BrocaDbContext> _contextFactory;
     private readonly string _baseUrl;
 
@@ -32,14 +34,19 @@ public class MySqlBlobStorageService : IBlobStorageService
             {
                 Username = username,
                 BlobId = blobId,
+                ContentType = contentType ?? "application/octet-stream",
+                StorageProvider = ProviderName,
                 Content = data,
-                ContentType = contentType ?? "application/octet-stream"
+                Size = data.LongLength
             });
         }
         else
         {
-            existing.Content = data;
             existing.ContentType = contentType ?? existing.ContentType;
+            existing.StorageProvider = ProviderName;
+            existing.StorageKey = null;
+            existing.Content = data;
+            existing.Size = data.LongLength;
         }
         await db.SaveChangesAsync(cancellationToken);
 
@@ -52,6 +59,10 @@ public class MySqlBlobStorageService : IBlobStorageService
         var entity = await db.Blobs.FindAsync([username, blobId], cancellationToken);
         if (entity is null)
             return null;
+
+        if (entity.StorageProvider != ProviderName || entity.Content is null)
+            return null;
+
         return (new MemoryStream(entity.Content), entity.ContentType);
     }
 

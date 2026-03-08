@@ -15,6 +15,7 @@ public class BrocaDbContext : DbContext
     public DbSet<ActivityEntity> Activities => Set<ActivityEntity>();
     public DbSet<DeliveryQueueEntity> DeliveryQueue => Set<DeliveryQueueEntity>();
     public DbSet<BlobEntity> Blobs => Set<BlobEntity>();
+    public DbSet<ActorSyncQueueEntity> ActorSyncQueue => Set<ActorSyncQueueEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,18 +25,20 @@ public class BrocaDbContext : DbContext
             e.HasKey(a => a.Username);
             e.Property(a => a.Username).HasMaxLength(255);
             e.Property(a => a.ActorId).HasMaxLength(2048);
-            e.Property(a => a.ActorJson).HasColumnType("longtext");
+            e.Property(a => a.ActorJson).HasColumnType("json");
             e.HasIndex(a => a.ActorId);
         });
 
         modelBuilder.Entity<FollowEntity>(e =>
         {
             e.ToTable("Follows");
-            e.HasKey(f => new { f.Username, f.ActorId, f.FollowType });
+            e.HasKey(f => f.Id);
+            e.Property(f => f.Id).ValueGeneratedOnAdd();
             e.Property(f => f.Username).HasMaxLength(255);
             e.Property(f => f.ActorId).HasMaxLength(2048);
             e.Property(f => f.FollowType).HasConversion<int>();
             e.HasIndex(f => new { f.Username, f.FollowType });
+            e.HasIndex(f => new { f.Username, f.ActorId, f.FollowType }).IsUnique();
         });
 
         modelBuilder.Entity<CollectionDefinitionEntity>(e =>
@@ -44,7 +47,7 @@ public class BrocaDbContext : DbContext
             e.HasKey(c => new { c.Username, c.CollectionId });
             e.Property(c => c.Username).HasMaxLength(255);
             e.Property(c => c.CollectionId).HasMaxLength(255);
-            e.Property(c => c.DefinitionJson).HasColumnType("longtext");
+            e.Property(c => c.DefinitionJson).HasColumnType("json");
         });
 
         modelBuilder.Entity<CollectionItemEntity>(e =>
@@ -59,14 +62,16 @@ public class BrocaDbContext : DbContext
         modelBuilder.Entity<ActivityEntity>(e =>
         {
             e.ToTable("Activities");
-            e.HasKey(a => a.ActivityId);
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).ValueGeneratedOnAdd();
             e.Property(a => a.ActivityId).HasMaxLength(2048);
             e.Property(a => a.Username).HasMaxLength(255);
             e.Property(a => a.Box).HasMaxLength(10);
-            e.Property(a => a.ActivityJson).HasColumnType("longtext");
+            e.Property(a => a.ActivityJson).HasColumnType("json");
             e.Property(a => a.ActivityType).HasMaxLength(255);
             e.Property(a => a.ObjectId).HasMaxLength(2048);
             e.Property(a => a.InReplyTo).HasMaxLength(2048);
+            e.HasIndex(a => a.ActivityId).IsUnique();
             e.HasIndex(a => new { a.Username, a.Box });
             e.HasIndex(a => a.CreatedAt);
             e.HasIndex(a => new { a.ActivityType, a.ObjectId });
@@ -78,7 +83,7 @@ public class BrocaDbContext : DbContext
             e.ToTable("DeliveryQueue");
             e.HasKey(d => d.Id);
             e.Property(d => d.Id).HasMaxLength(255);
-            e.Property(d => d.ActivityJson).HasColumnType("longtext");
+            e.Property(d => d.ActivityJson).HasColumnType("json");
             e.Property(d => d.InboxUrl).HasMaxLength(2048);
             e.Property(d => d.TargetActorId).HasMaxLength(2048);
             e.Property(d => d.SenderActorId).HasMaxLength(2048);
@@ -95,8 +100,21 @@ public class BrocaDbContext : DbContext
             e.HasKey(b => new { b.Username, b.BlobId });
             e.Property(b => b.Username).HasMaxLength(255);
             e.Property(b => b.BlobId).HasMaxLength(255);
-            e.Property(b => b.Content).HasColumnType("longblob");
             e.Property(b => b.ContentType).HasMaxLength(255);
+            e.Property(b => b.StorageProvider).HasMaxLength(64);
+            e.Property(b => b.StorageKey).HasMaxLength(2048);
+            e.Property(b => b.Content).HasColumnType("longblob");
+            e.HasIndex(b => b.StorageProvider);
+        });
+
+        modelBuilder.Entity<ActorSyncQueueEntity>(e =>
+        {
+            e.ToTable("ActorSyncQueue");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).ValueGeneratedOnAdd();
+            e.Property(a => a.ActorId).HasMaxLength(2048);
+            e.HasIndex(a => a.ActorId).IsUnique();
+            e.HasIndex(a => a.EnqueuedAt);
         });
     }
 }

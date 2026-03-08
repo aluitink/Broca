@@ -2,6 +2,7 @@ namespace Broca.ActivityPub.Persistence.MySql.Entities;
 
 public class ActivityEntity
 {
+    public long Id { get; set; }
     public string ActivityId { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string Box { get; set; } = string.Empty;

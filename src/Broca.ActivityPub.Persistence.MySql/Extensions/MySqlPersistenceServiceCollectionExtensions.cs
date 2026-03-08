@@ -27,6 +27,7 @@ public static class MySqlPersistenceServiceCollectionExtensions
         services.AddScoped<MySqlActivityRepository>();
         services.AddScoped<MySqlDeliveryQueueRepository>();
         services.AddScoped<MySqlBlobStorageService>();
+        services.AddSingleton<MySqlActorSyncQueue>();
 
         services.AddScoped<IActorRepository>(sp => sp.GetRequiredService<MySqlActorRepository>());
         services.AddScoped<IActorStatistics>(sp => sp.GetRequiredService<MySqlActorRepository>());
@@ -35,6 +36,7 @@ public static class MySqlPersistenceServiceCollectionExtensions
         services.AddScoped<ISearchableActivityRepository>(sp => sp.GetRequiredService<MySqlActivityRepository>());
         services.AddScoped<IDeliveryQueueRepository>(sp => sp.GetRequiredService<MySqlDeliveryQueueRepository>());
         services.AddScoped<IBlobStorageService>(sp => sp.GetRequiredService<MySqlBlobStorageService>());
+        services.AddSingleton<IActorSyncQueue>(sp => sp.GetRequiredService<MySqlActorSyncQueue>());
 
         return services;
     }
