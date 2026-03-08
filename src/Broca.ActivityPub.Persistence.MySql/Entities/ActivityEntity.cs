@@ -11,4 +11,6 @@ public class ActivityEntity
     public string? ObjectId { get; set; }
     public string? InReplyTo { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ActorEntity? Actor { get; set; }
 }

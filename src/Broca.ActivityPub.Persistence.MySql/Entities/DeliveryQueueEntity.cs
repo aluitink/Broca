@@ -18,4 +18,6 @@ public class DeliveryQueueEntity
     public DateTime? LastAttemptAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public string? LastError { get; set; }
+
+    public ActorEntity? SenderActor { get; set; }
 }

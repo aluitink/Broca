@@ -73,9 +73,6 @@ public class MySqlActorRepository : IActorRepository, IActorStatistics
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var key = username.ToLowerInvariant();
         await db.Actors.Where(a => a.Username == key).ExecuteDeleteAsync(cancellationToken);
-        await db.Follows.Where(f => f.Username == key).ExecuteDeleteAsync(cancellationToken);
-        await db.CollectionDefinitions.Where(c => c.Username == key).ExecuteDeleteAsync(cancellationToken);
-        await db.CollectionItems.Where(c => c.Username == key).ExecuteDeleteAsync(cancellationToken);
     }
 
     public async Task<IEnumerable<string>> GetFollowersAsync(string username, CancellationToken cancellationToken = default)
@@ -218,9 +215,6 @@ public class MySqlActorRepository : IActorRepository, IActorStatistics
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var key = username.ToLowerInvariant();
         await db.CollectionDefinitions
-            .Where(c => c.Username == key && c.CollectionId == collectionId)
-            .ExecuteDeleteAsync(cancellationToken);
-        await db.CollectionItems
             .Where(c => c.Username == key && c.CollectionId == collectionId)
             .ExecuteDeleteAsync(cancellationToken);
     }

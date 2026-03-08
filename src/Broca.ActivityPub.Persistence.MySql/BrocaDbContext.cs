@@ -39,6 +39,10 @@ public class BrocaDbContext : DbContext
             e.Property(f => f.FollowType).HasConversion<int>();
             e.HasIndex(f => new { f.Username, f.FollowType });
             e.HasIndex(f => new { f.Username, f.ActorId, f.FollowType }).IsUnique();
+            e.HasOne(f => f.Actor)
+                .WithMany(a => a.Follows)
+                .HasForeignKey(f => f.Username)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<CollectionDefinitionEntity>(e =>
@@ -48,6 +52,10 @@ public class BrocaDbContext : DbContext
             e.Property(c => c.Username).HasMaxLength(255);
             e.Property(c => c.CollectionId).HasMaxLength(255);
             e.Property(c => c.DefinitionJson).HasColumnType("json");
+            e.HasOne(c => c.Actor)
+                .WithMany(a => a.CollectionDefinitions)
+                .HasForeignKey(c => c.Username)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<CollectionItemEntity>(e =>
@@ -57,6 +65,14 @@ public class BrocaDbContext : DbContext
             e.Property(c => c.Username).HasMaxLength(255);
             e.Property(c => c.CollectionId).HasMaxLength(255);
             e.Property(c => c.ItemId).HasMaxLength(2048);
+            e.HasOne(c => c.Actor)
+                .WithMany(a => a.CollectionItems)
+                .HasForeignKey(c => c.Username)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(c => c.CollectionDefinition)
+                .WithMany(d => d.Items)
+                .HasForeignKey(c => new { c.Username, c.CollectionId })
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ActivityEntity>(e =>
@@ -76,6 +92,10 @@ public class BrocaDbContext : DbContext
             e.HasIndex(a => a.CreatedAt);
             e.HasIndex(a => new { a.ActivityType, a.ObjectId });
             e.HasIndex(a => a.InReplyTo);
+            e.HasOne(a => a.Actor)
+                .WithMany(ac => ac.Activities)
+                .HasForeignKey(a => a.Username)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DeliveryQueueEntity>(e =>
@@ -92,6 +112,10 @@ public class BrocaDbContext : DbContext
             e.Property(d => d.Status).HasConversion<int>();
             e.HasIndex(d => d.Status);
             e.HasIndex(d => d.NextAttemptAt);
+            e.HasOne(d => d.SenderActor)
+                .WithMany(a => a.OutboundDeliveries)
+                .HasForeignKey(d => d.SenderUsername)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<BlobEntity>(e =>
@@ -105,6 +129,10 @@ public class BrocaDbContext : DbContext
             e.Property(b => b.StorageKey).HasMaxLength(2048);
             e.Property(b => b.Content).HasColumnType("longblob");
             e.HasIndex(b => b.StorageProvider);
+            e.HasOne(b => b.Actor)
+                .WithMany(a => a.Blobs)
+                .HasForeignKey(b => b.Username)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ActorSyncQueueEntity>(e =>

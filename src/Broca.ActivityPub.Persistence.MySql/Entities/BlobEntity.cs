@@ -9,4 +9,6 @@ public class BlobEntity
     public string? StorageKey { get; set; }
     public byte[]? Content { get; set; }
     public long? Size { get; set; }
+
+    public ActorEntity? Actor { get; set; }
 }
