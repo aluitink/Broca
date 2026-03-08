@@ -9,6 +9,7 @@ COPY ["src/Broca.ActivityPub.Server/Broca.ActivityPub.Server.csproj", "src/Broca
 COPY ["src/Broca.ActivityPub.Client/Broca.ActivityPub.Client.csproj", "src/Broca.ActivityPub.Client/"]
 COPY ["src/Broca.ActivityPub.Core/Broca.ActivityPub.Core.csproj", "src/Broca.ActivityPub.Core/"]
 COPY ["src/Broca.ActivityPub.Persistence/Broca.ActivityPub.Persistence.csproj", "src/Broca.ActivityPub.Persistence/"]
+COPY ["src/Broca.ActivityPub.Persistence.MySql/Broca.ActivityPub.Persistence.MySql.csproj", "src/Broca.ActivityPub.Persistence.MySql/"]
 
 # Restore dependencies
 RUN dotnet restore "src/Broca.API/Broca.API.csproj"
@@ -19,6 +20,7 @@ COPY ["src/Broca.ActivityPub.Server/", "src/Broca.ActivityPub.Server/"]
 COPY ["src/Broca.ActivityPub.Client/", "src/Broca.ActivityPub.Client/"]
 COPY ["src/Broca.ActivityPub.Core/", "src/Broca.ActivityPub.Core/"]
 COPY ["src/Broca.ActivityPub.Persistence/", "src/Broca.ActivityPub.Persistence/"]
+COPY ["src/Broca.ActivityPub.Persistence.MySql/", "src/Broca.ActivityPub.Persistence.MySql/"]
 
 # Build and publish
 WORKDIR "/src/src/Broca.API"

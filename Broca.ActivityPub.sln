@@ -31,6 +31,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Broca.SampleData", "tools\Broca.SampleData\Broca.SampleData.csproj", "{EA3C5007-B9B1-431F-A44D-409FA8FBB11E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Broca.ActivityPub.Persistence.MySql", "src\Broca.ActivityPub.Persistence.MySql\Broca.ActivityPub.Persistence.MySql.csproj", "{505F1554-F27F-4A1D-A325-9B95066F5C54}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -173,6 +175,18 @@ Global
 		{EA3C5007-B9B1-431F-A44D-409FA8FBB11E}.Release|x64.Build.0 = Release|Any CPU
 		{EA3C5007-B9B1-431F-A44D-409FA8FBB11E}.Release|x86.ActiveCfg = Release|Any CPU
 		{EA3C5007-B9B1-431F-A44D-409FA8FBB11E}.Release|x86.Build.0 = Release|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Debug|x64.Build.0 = Debug|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Debug|x86.Build.0 = Debug|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Release|Any CPU.Build.0 = Release|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Release|x64.ActiveCfg = Release|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Release|x64.Build.0 = Release|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Release|x86.ActiveCfg = Release|Any CPU
+		{505F1554-F27F-4A1D-A325-9B95066F5C54}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -189,5 +203,6 @@ Global
 		{664ECEF2-8938-4BEA-9D1E-BC3D0C5EC4D0} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{20644776-4EBD-4B61-8007-0A6430BF6CEB} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{EA3C5007-B9B1-431F-A44D-409FA8FBB11E} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{505F1554-F27F-4A1D-A325-9B95066F5C54} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

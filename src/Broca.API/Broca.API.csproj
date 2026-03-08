@@ -13,6 +13,9 @@
     <ProjectReference Include="..\Broca.ActivityPub.Client\Broca.ActivityPub.Client.csproj">
       <ExcludeAssets>contentFiles</ExcludeAssets>
     </ProjectReference>
+    <ProjectReference Include="..\Broca.ActivityPub.Persistence.MySql\Broca.ActivityPub.Persistence.MySql.csproj">
+      <ExcludeAssets>contentFiles</ExcludeAssets>
+    </ProjectReference>
   </ItemGroup>
 
 </Project>

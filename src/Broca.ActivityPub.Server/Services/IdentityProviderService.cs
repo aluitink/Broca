@@ -4,6 +4,7 @@ using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 using KristofferStrube.ActivityStreams.JsonLD;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -19,7 +20,7 @@ namespace Broca.ActivityPub.Server.Services;
 public class IdentityProviderService
 {
     private readonly IIdentityProvider _identityProvider;
-    private readonly IActorRepository _actorRepository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ActivityPubServerOptions _serverOptions;
     private readonly CryptographyService _cryptographyService;
     private readonly ILogger<IdentityProviderService> _logger;
@@ -28,13 +29,13 @@ public class IdentityProviderService
 
     public IdentityProviderService(
         IIdentityProvider identityProvider,
-        IActorRepository actorRepository,
+        IServiceScopeFactory scopeFactory,
         IOptions<ActivityPubServerOptions> serverOptions,
         CryptographyService cryptographyService,
         ILogger<IdentityProviderService> logger)
     {
         _identityProvider = identityProvider ?? throw new ArgumentNullException(nameof(identityProvider));
-        _actorRepository = actorRepository ?? throw new ArgumentNullException(nameof(actorRepository));
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _serverOptions = serverOptions?.Value ?? throw new ArgumentNullException(nameof(serverOptions));
         _cryptographyService = cryptographyService ?? throw new ArgumentNullException(nameof(cryptographyService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -80,8 +81,11 @@ public class IdentityProviderService
     /// </summary>
     public async Task<Actor?> EnsureActorExistsAsync(string username, CancellationToken cancellationToken = default)
     {
+        using var scope = _scopeFactory.CreateScope();
+        var actorRepository = scope.ServiceProvider.GetRequiredService<IActorRepository>();
+
         // Check if actor already exists
-        var existingActor = await _actorRepository.GetActorByUsernameAsync(username, cancellationToken);
+        var existingActor = await actorRepository.GetActorByUsernameAsync(username, cancellationToken);
         if (existingActor != null)
         {
             _logger.LogDebug("Actor {Username} already exists", username);
@@ -97,7 +101,7 @@ public class IdentityProviderService
         }
 
         _logger.LogInformation("Creating new actor for {Username}", username);
-        return await CreateActorFromIdentityAsync(identityDetails, cancellationToken);
+        return await CreateActorFromIdentityAsync(actorRepository, identityDetails, cancellationToken);
     }
 
     /// <summary>
@@ -105,7 +109,10 @@ public class IdentityProviderService
     /// </summary>
     public async Task<Actor?> GetOrCreateActorAsync(string username, CancellationToken cancellationToken = default)
     {
-        var actor = await _actorRepository.GetActorByUsernameAsync(username, cancellationToken);
+        using var scope = _scopeFactory.CreateScope();
+        var actorRepository = scope.ServiceProvider.GetRequiredService<IActorRepository>();
+
+        var actor = await actorRepository.GetActorByUsernameAsync(username, cancellationToken);
         if (actor != null)
         {
             return actor;
@@ -121,7 +128,7 @@ public class IdentityProviderService
         return await EnsureActorExistsAsync(username, cancellationToken);
     }
 
-    private async Task<Actor> CreateActorFromIdentityAsync(IdentityDetails identity, CancellationToken cancellationToken)
+    private async Task<Actor> CreateActorFromIdentityAsync(IActorRepository actorRepository, IdentityDetails identity, CancellationToken cancellationToken)
     {
         var baseUrl = (_serverOptions.BaseUrl ?? "http://localhost").TrimEnd('/');
         var routePrefix = _serverOptions.NormalizedRoutePrefix;
@@ -244,7 +251,7 @@ public class IdentityProviderService
         actor.ExtensionData = extensionData;
 
         // Save to repository
-        await _actorRepository.SaveActorAsync(username, actor, cancellationToken);
+        await actorRepository.SaveActorAsync(username, actor, cancellationToken);
 
         _logger.LogInformation("Created actor: {ActorId}", actorId);
         return actor;

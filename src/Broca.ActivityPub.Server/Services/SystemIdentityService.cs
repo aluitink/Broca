@@ -5,6 +5,7 @@ using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Core.Models;
 using KristofferStrube.ActivityStreams;
 using KristofferStrube.ActivityStreams.JsonLD;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -16,7 +17,7 @@ namespace Broca.ActivityPub.Server.Services;
 public class SystemIdentityService : ISystemIdentityService
 {
     private readonly ActivityPubServerOptions _options;
-    private readonly IActorRepository _actorRepository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SystemIdentityService> _logger;
     private readonly CryptographyService _cryptographyService;
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -28,12 +29,12 @@ public class SystemIdentityService : ISystemIdentityService
 
     public SystemIdentityService(
         IOptions<ActivityPubServerOptions> options,
-        IActorRepository actorRepository,
+        IServiceScopeFactory scopeFactory,
         ILogger<SystemIdentityService> logger,
         CryptographyService cryptographyService)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-        _actorRepository = actorRepository ?? throw new ArgumentNullException(nameof(actorRepository));
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _cryptographyService = cryptographyService ?? throw new ArgumentNullException(nameof(cryptographyService));
     }
@@ -77,8 +78,11 @@ public class SystemIdentityService : ISystemIdentityService
 
             _logger.LogInformation("Initializing system actor: {SystemActorId}", SystemActorId);
 
+            using var scope = _scopeFactory.CreateScope();
+            var actorRepository = scope.ServiceProvider.GetRequiredService<IActorRepository>();
+
             // Try to load existing system actor
-            var existingActor = await _actorRepository.GetActorByUsernameAsync(_options.SystemActorUsername, cancellationToken);
+            var existingActor = await actorRepository.GetActorByUsernameAsync(_options.SystemActorUsername, cancellationToken);
             
             if (existingActor != null)
             {
@@ -96,13 +100,13 @@ public class SystemIdentityService : ISystemIdentityService
                 if (_systemPrivateKey == null)
                 {
                     _logger.LogWarning("System actor exists but has no private key - regenerating");
-                    await CreateSystemActorAsync(cancellationToken);
+                    await CreateSystemActorAsync(actorRepository, cancellationToken);
                 }
             }
             else
             {
                 _logger.LogInformation("Creating new system actor");
-                await CreateSystemActorAsync(cancellationToken);
+                await CreateSystemActorAsync(actorRepository, cancellationToken);
             }
         }
         finally
@@ -111,7 +115,7 @@ public class SystemIdentityService : ISystemIdentityService
         }
     }
 
-    private async Task CreateSystemActorAsync(CancellationToken cancellationToken)
+    private async Task CreateSystemActorAsync(IActorRepository actorRepository, CancellationToken cancellationToken)
     {
         // Generate RSA key pair using RSACryptoServiceProvider for compatibility with CryptographyService
         using var rsa = new RSACryptoServiceProvider(2048);
@@ -175,7 +179,7 @@ public class SystemIdentityService : ISystemIdentityService
             });
         }
 
-        await _actorRepository.SaveActorAsync(username, actor, cancellationToken);
+        await actorRepository.SaveActorAsync(username, actor, cancellationToken);
         _systemActor = actor;
 
         _logger.LogInformation("Created system actor: {ActorId}", actorId);

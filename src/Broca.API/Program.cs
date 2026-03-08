@@ -1,6 +1,7 @@
 using Broca.ActivityPub.Client.Extensions;
 using Broca.ActivityPub.Server.Extensions;
 using Broca.ActivityPub.Persistence.Extensions;
+using Broca.ActivityPub.Persistence.MySql.Extensions;
 using Broca.ActivityPub.Core.Interfaces;
 using Broca.ActivityPub.Server.Services;
 
@@ -22,6 +23,8 @@ builder.Configuration["Persistence:Driver"] = persistenceDriver;
 // Configure persistence layer
 if (persistenceDriver.Equals("FileSystem", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddFileSystemPersistence(dataPath);
+else if (persistenceDriver.Equals("MySql", StringComparison.OrdinalIgnoreCase))
+    builder.Services.AddMySqlPersistence(builder.Configuration);
 else
     builder.Services.AddInMemoryPersistence();
 
@@ -44,6 +47,12 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Ensure MySQL schema exists before any queries
+if (persistenceDriver.Equals("MySql", StringComparison.OrdinalIgnoreCase))
+{
+    await app.Services.InitializeMySqlSchemaAsync();
+}
 
 // Initialize system actor on startup
 using (var scope = app.Services.CreateScope())
