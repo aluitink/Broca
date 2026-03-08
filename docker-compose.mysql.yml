@@ -1,0 +1,12 @@
+services:
+  broca-api:
+    environment:
+      - Persistence__Driver=MySql
+      - Persistence__ConnectionString=Server=broca-mysql;Database=broca;User=broca;Password=broca_password;
+    depends_on:
+      broca-mysql:
+        condition: service_healthy
+    profiles: []
+
+  broca-mysql:
+    profiles: []

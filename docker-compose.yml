@@ -1,4 +1,26 @@
 services:
+  broca-mysql:
+    image: mysql:9.1
+    container_name: broca-mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=broca_root
+      - MYSQL_DATABASE=broca
+      - MYSQL_USER=broca
+      - MYSQL_PASSWORD=broca_password
+    volumes:
+      - broca-mysql-data:/var/lib/mysql
+    networks:
+      - broca-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "broca", "-pbroca_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    profiles:
+      - mysql
+
   broca-api:
     build:
       context: .
@@ -73,6 +95,8 @@ services:
 
 volumes:
   broca-data:
+    driver: local
+  broca-mysql-data:
     driver: local
 
 networks:
