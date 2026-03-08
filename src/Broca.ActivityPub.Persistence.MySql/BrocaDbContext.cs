@@ -25,8 +25,12 @@ public class BrocaDbContext : DbContext
             e.HasKey(a => a.Username);
             e.Property(a => a.Username).HasMaxLength(255);
             e.Property(a => a.ActorId).HasMaxLength(2048);
+            e.Property(a => a.IsLocal).IsRequired();
+            e.Property(a => a.Domain).HasMaxLength(255);
             e.Property(a => a.ActorJson).HasColumnType("json");
             e.HasIndex(a => a.ActorId);
+            e.HasIndex(a => a.IsLocal);
+            e.HasIndex(a => a.Domain);
         });
 
         modelBuilder.Entity<FollowEntity>(e =>

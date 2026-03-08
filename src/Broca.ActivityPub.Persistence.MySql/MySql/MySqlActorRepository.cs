@@ -5,6 +5,7 @@ using Broca.ActivityPub.Persistence.MySql.Entities;
 using KristofferStrube.ActivityStreams;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Broca.ActivityPub.Persistence.MySql.MySql;
 
@@ -13,12 +14,15 @@ public class MySqlActorRepository : IActorRepository, IActorStatistics
     private readonly IDbContextFactory<BrocaDbContext> _contextFactory;
     private readonly ILogger<MySqlActorRepository> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly ActivityPubServerOptions _serverOptions;
 
     public MySqlActorRepository(
         IDbContextFactory<BrocaDbContext> contextFactory,
+        IOptions<ActivityPubServerOptions> serverOptions,
         ILogger<MySqlActorRepository> logger)
     {
         _contextFactory = contextFactory;
+        _serverOptions = serverOptions.Value;
         _logger = logger;
         _jsonOptions = new JsonSerializerOptions
         {
@@ -46,6 +50,8 @@ public class MySqlActorRepository : IActorRepository, IActorStatistics
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var key = username.ToLowerInvariant();
         var json = JsonSerializer.Serialize(actor, _jsonOptions);
+        var isLocal = IsLocalActor(actor.Id);
+        var domain = ExtractDomain(actor.Id);
         var existing = await db.Actors.FindAsync([key], cancellationToken);
         if (existing is null)
         {
@@ -53,6 +59,8 @@ public class MySqlActorRepository : IActorRepository, IActorStatistics
             {
                 Username = key,
                 ActorId = actor.Id,
+                IsLocal = isLocal,
+                Domain = domain,
                 ActorJson = json,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -61,6 +69,8 @@ public class MySqlActorRepository : IActorRepository, IActorStatistics
         else
         {
             existing.ActorId = actor.Id;
+            existing.IsLocal = isLocal;
+            existing.Domain = domain;
             existing.ActorJson = json;
             existing.UpdatedAt = DateTime.UtcNow;
         }
@@ -174,7 +184,7 @@ public class MySqlActorRepository : IActorRepository, IActorStatistics
     public async Task<IEnumerable<string>> GetAllLocalUsernamesAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Actors.Select(a => a.Username).ToListAsync(cancellationToken);
+        return await db.Actors.Where(a => a.IsLocal).Select(a => a.Username).ToListAsync(cancellationToken);
     }
 
     public async Task<IEnumerable<CustomCollectionDefinition>> GetCollectionDefinitionsAsync(string username, CancellationToken cancellationToken = default)
@@ -263,7 +273,7 @@ public class MySqlActorRepository : IActorRepository, IActorStatistics
     public async Task<int> CountLocalActorsAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Actors.CountAsync(a => a.Username != SystemActorUsername, cancellationToken);
+        return await db.Actors.CountAsync(a => a.IsLocal && a.Username != SystemActorUsername, cancellationToken);
     }
 
     private const string SystemActorUsername = "sys";
@@ -289,5 +299,26 @@ public class MySqlActorRepository : IActorRepository, IActorStatistics
         await db.Follows
             .Where(f => f.Username == key && f.ActorId == actorId && f.FollowType == type)
             .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    private bool IsLocalActor(string? actorId)
+    {
+        if (string.IsNullOrWhiteSpace(actorId)) return false;
+        var baseUrl = _serverOptions.BaseUrl?.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            _logger.LogWarning("ActivityPub BaseUrl is not configured; actor locality cannot be determined accurately");
+            return false;
+        }
+        return actorId.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string? ExtractDomain(string? actorId)
+    {
+        if (string.IsNullOrWhiteSpace(actorId)) return null;
+        if (Uri.TryCreate(actorId, UriKind.Absolute, out var uri))
+            return uri.Host.ToLowerInvariant();
+        _logger.LogWarning("Could not extract domain from actor ID {ActorId}", actorId);
+        return null;
     }
 }
