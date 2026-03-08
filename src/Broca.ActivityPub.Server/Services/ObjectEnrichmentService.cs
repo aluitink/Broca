@@ -43,7 +43,7 @@ public class ObjectEnrichmentService
         {
             // Extract username from object ID if it's a local object
             // Format: {baseUrl}/users/{username}/objects/{objectId}
-            if (!obj.Id.StartsWith(baseUrl))
+            if (string.IsNullOrEmpty(baseUrl) || !obj.Id.StartsWith(baseUrl))
             {
                 // Skip enrichment for remote objects
                 return;
@@ -60,10 +60,17 @@ public class ObjectEnrichmentService
             var username = idParts[1];
             var objectId = idParts[3];
 
-            // Get counts for the collections
-            var repliesCount = await _activityRepository.GetRepliesCountAsync(obj.Id);
-            var likesCount = await _activityRepository.GetLikesCountAsync(obj.Id);
-            var sharesCount = await _activityRepository.GetSharesCountAsync(obj.Id);
+            // Get counts for the collections, using remote-provided TotalItems as a floor so
+            // counts carried in received JSON are not discarded when our local index is smaller.
+            var repliesCount = Math.Max(
+                await _activityRepository.GetRepliesCountAsync(obj.Id),
+                (int)(obj.Replies?.TotalItems ?? 0));
+            var likesCount = Math.Max(
+                await _activityRepository.GetLikesCountAsync(obj.Id),
+                (int)(obj.Likes?.TotalItems ?? 0));
+            var sharesCount = Math.Max(
+                await _activityRepository.GetSharesCountAsync(obj.Id),
+                (int)(obj.Shares?.TotalItems ?? 0));
 
             // Build collection URLs
             var repliesUrl = $"{baseUrl}/users/{username}/objects/{objectId}/replies";

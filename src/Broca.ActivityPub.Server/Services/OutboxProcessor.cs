@@ -334,6 +334,9 @@ public class OutboxProcessor
             case Reject rejectActivity:
                 await HandleOutgoingRejectAsync(username, rejectActivity, cancellationToken);
                 break;
+            case Like:
+            case Announce:
+                break;
             case Undo undoActivity:
                 await HandleOutgoingUndoAsync(username, undoActivity, cancellationToken);
                 break;
@@ -627,6 +630,38 @@ public class OutboxProcessor
             {
                 await _actorRepository.RemoveFollowingAsync(username, targetActorId, cancellationToken);
                 _logger.LogInformation("Removed {TargetActorId} from {Username}'s following collection", targetActorId, username);
+            }
+        }
+
+        // Handle Undo Like
+        if (undoObject is Like originalLike && originalLike.Object != null)
+        {
+            var likedObjectId = originalLike.Object.FirstOrDefault() switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+            if (!string.IsNullOrEmpty(likedObjectId) && !string.IsNullOrEmpty(originalLike.Id))
+            {
+                await _activityRepository.RemoveInteractionAsync(likedObjectId, ActivityInteractionType.Like, originalLike.Id, cancellationToken);
+                _logger.LogInformation("Removed outgoing Like {LikeId} on {ObjectId} for {Username}", originalLike.Id, likedObjectId, username);
+            }
+        }
+
+        // Handle Undo Announce
+        if (undoObject is Announce originalAnnounce && originalAnnounce.Object != null)
+        {
+            var announcedObjectId = originalAnnounce.Object.FirstOrDefault() switch
+            {
+                ILink link => link.Href?.ToString(),
+                IObject obj => obj.Id,
+                _ => null
+            };
+            if (!string.IsNullOrEmpty(announcedObjectId) && !string.IsNullOrEmpty(originalAnnounce.Id))
+            {
+                await _activityRepository.RemoveInteractionAsync(announcedObjectId, ActivityInteractionType.Announce, originalAnnounce.Id, cancellationToken);
+                _logger.LogInformation("Removed outgoing Announce {AnnounceId} on {ObjectId} for {Username}", originalAnnounce.Id, announcedObjectId, username);
             }
         }
     }

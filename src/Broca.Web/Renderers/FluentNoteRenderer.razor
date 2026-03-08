@@ -123,6 +123,8 @@
                                 ShowBookmark="false"
                                 ShowShare="false"
                                 ReplyCount="@GetReplyCount()"
+                                BoostCount="@GetBoostCount()"
+                                LikeCount="@GetLikeCount()"
                                 OnReplyClick="@HandleReplyButtonClick"
                                 BarTemplate="FluentInteractionBarRenderer.Template" />
 
@@ -280,6 +282,20 @@
     private int GetReplyCount()
     {
         if (Note?.Replies is Collection collection)
+            return (int)(collection.TotalItems ?? 0);
+        return 0;
+    }
+
+    private int GetLikeCount()
+    {
+        if (Note?.Likes is Collection collection)
+            return (int)(collection.TotalItems ?? 0);
+        return 0;
+    }
+
+    private int GetBoostCount()
+    {
+        if (Note?.Shares is Collection collection)
             return (int)(collection.TotalItems ?? 0);
         return 0;
     }

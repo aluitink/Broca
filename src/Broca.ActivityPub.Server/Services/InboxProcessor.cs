@@ -382,12 +382,39 @@ public class InboxProcessor : IInboxHandler
 
                 if (!string.IsNullOrEmpty(replyToId))
                 {
-                    await _activityRepository.RecordInteractionAsync(replyToId, ActivityInteractionType.Reply, innerObj.Id, cancellationToken);
-                    _logger.LogInformation("Recorded reply {ReplyId} to {ObjectId} for {Username}", innerObj.Id, replyToId, username);
+                    await TryFetchAndStoreParentNoteAsync(username, replyToId, cancellationToken);
                 }
             }
         }
         return true;
+    }
+
+    private async Task TryFetchAndStoreParentNoteAsync(string username, string parentNoteId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var existing = await _activityRepository.GetActivityByIdAsync(parentNoteId, cancellationToken);
+            if (existing != null)
+                return;
+
+            var baseUrl = _options.BaseUrl?.TrimEnd('/') ?? string.Empty;
+            if (!string.IsNullOrEmpty(baseUrl) && parentNoteId.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (!Uri.TryCreate(parentNoteId, UriKind.Absolute, out var parentUri))
+                return;
+
+            var parentNote = await _activityPubClient.GetAsync<KristofferStrube.ActivityStreams.Object>(parentUri, useCache: false, cancellationToken);
+            if (parentNote == null)
+                return;
+
+            await _activityRepository.SaveInboxActivityAsync(username, parentNoteId, parentNote, cancellationToken);
+            _logger.LogInformation("Fetched and stored parent note {ParentNoteId} for {Username}", parentNoteId, username);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not fetch parent note {ParentNoteId}", parentNoteId);
+        }
     }
 
     private async Task<bool> HandleDeleteAsync(string username, IObject? activity, CancellationToken cancellationToken)
@@ -473,47 +500,11 @@ public class InboxProcessor : IInboxHandler
     }
 
 
-    private async Task<bool> HandleLikeAsync(string username, IObject? activity, CancellationToken cancellationToken)
-    {
-        if (activity is Activity likeActivity)
-        {
-            var objectRef = likeActivity.Object?.FirstOrDefault();
-            var objectId = objectRef switch
-            {
-                ILink link => link.Href?.ToString(),
-                IObject obj => obj.Id,
-                _ => null
-            };
+    private Task<bool> HandleLikeAsync(string username, IObject? activity, CancellationToken cancellationToken)
+        => Task.FromResult(true);
 
-            if (!string.IsNullOrEmpty(objectId) && !string.IsNullOrEmpty(likeActivity.Id))
-            {
-                await _activityRepository.RecordInteractionAsync(objectId, ActivityInteractionType.Like, likeActivity.Id, cancellationToken);
-                _logger.LogInformation("Recorded Like {ActivityId} on {ObjectId} for {Username}", likeActivity.Id, objectId, username);
-            }
-        }
-        return true;
-    }
-
-    private async Task<bool> HandleAnnounceAsync(string username, IObject? activity, CancellationToken cancellationToken)
-    {
-        if (activity is Activity announceActivity)
-        {
-            var objectRef = announceActivity.Object?.FirstOrDefault();
-            var objectId = objectRef switch
-            {
-                ILink link => link.Href?.ToString(),
-                IObject obj => obj.Id,
-                _ => null
-            };
-
-            if (!string.IsNullOrEmpty(objectId) && !string.IsNullOrEmpty(announceActivity.Id))
-            {
-                await _activityRepository.RecordInteractionAsync(objectId, ActivityInteractionType.Announce, announceActivity.Id, cancellationToken);
-                _logger.LogInformation("Recorded Announce {ActivityId} on {ObjectId} for {Username}", announceActivity.Id, objectId, username);
-            }
-        }
-        return true;
-    }
+    private Task<bool> HandleAnnounceAsync(string username, IObject? activity, CancellationToken cancellationToken)
+        => Task.FromResult(true);
 
     private async Task<bool> HandleMoveAsync(string username, IObject? activity, CancellationToken cancellationToken)
     {

@@ -497,7 +497,21 @@ public class InMemoryActivityRepository : IActivityRepository, IActivityStatisti
                 }
             }
         }
-        // Index replies (objects with inReplyTo property)
+        // Index Create activities wrapping a reply Note
+        else if (types.Contains("Create"))
+        {
+            var inner = (obj as Activity)?.Object?.FirstOrDefault() as IObject;
+            if (inner != null && TryGetInReplyTo(inner, out var inReplyTo))
+            {
+                var replyList = _replies.GetOrAdd(inReplyTo, _ => new List<(string, DateTime)>());
+                lock (replyList)
+                {
+                    if (!replyList.Any(x => x.ActivityId == activityId))
+                        replyList.Add((activityId, timestamp));
+                }
+            }
+        }
+        // Index replies (bare objects with inReplyTo property)
         else if (TryGetInReplyTo(obj, out var inReplyTo))
         {
             var replyList = _replies.GetOrAdd(inReplyTo, _ => new List<(string, DateTime)>());
@@ -543,7 +557,19 @@ public class InMemoryActivityRepository : IActivityRepository, IActivityStatisti
                 }
             }
         }
-        // Remove from replies index
+        // Remove from replies index (Create wrapping a reply Note)
+        else if (types.Contains("Create"))
+        {
+            var inner = (obj as Activity)?.Object?.FirstOrDefault() as IObject;
+            if (inner != null && TryGetInReplyTo(inner, out var inReplyTo) && _replies.TryGetValue(inReplyTo, out var replyList))
+            {
+                lock (replyList)
+                {
+                    replyList.RemoveAll(x => x.ActivityId == activityId);
+                }
+            }
+        }
+        // Remove from replies index (bare objects with inReplyTo)
         else if (TryGetInReplyTo(obj, out var inReplyTo) && _replies.TryGetValue(inReplyTo, out var replyList))
         {
             lock (replyList)

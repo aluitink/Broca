@@ -118,6 +118,9 @@
                                     ShowLike="true"
                                     ShowBookmark="false"
                                     ShowShare="false"
+                                    ReplyCount="@GetReplyCount()"
+                                    BoostCount="@GetBoostCount()"
+                                    LikeCount="@GetLikeCount()"
                                     BarTemplate="FluentInteractionBarRenderer.Template" />
                 }
 
@@ -219,6 +222,27 @@
     private string GetContent()
     {
         return Article?.Content?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private int GetReplyCount()
+    {
+        if (Article?.Replies is Collection collection)
+            return (int)(collection.TotalItems ?? 0);
+        return 0;
+    }
+
+    private int GetLikeCount()
+    {
+        if (Article?.Likes is Collection collection)
+            return (int)(collection.TotalItems ?? 0);
+        return 0;
+    }
+
+    private int GetBoostCount()
+    {
+        if (Article?.Shares is Collection collection)
+            return (int)(collection.TotalItems ?? 0);
+        return 0;
     }
 
     private string GetFeaturedImageUrl()

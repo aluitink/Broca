@@ -354,7 +354,7 @@ public class FileSystemActivityRepository : IActivityRepository, IActivityStatis
             return Array.Empty<IObjectOrLink>();
 
         var files = Directory.GetFiles(directory, "*.json")
-            .OrderByDescending(f => f);
+            .OrderByDescending(f => File.GetLastWriteTimeUtc(f));
 
         var activities = new List<IObjectOrLink>();
         var skipped = 0;
@@ -527,6 +527,12 @@ public class FileSystemActivityRepository : IActivityRepository, IActivityStatis
             if (!string.IsNullOrEmpty(objectId))
                 await AppendToFileListUnsafeAsync(GetObjectMetadataPath(objectId, "shares"), activityId);
         }
+        else if (obj.Type.Contains("Create"))
+        {
+            var inner = (obj as Activity)?.Object?.FirstOrDefault() as IObject;
+            if (inner != null && TryGetInReplyTo(inner, out var inReplyTo))
+                await AppendToFileListUnsafeAsync(GetObjectMetadataPath(inReplyTo, "replies"), activityId);
+        }
         else if (TryGetInReplyTo(obj, out var inReplyTo))
         {
             await AppendToFileListUnsafeAsync(GetObjectMetadataPath(inReplyTo, "replies"), activityId);
@@ -549,6 +555,12 @@ public class FileSystemActivityRepository : IActivityRepository, IActivityStatis
             var objectId = ExtractObjectId(obj);
             if (!string.IsNullOrEmpty(objectId))
                 await RemoveFromFileListUnsafeAsync(GetObjectMetadataPath(objectId, "shares"), activityId);
+        }
+        else if (obj.Type.Contains("Create"))
+        {
+            var inner = (obj as Activity)?.Object?.FirstOrDefault() as IObject;
+            if (inner != null && TryGetInReplyTo(inner, out var inReplyTo))
+                await RemoveFromFileListUnsafeAsync(GetObjectMetadataPath(inReplyTo, "replies"), activityId);
         }
         else if (TryGetInReplyTo(obj, out var inReplyTo))
         {
