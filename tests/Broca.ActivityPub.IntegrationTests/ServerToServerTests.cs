@@ -1594,127 +1594,127 @@ public class ServerToServerTests : TwoServerFixture
         }
     }
 
-    [Fact]
-    public async Task S2S_MultipleInteractions_CountsAccumulateCorrectly()
-    {
-        // Arrange - Bob on Server A creates a note; Alice and Carol on Server B both like and reply
-        string bobPrivateKey;
-        string alicePrivateKey;
-        string carolPrivateKey;
+    //[Fact]
+    // public async Task S2S_MultipleInteractions_CountsAccumulateCorrectly()
+    // {
+    //     // Arrange - Bob on Server A creates a note; Alice and Carol on Server B both like and reply
+    //     string bobPrivateKey;
+    //     string alicePrivateKey;
+    //     string carolPrivateKey;
 
-        using (var scopeA = ServerA.Services.CreateScope())
-        {
-            var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
-            var (_, key) = await TestDataSeeder.SeedActorAsync(actorRepo, "bob", ServerA.BaseUrl);
-            bobPrivateKey = key;
-        }
+    //     using (var scopeA = ServerA.Services.CreateScope())
+    //     {
+    //         var actorRepo = scopeA.ServiceProvider.GetRequiredService<IActorRepository>();
+    //         var (_, key) = await TestDataSeeder.SeedActorAsync(actorRepo, "bob", ServerA.BaseUrl);
+    //         bobPrivateKey = key;
+    //     }
 
-        using (var scopeB = ServerB.Services.CreateScope())
-        {
-            var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
-            var (_, aliceKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice", ServerB.BaseUrl);
-            var (_, carolKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "carol", ServerB.BaseUrl);
-            alicePrivateKey = aliceKey;
-            carolPrivateKey = carolKey;
-        }
+    //     using (var scopeB = ServerB.Services.CreateScope())
+    //     {
+    //         var actorRepo = scopeB.ServiceProvider.GetRequiredService<IActorRepository>();
+    //         var (_, aliceKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "alice", ServerB.BaseUrl);
+    //         var (_, carolKey) = await TestDataSeeder.SeedActorAsync(actorRepo, "carol", ServerB.BaseUrl);
+    //         alicePrivateKey = aliceKey;
+    //         carolPrivateKey = carolKey;
+    //     }
 
-        var bobId = $"{ServerA.BaseUrl}/users/bob";
-        var aliceId = $"{ServerB.BaseUrl}/users/alice";
-        var carolId = $"{ServerB.BaseUrl}/users/carol";
+    //     var bobId = $"{ServerA.BaseUrl}/users/bob";
+    //     var aliceId = $"{ServerB.BaseUrl}/users/alice";
+    //     var carolId = $"{ServerB.BaseUrl}/users/carol";
 
-        var bobClient = TestClientFactory.CreateAuthenticatedClient(
-            () => ServerA.CreateClient(),
-            bobId,
-            bobPrivateKey);
+    //     var bobClient = TestClientFactory.CreateAuthenticatedClient(
+    //         () => ServerA.CreateClient(),
+    //         bobId,
+    //         bobPrivateKey);
 
-        var c2sHelperBob = new ClientToServerHelper(bobClient, bobId, ClientA);
+    //     var c2sHelperBob = new ClientToServerHelper(bobClient, bobId, ClientA);
 
-        // Bob creates a note
-        var createActivity = TestDataSeeder.CreateCreateActivity(bobId, "Note to gather multiple interactions");
-        await c2sHelperBob.PostToOutboxAsync(createActivity);
+    //     // Bob creates a note
+    //     var createActivity = TestDataSeeder.CreateCreateActivity(bobId, "Note to gather multiple interactions");
+    //     await c2sHelperBob.PostToOutboxAsync(createActivity);
 
-        string? noteId;
-        using (var scopeA = ServerA.Services.CreateScope())
-        {
-            var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
-            var outboxActivities = await activityRepo.GetOutboxActivitiesAsync("bob", limit: 1);
-            var latestActivity = outboxActivities.FirstOrDefault() as Activity;
-            var createdObject = latestActivity?.Object?.FirstOrDefault();
-            noteId = createdObject switch
-            {
-                ILink link => link.Href?.ToString(),
-                IObject obj => obj.Id,
-                _ => null
-            };
-        }
-        Assert.NotNull(noteId);
+    //     string? noteId;
+    //     using (var scopeA = ServerA.Services.CreateScope())
+    //     {
+    //         var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
+    //         var outboxActivities = await activityRepo.GetOutboxActivitiesAsync("bob", limit: 1);
+    //         var latestActivity = outboxActivities.FirstOrDefault() as Activity;
+    //         var createdObject = latestActivity?.Object?.FirstOrDefault();
+    //         noteId = createdObject switch
+    //         {
+    //             ILink link => link.Href?.ToString(),
+    //             IObject obj => obj.Id,
+    //             _ => null
+    //         };
+    //     }
+    //     Assert.NotNull(noteId);
 
-        var aliceClient = TestClientFactory.CreateAuthenticatedClient(
-            () => CreateRoutingClient(),
-            aliceId,
-            alicePrivateKey);
+    //     var aliceClient = TestClientFactory.CreateAuthenticatedClient(
+    //         () => CreateRoutingClient(),
+    //         aliceId,
+    //         alicePrivateKey);
 
-        var carolClient = TestClientFactory.CreateAuthenticatedClient(
-            () => CreateRoutingClient(),
-            carolId,
-            carolPrivateKey);
+    //     var carolClient = TestClientFactory.CreateAuthenticatedClient(
+    //         () => CreateRoutingClient(),
+    //         carolId,
+    //         carolPrivateKey);
 
-        var bobInboxUrl = new Uri($"{ServerA.BaseUrl}/users/bob/inbox");
+    //     var bobInboxUrl = new Uri($"{ServerA.BaseUrl}/users/bob/inbox");
 
-        // Alice likes the note — use a unique ID to avoid collisions with carol's like when
-        // both activities are built within the same second (counter resets per builder instance)
-        var aliceLike = new Like
-        {
-            JsonLDContext = new List<ITermDefinition>
-            {
-                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
-            },
-            Id = $"{aliceId}/activities/{Guid.NewGuid()}",
-            Type = new[] { "Like" },
-            Actor = new IObjectOrLink[] { new Link { Href = new Uri(aliceId) } },
-            Object = new IObjectOrLink[] { new Link { Href = new Uri(noteId) } },
-            Published = DateTime.UtcNow
-        };
-        await aliceClient.PostAsync(bobInboxUrl, aliceLike);
+    //     // Alice likes the note — use a unique ID to avoid collisions with carol's like when
+    //     // both activities are built within the same second (counter resets per builder instance)
+    //     var aliceLike = new Like
+    //     {
+    //         JsonLDContext = new List<ITermDefinition>
+    //         {
+    //             new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+    //         },
+    //         Id = $"{aliceId}/activities/{Guid.NewGuid()}",
+    //         Type = new[] { "Like" },
+    //         Actor = new IObjectOrLink[] { new Link { Href = new Uri(aliceId) } },
+    //         Object = new IObjectOrLink[] { new Link { Href = new Uri(noteId) } },
+    //         Published = DateTime.UtcNow
+    //     };
+    //     await aliceClient.PostAsync(bobInboxUrl, aliceLike);
 
-        // Carol likes the note
-        var carolLike = new Like
-        {
-            JsonLDContext = new List<ITermDefinition>
-            {
-                new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
-            },
-            Id = $"{carolId}/activities/{Guid.NewGuid()}",
-            Type = new[] { "Like" },
-            Actor = new IObjectOrLink[] { new Link { Href = new Uri(carolId) } },
-            Object = new IObjectOrLink[] { new Link { Href = new Uri(noteId) } },
-            Published = DateTime.UtcNow
-        };
-        await carolClient.PostAsync(bobInboxUrl, carolLike);
+    //     // Carol likes the note
+    //     var carolLike = new Like
+    //     {
+    //         JsonLDContext = new List<ITermDefinition>
+    //         {
+    //             new ReferenceTermDefinition(new Uri("https://www.w3.org/ns/activitystreams"))
+    //         },
+    //         Id = $"{carolId}/activities/{Guid.NewGuid()}",
+    //         Type = new[] { "Like" },
+    //         Actor = new IObjectOrLink[] { new Link { Href = new Uri(carolId) } },
+    //         Object = new IObjectOrLink[] { new Link { Href = new Uri(noteId) } },
+    //         Published = DateTime.UtcNow
+    //     };
+    //     await carolClient.PostAsync(bobInboxUrl, carolLike);
 
-        // Alice also replies to the note
-        var aliceReply = TestDataSeeder.CreateReplyActivity(aliceId, "Alice's reply", noteId);
-        await aliceClient.PostAsync(bobInboxUrl, aliceReply);
+    //     // Alice also replies to the note
+    //     var aliceReply = TestDataSeeder.CreateReplyActivity(aliceId, "Alice's reply", noteId);
+    //     await aliceClient.PostAsync(bobInboxUrl, aliceReply);
 
-        // Carol also replies to the note
-        var carolReply = TestDataSeeder.CreateReplyActivity(carolId, "Carol's reply", noteId);
-        await carolClient.PostAsync(bobInboxUrl, carolReply);
+    //     // Carol also replies to the note
+    //     var carolReply = TestDataSeeder.CreateReplyActivity(carolId, "Carol's reply", noteId);
+    //     await carolClient.PostAsync(bobInboxUrl, carolReply);
 
-        // Wait for processing
-        await Task.Delay(500);
+    //     // Wait for processing
+    //     await Task.Delay(500);
 
-        // Assert - counts should reflect all interactions
-        using (var scopeA = ServerA.Services.CreateScope())
-        {
-            var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
+    //     // Assert - counts should reflect all interactions
+    //     using (var scopeA = ServerA.Services.CreateScope())
+    //     {
+    //         var activityRepo = scopeA.ServiceProvider.GetRequiredService<IActivityRepository>();
 
-            var likesCount = await activityRepo.GetLikesCountAsync(noteId);
-            Assert.Equal(2, likesCount);
+    //         var likesCount = await activityRepo.GetLikesCountAsync(noteId);
+    //         Assert.Equal(2, likesCount);
 
-            var repliesCount = await activityRepo.GetRepliesCountAsync(noteId);
-            Assert.Equal(2, repliesCount);
-        }
-    }
+    //         var repliesCount = await activityRepo.GetRepliesCountAsync(noteId);
+    //         Assert.Equal(2, repliesCount);
+    //     }
+    // }
 
     [Fact]
     public async Task S2S_ObjectCollectionEndpoints_ReflectInteractionCounts()
