@@ -36,6 +36,7 @@ public static class FluentRendererExtensions
         registry.RegisterRenderer(typeof(Page), new FluentPageRendererProxy());
         
         // Activity type renderers
+        registry.RegisterRenderer(typeof(Accept), new FluentAcceptRendererProxy());
         registry.RegisterRenderer(typeof(Update), new FluentUpdateRendererProxy());
         registry.RegisterRenderer(typeof(Delete), new FluentDeleteRendererProxy());
         registry.RegisterRenderer(typeof(Block), new FluentBlockRendererProxy());
@@ -374,6 +375,22 @@ internal class FluentUndoRendererProxy : ObjectRendererBase<Undo>
         {
             builder.OpenComponent<FluentUndoRenderer>(0);
             builder.AddAttribute(1, "Undo", obj);
+            builder.CloseComponent();
+        };
+    }
+}
+
+/// <summary>
+/// Proxy renderer for Accept activities using FluentAcceptRenderer.
+/// </summary>
+internal class FluentAcceptRendererProxy : ObjectRendererBase<Accept>
+{
+    protected override RenderFragment Render(Accept obj)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<FluentAcceptRenderer>(0);
+            builder.AddAttribute(1, "Accept", obj);
             builder.CloseComponent();
         };
     }

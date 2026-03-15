@@ -15,7 +15,7 @@
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" class="follow-header">
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
-                    @if (Follow.Actor?.Any() == true)
+                    @if (displayRef != null)
                     {
                         <div class="actor-info-clickable" @onclick="NavigateToActor" style="cursor: pointer;">
                             <FluentPersona Name="@GetActorDisplay()"
@@ -33,7 +33,7 @@
                     }
 
                     <FluentBadge Appearance="Appearance.Accent">
-                        👤 Follow request
+                        @(isOutgoingFollow ? "👤 Following" : "👤 Follow request")
                     </FluentBadge>
                 </FluentStack>
 
@@ -47,56 +47,90 @@
                 }
             </FluentStack>
 
-            @if (actionState == FollowActionState.None && ActivityPubClient != null)
+            @if (isOutgoingFollow && targetActor != null)
             {
                 <FluentDivider Style="margin: 0;" />
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
-                    <FluentButton Appearance="Appearance.Accent"
-                                  IconStart="@(new Icons.Regular.Size16.Checkmark())"
-                                  Loading="@(pendingAction == FollowActionState.Accepted)"
-                                  Disabled="@(pendingAction != FollowActionState.None)"
-                                  OnClick="AcceptAsync">
-                        Accept
-                    </FluentButton>
-                    <FluentButton Appearance="Appearance.Outline"
-                                  IconStart="@(new Icons.Regular.Size16.Dismiss())"
-                                  Loading="@(pendingAction == FollowActionState.Rejected)"
-                                  Disabled="@(pendingAction != FollowActionState.None)"
-                                  OnClick="RejectAsync">
-                        Reject
-                    </FluentButton>
-                    <FluentButton Appearance="Appearance.Outline"
-                                  IconStart="@(new Icons.Regular.Size16.Prohibited())"
-                                  Loading="@(pendingAction == FollowActionState.Blocked)"
-                                  Disabled="@(pendingAction != FollowActionState.None)"
-                                  OnClick="BlockAsync">
-                        Block
-                    </FluentButton>
-                </FluentStack>
-            }
-            else if (actionState == FollowActionState.Accepted)
-            {
-                <FluentDivider Style="margin: 0;" />
-                <FluentBadge Appearance="Appearance.Accent" BackgroundColor="var(--success)">
-                    ✅ Accepted
-                </FluentBadge>
-            }
-            else if (actionState == FollowActionState.Rejected)
-            {
-                <FluentDivider Style="margin: 0;" />
-                <FluentBadge Appearance="Appearance.Accent" BackgroundColor="var(--error)">
-                    ❌ Rejected
-                </FluentBadge>
-            }
-            else if (actionState == FollowActionState.Blocked)
-            {
-                <FluentDivider Style="margin: 0;" />
-                <FluentBadge Appearance="Appearance.Neutral">
-                    🚫 Blocked
-                </FluentBadge>
+                <FluentActorRenderer Actor="@targetActor" ShowFollowButton="false" />
             }
 
-            @if (!string.IsNullOrEmpty(actionError))
+            @if (!IsSubActivity)
+            {
+                @if (isOutgoingFollow)
+                {
+                    @if (actionState == FollowActionState.None && ActivityPubClient != null)
+                    {
+                        <FluentDivider Style="margin: 0;" />
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                            <FluentButton Appearance="Appearance.Outline"
+                                          Loading="@(pendingAction == FollowActionState.Unfollowed)"
+                                          Disabled="@(pendingAction != FollowActionState.None)"
+                                          OnClick="UnfollowAsync">
+                                Unfollow
+                            </FluentButton>
+                        </FluentStack>
+                    }
+                    else if (actionState == FollowActionState.Unfollowed)
+                    {
+                        <FluentDivider Style="margin: 0;" />
+                        <FluentBadge Appearance="Appearance.Neutral">
+                            ✖️ Unfollowed
+                        </FluentBadge>
+                    }
+                }
+                else
+                {
+                    @if (actionState == FollowActionState.None && ActivityPubClient != null)
+                    {
+                        <FluentDivider Style="margin: 0;" />
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                            <FluentButton Appearance="Appearance.Accent"
+                                          IconStart="@(new Icons.Regular.Size16.Checkmark())"
+                                          Loading="@(pendingAction == FollowActionState.Accepted)"
+                                          Disabled="@(pendingAction != FollowActionState.None)"
+                                          OnClick="AcceptAsync">
+                                Accept
+                            </FluentButton>
+                            <FluentButton Appearance="Appearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                          Loading="@(pendingAction == FollowActionState.Rejected)"
+                                          Disabled="@(pendingAction != FollowActionState.None)"
+                                          OnClick="RejectAsync">
+                                Reject
+                            </FluentButton>
+                            <FluentButton Appearance="Appearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size16.Prohibited())"
+                                          Loading="@(pendingAction == FollowActionState.Blocked)"
+                                          Disabled="@(pendingAction != FollowActionState.None)"
+                                          OnClick="BlockAsync">
+                                Block
+                            </FluentButton>
+                        </FluentStack>
+                    }
+                    else if (actionState == FollowActionState.Accepted)
+                    {
+                        <FluentDivider Style="margin: 0;" />
+                        <FluentBadge Appearance="Appearance.Accent" BackgroundColor="var(--success)">
+                            ✅ Accepted
+                        </FluentBadge>
+                    }
+                    else if (actionState == FollowActionState.Rejected)
+                    {
+                        <FluentDivider Style="margin: 0;" />
+                        <FluentBadge Appearance="Appearance.Accent" BackgroundColor="var(--error)">
+                            ❌ Rejected
+                        </FluentBadge>
+                    }
+                    else if (actionState == FollowActionState.Blocked)
+                    {
+                        <FluentDivider Style="margin: 0;" />
+                        <FluentBadge Appearance="Appearance.Neutral">
+                            🚫 Blocked
+                        </FluentBadge>
+                    }
+                }
+            }
+
+            @if (!IsSubActivity && !string.IsNullOrEmpty(actionError))
             {
                 <FluentMessageBar Intent="MessageIntent.Error" AllowDismiss="true">
                     @actionError
@@ -113,11 +147,15 @@
 
 @code {
     private ActorInfo? actorInfo;
+    private IObjectOrLink? displayRef;
+    private KristofferStrube.ActivityStreams.Object? targetActor;
     private FollowActionState actionState = FollowActionState.None;
     private FollowActionState pendingAction = FollowActionState.None;
     private string? actionError;
 
-    private enum FollowActionState { None, Accepted, Rejected, Blocked }
+    private enum FollowActionState { None, Accepted, Rejected, Blocked, Unfollowed }
+
+    private bool isOutgoingFollow = false;
 
     [Parameter]
     public Follow? Follow { get; set; }
@@ -126,24 +164,49 @@
     public string? CssClass { get; set; }
 
     [Parameter]
+    public bool IsSubActivity { get; set; }
+
+    [Parameter]
     public RenderFragment<Follow>? AdditionalContent { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
+        DetectOutgoingFollow();
         await LoadActorInfo();
+    }
+
+    private void DetectOutgoingFollow()
+    {
+        if (ActivityPubClient?.ActorId == null || Follow?.Actor?.Any() != true)
+        {
+            isOutgoingFollow = false;
+            displayRef = Follow?.Actor?.FirstOrDefault();
+            return;
+        }
+
+        var actorRef = Follow.Actor.First();
+        string? actorId = null;
+        if (actorRef is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
+            actorId = actorObj.Id;
+        else if (actorRef is ILink link && link.Href != null)
+            actorId = link.Href.ToString();
+
+        isOutgoingFollow = string.Equals(ActivityPubClient.ActorId, actorId, StringComparison.OrdinalIgnoreCase);
+        displayRef = isOutgoingFollow
+            ? Follow.Object?.FirstOrDefault()
+            : Follow.Actor.FirstOrDefault();
     }
 
     private async Task LoadActorInfo()
     {
-        if (Follow?.Actor?.Any() != true)
+        if (displayRef == null)
             return;
 
-        var actorRef = Follow.Actor.First();
         string? actorId = null;
 
-        if (actorRef is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
+        if (displayRef is IObject actorObj && !string.IsNullOrEmpty(actorObj.Id))
             actorId = actorObj.Id;
-        else if (actorRef is ILink link && link.Href != null)
+        else if (displayRef is ILink link && link.Href != null)
             actorId = link.Href.ToString();
 
         if (!string.IsNullOrEmpty(actorId))
@@ -156,7 +219,28 @@
             {
                 // Actor resolution failure is non-fatal; fall back to raw values
             }
+
+            if (isOutgoingFollow && ActivityPubClient != null)
+            {
+                try
+                {
+                    targetActor = await ActivityPubClient.GetAsync<KristofferStrube.ActivityStreams.Object>(new Uri(actorId));
+                }
+                catch
+                {
+                    // Non-fatal; card body just won't show
+                }
+            }
         }
+    }
+
+    private async Task UnfollowAsync()
+    {
+        await DispatchActionAsync(FollowActionState.Unfollowed, async client =>
+        {
+            var undo = client.CreateActivityBuilder().Undo(Follow!);
+            await client.PostToOutboxAsync(undo);
+        });
     }
 
     private async Task AcceptAsync()
@@ -217,23 +301,18 @@
 
     private string GetActorId()
     {
-        var actorRef = Follow?.Actor?.FirstOrDefault();
-        if (actorRef == null) return string.Empty;
         if (actorInfo != null) return actorInfo.Id;
-        if (actorRef is IObject obj && !string.IsNullOrEmpty(obj.Id)) return obj.Id;
-        if (actorRef is ILink link && link.Href != null) return link.Href.ToString();
+        if (displayRef is IObject obj && !string.IsNullOrEmpty(obj.Id)) return obj.Id;
+        if (displayRef is ILink link && link.Href != null) return link.Href.ToString();
         return string.Empty;
     }
 
     private string GetActorDisplay()
     {
         if (actorInfo != null) return actorInfo.Name;
-
-        var actorRef = Follow?.Actor?.FirstOrDefault();
-        if (actorRef == null) return "Unknown";
-        if (actorRef is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
+        if (displayRef is KristofferStrube.ActivityStreams.Object obj && obj.Name?.Any() == true)
             return obj.Name.First();
-        if (actorRef is ILink link && link.Href != null)
+        if (displayRef is ILink link && link.Href != null)
             return link.Href.ToString();
         return "Unknown";
     }
@@ -247,9 +326,7 @@
     private string GetActorImageUrl()
     {
         if (actorInfo?.IconUrl != null) return actorInfo.IconUrl;
-
-        var actorRef = Follow?.Actor?.FirstOrDefault();
-        if (actorRef is Person person && person.Icon?.Any() == true)
+        if (displayRef is Person person && person.Icon?.Any() == true)
         {
             var icon = person.Icon.First();
             if (icon is Image img && img.Url?.Any() == true)
