@@ -16,7 +16,7 @@ public class ActorEntity
     [MaxLength(767)]
     public string? ActorUri { get; set; }
 
-    [Column(TypeName = "longtext")]
+    [Column(TypeName = "json")]
     public string ActorJson { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -13,7 +13,7 @@ public static class MySqlPersistenceServiceCollectionExtensions
         string connectionString)
     {
         services.AddDbContextFactory<BrocaDbContext>(options =>
-            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+            options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 4, 0))));
 
         RegisterRepositories(services);
         return services;

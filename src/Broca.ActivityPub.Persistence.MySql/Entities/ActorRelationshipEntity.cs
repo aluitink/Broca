@@ -12,7 +12,7 @@ public class ActorRelationshipEntity
 
     public long ActorId { get; set; }
 
-    [MaxLength(767)]
+    [MaxLength(766)]
     public string TargetActorUri { get; set; } = string.Empty;
 
     public ActorRelationshipFlags Flags { get; set; } = ActorRelationshipFlags.None;

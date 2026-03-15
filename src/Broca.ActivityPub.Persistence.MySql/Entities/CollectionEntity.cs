@@ -15,13 +15,13 @@ public class CollectionEntity
     [MaxLength(64)]
     public CollectionType Type { get; set; }
 
-    [MaxLength(767)]
+    [MaxLength(700)]
     public string? TargetUri { get; set; }
 
     [MaxLength(255)]
     public string? Name { get; set; }
 
-    [Column(TypeName = "longtext")]
+    [Column(TypeName = "json")]
     public string? DefinitionJson { get; set; }
 
     public ActorEntity Actor { get; set; } = null!;

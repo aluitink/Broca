@@ -16,7 +16,7 @@ public class ActivityEntity
     [MaxLength(128)]
     public string? ActivityType { get; set; }
 
-    [Column(TypeName = "longtext")]
+    [Column(TypeName = "json")]
     public string ActivityJson { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -11,7 +11,7 @@ public class DeliveryQueueEntity
     [MaxLength(255)]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    [Column(TypeName = "longtext")]
+    [Column(TypeName = "json")]
     public string ActivityJson { get; set; } = string.Empty;
 
     [MaxLength(2048)]
