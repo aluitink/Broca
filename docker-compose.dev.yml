@@ -1,0 +1,32 @@
+# Development override: runs broca-web with dotnet watch and mounted source
+# for incremental hot-reload rebuilds without Docker image rebuilds.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.dev.yml up
+#
+# Access:
+#   http://localhost:8080  - via nginx (full stack)
+#   http://localhost:5051  - direct to dev server (required for hot reload auto-refresh)
+
+services:
+  broca-web:
+    build:
+      context: .
+      dockerfile: src/Broca.Web/Dockerfile.dev
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - DOTNET_USE_POLLING_FILE_WATCHER=true
+    volumes:
+      - .:/src
+      - broca-web-nuget:/root/.nuget/packages
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  broca-web-nuget:
+    driver: local
